@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cron Scheduling - Shell Scripting Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </a>
+            <nav class="nav">
+                <a href="../../index.html#shell" class="nav-link active">Shell</a>
+                <button class="theme-toggle">&#127769;</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="section">
+            <h1>Cron Scheduling</h1>
+            <p>Schedule and automate recurring tasks using cron, the time-based job scheduler in Unix-like systems.</p>
+
+            <h2>3D Visualization</h2>
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="syntax">Cron Syntax</button>
+                <button class="tab" data-tab="examples">Common Schedules</button>
+                <button class="tab" data-tab="management">Job Management</button>
+                <button class="tab" data-tab="advanced">Advanced Patterns</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="syntax" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# CRON SYNTAX REFERENCE
+# ============================================
+
+# Cron expression format:
+# ┌───────────── minute (0-59)
+# │ ┌───────────── hour (0-23)
+# │ │ ┌───────────── day of month (1-31)
+# │ │ │ ┌───────────── month (1-12)
+# │ │ │ │ ┌───────────── day of week (0-7, Sun=0 or 7)
+# │ │ │ │ │
+# * * * * * command
+
+# Special characters:
+# *     Any value
+# ,     Value list separator (1,3,5)
+# -     Range of values (1-5)
+# /     Step values (*/15 = every 15)
+
+# Examples:
+# * * * * *         Every minute
+# 0 * * * *         Every hour (at minute 0)
+# 0 0 * * *         Daily at midnight
+# 0 0 * * 0         Weekly on Sunday at midnight
+# 0 0 1 * *         Monthly on the 1st at midnight
+# 0 0 1 1 *         Yearly on Jan 1st at midnight
+
+# Special strings (some cron implementations):
+# @reboot           Run once at startup
+# @yearly           Same as 0 0 1 1 *
+# @monthly          Same as 0 0 1 * *
+# @weekly           Same as 0 0 * * 0
+# @daily            Same as 0 0 * * *
+# @hourly           Same as 0 * * * *
+
+# Environment variables in crontab:
+# SHELL=/bin/bash
+# PATH=/usr/local/bin:/usr/bin:/bin
+# MAILTO=admin@example.com
+# HOME=/home/user
+
+# Example crontab file:
+cat << 'CRONTAB'
+# Environment
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+MAILTO=admin@example.com
+
+# Jobs
+# Run ETL daily at 2 AM
+0 2 * * * /home/user/scripts/etl_pipeline.sh
+
+# Backup database every 6 hours
+0 */6 * * * /home/user/scripts/backup_db.sh
+
+# Clean temp files weekly
+0 3 * * 0 /home/user/scripts/cleanup.sh
+
+# Health check every 5 minutes
+*/5 * * * * /home/user/scripts/health_check.sh
+CRONTAB</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="examples" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# COMMON CRON SCHEDULES
+# ============================================
+
+# Every minute
+* * * * * /path/to/script.sh
+
+# Every 5 minutes
+*/5 * * * * /path/to/script.sh
+
+# Every 15 minutes
+*/15 * * * * /path/to/script.sh
+
+# Every 30 minutes
+*/30 * * * * /path/to/script.sh
+
+# Every hour at minute 0
+0 * * * * /path/to/script.sh
+
+# Every 2 hours
+0 */2 * * * /path/to/script.sh
+
+# Every 6 hours
+0 */6 * * * /path/to/script.sh
+
+# Daily at midnight
+0 0 * * * /path/to/script.sh
+
+# Daily at 6 AM
+0 6 * * * /path/to/script.sh
+
+# Daily at 2:30 AM
+30 2 * * * /path/to/script.sh
+
+# Twice daily (6 AM and 6 PM)
+0 6,18 * * * /path/to/script.sh
+
+# Weekdays at 9 AM
+0 9 * * 1-5 /path/to/script.sh
+
+# Weekends at noon
+0 12 * * 0,6 /path/to/script.sh
+
+# First day of month at midnight
+0 0 1 * * /path/to/script.sh
+
+# Last day of month (using script logic)
+0 0 28-31 * * [ "$(date +\%d -d tomorrow)" = "01" ] && /path/to/script.sh
+
+# Quarterly (Jan, Apr, Jul, Oct)
+0 0 1 1,4,7,10 * /path/to/script.sh
+
+# Business hours (9 AM - 5 PM, Mon-Fri)
+0 9-17 * * 1-5 /path/to/script.sh
+
+# Every 10 minutes during business hours
+*/10 9-17 * * 1-5 /path/to/script.sh</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="management" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# CRON JOB MANAGEMENT
+# ============================================
+
+# View current crontab
+crontab -l
+
+# Edit crontab
+crontab -e
+
+# Remove all cron jobs
+crontab -r
+
+# Install crontab from file
+crontab /path/to/crontab.txt
+
+# View another user's crontab (root only)
+crontab -u username -l
+
+# ============================================
+# PROGRAMMATIC CRON MANAGEMENT
+# ============================================
+
+# Add a cron job
+add_cron_job() {
+    local schedule="$1"
+    local command="$2"
+    local comment="$3"
+    
+    # Check if job already exists
+    if crontab -l 2>/dev/null | grep -q "$command"; then
+        echo "Job already exists"
+        return 1
+    fi
+    
+    # Add new job
+    (crontab -l 2>/dev/null; echo "$schedule $command # $comment") | crontab -
+    echo "Added: $schedule $command"
+}
+
+# Remove a cron job by comment
+remove_cron_job() {
+    local comment="$1"
+    crontab -l 2>/dev/null | grep -v "# $comment" | crontab -
+    echo "Removed jobs with comment: $comment"
+}
+
+# List cron jobs with descriptions
+list_cron_jobs() {
+    echo "Current cron jobs:"
+    echo "=================="
+    crontab -l 2>/dev/null | while read -r line; do
+        # Skip empty lines and pure comments
+        [[ -z "$line" || "$line" =~ ^#[^!] ]] && continue
+        
+        # Extract schedule and command
+        schedule=$(echo "$line" | awk '{print $1,$2,$3,$4,$5}')
+        command=$(echo "$line" | awk '{for(i=6;i<=NF;i++) printf $i" "; print ""}')
+        
+        echo "Schedule: $schedule"
+        echo "Command: $command"
+        echo ""
+    done
+}
+
+# Backup crontab
+backup_crontab() {
+    local backup_file="${1:-crontab_backup_$(date +%Y%m%d).txt}"
+    crontab -l > "$backup_file"
+    echo "Backed up to: $backup_file"
+}
+
+# Restore crontab
+restore_crontab() {
+    local backup_file="$1"
+    if [ -f "$backup_file" ]; then
+        crontab "$backup_file"
+        echo "Restored from: $backup_file"
+    else
+        echo "Backup file not found: $backup_file"
+        return 1
+    fi
+}</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="advanced" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# ADVANCED CRON PATTERNS
+# ============================================
+
+# Cron wrapper script with logging and locking
+cat << 'WRAPPER' > /usr/local/bin/cron_wrapper.sh
+#!/bin/bash
+set -euo pipefail
+
+JOB_NAME="$1"
+SCRIPT="$2"
+LOG_DIR="/var/log/cron"
+LOCK_DIR="/var/lock/cron"
+
+mkdir -p "$LOG_DIR" "$LOCK_DIR"
+
+LOG_FILE="$LOG_DIR/${JOB_NAME}.log"
+LOCK_FILE="$LOCK_DIR/${JOB_NAME}.lock"
+
+# Prevent concurrent execution
+exec 200>"$LOCK_FILE"
+if ! flock -n 200; then
+    echo "$(date): Job $JOB_NAME already running, skipping" >> "$LOG_FILE"
+    exit 0
+fi
+
+# Run with logging
+{
+    echo "=== Started: $(date) ==="
+    if "$SCRIPT"; then
+        echo "=== Completed successfully: $(date) ==="
+    else
+        echo "=== Failed with exit code $?: $(date) ==="
+        # Send alert
+        echo "Cron job $JOB_NAME failed" | mail -s "Cron Alert" admin@example.com
+    fi
+} >> "$LOG_FILE" 2>&1
+WRAPPER
+
+# Usage in crontab:
+# 0 2 * * * /usr/local/bin/cron_wrapper.sh etl_job /home/user/scripts/etl.sh
+
+# ============================================
+# CONDITIONAL EXECUTION
+# ============================================
+
+# Run only on first Monday of month
+0 9 1-7 * 1 /path/to/script.sh
+
+# Run only if file exists
+*/5 * * * * [ -f /tmp/trigger.flag ] && /path/to/script.sh
+
+# Run only if service is running
+*/5 * * * * pgrep -x nginx > /dev/null && /path/to/nginx_check.sh
+
+# Run with timeout
+0 * * * * timeout 300 /path/to/script.sh
+
+# ============================================
+# OUTPUT HANDLING
+# ============================================
+
+# Discard all output
+0 * * * * /path/to/script.sh > /dev/null 2>&1
+
+# Log output to file
+0 * * * * /path/to/script.sh >> /var/log/job.log 2>&1
+
+# Email only on error
+0 * * * * /path/to/script.sh > /dev/null
+
+# Separate stdout and stderr
+0 * * * * /path/to/script.sh >> /var/log/job.log 2>> /var/log/job_error.log
+
+# ============================================
+# RANDOM DELAY
+# ============================================
+
+# Add random delay (0-300 seconds)
+0 * * * * sleep $((RANDOM \% 300)) && /path/to/script.sh</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../09_log_processing/index.html" style="color: var(--text-muted);">&larr; Previous: Log Processing</a>
+                <a href="../11_error_handling/index.html" style="color: var(--accent-primary);">Next: Error Handling &rarr;</a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+        </div>
+    </footer>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', {
+                backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 0x1a1a2e : 0xf8f9fa,
+                cameraPosition: { x: 6, y: 4, z: 6 }
+            });
+            
+            // Cron schedule visualization (clock-like)
+            viz.createDataNode({ type: 'cylinder', size: 1.5, color: 0x4dabf7, position: { x: 0, y: 0.1, z: 0 }, opacity: 0.3 });
+            
+            // Hour markers
+            for (let i = 0; i < 12; i++) {
+                const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
+                const x = Math.cos(angle) * 1.2;
+                const z = Math.sin(angle) * 1.2;
+                viz.createDataNode({ type: 'sphere', size: 0.1, color: 0xe25a1c, position: { x, y: 0.3, z } });
+            }
+            
+            viz.createLabel('Cron Scheduler', { x: 0, y: 1.5, z: 0 });
+            viz.createLabel('* * * * *', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        });
+    </script>
+</body>
+</html>

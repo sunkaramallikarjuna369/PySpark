@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Operations - Shell Scripting Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </a>
+            <nav class="nav">
+                <a href="../../index.html#shell" class="nav-link active">Shell</a>
+                <button class="theme-toggle">&#127769;</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="section">
+            <h1>File Operations</h1>
+            <p>Master file manipulation in bash for data engineering tasks including reading, writing, copying, moving, and processing files efficiently.</p>
+
+            <h2>3D Visualization</h2>
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="basic">Basic Operations</button>
+                <button class="tab" data-tab="reading">Reading Files</button>
+                <button class="tab" data-tab="writing">Writing Files</button>
+                <button class="tab" data-tab="batch">Batch Processing</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="basic" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# BASIC FILE OPERATIONS
+# ============================================
+
+# Create files and directories
+touch newfile.txt
+mkdir -p data/raw data/processed data/archive
+
+# Copy files
+cp source.csv destination.csv
+cp -r source_dir/ dest_dir/
+cp -p file.txt backup.txt  # Preserve attributes
+
+# Move/rename files
+mv oldname.csv newname.csv
+mv file.csv /path/to/destination/
+
+# Delete files
+rm file.txt
+rm -f file.txt  # Force, no prompt
+rm -r directory/  # Recursive
+rm -rf temp/  # Force recursive
+
+# File information
+ls -la file.txt
+stat file.txt
+file data.csv  # Determine file type
+du -sh directory/  # Directory size
+
+# Find files
+find . -name "*.csv"
+find . -type f -mtime -7  # Modified in last 7 days
+find . -size +100M  # Files > 100MB
+find . -name "*.log" -delete  # Find and delete
+
+# Permissions
+chmod +x script.sh
+chmod 755 script.sh
+chmod -R 644 data/
+chown user:group file.txt
+
+# Links
+ln -s /path/to/file symlink
+ln file hardlink
+
+# Temporary files
+TEMP_FILE=$(mktemp)
+TEMP_DIR=$(mktemp -d)
+echo "Temp file: $TEMP_FILE"
+# Clean up
+rm -f "$TEMP_FILE"
+rm -rf "$TEMP_DIR"</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="reading" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# READING FILES
+# ============================================
+
+# Read entire file
+cat file.txt
+cat -n file.txt  # With line numbers
+
+# Read parts of file
+head -n 10 file.txt  # First 10 lines
+tail -n 20 file.txt  # Last 20 lines
+tail -f log.txt  # Follow (real-time)
+
+# Read specific lines
+sed -n '5,10p' file.txt  # Lines 5-10
+sed -n '5p' file.txt  # Line 5 only
+
+# Read line by line
+while IFS= read -r line; do
+    echo "Line: $line"
+done < file.txt
+
+# Read CSV with fields
+while IFS=',' read -r id name value; do
+    echo "ID: $id, Name: $name, Value: $value"
+done < data.csv
+
+# Skip header
+tail -n +2 data.csv | while IFS=',' read -r id name value; do
+    echo "Processing: $name"
+done
+
+# Read into array
+mapfile -t LINES < file.txt
+echo "Total lines: ${#LINES[@]}"
+
+# Read with process substitution
+while read -r line; do
+    echo "$line"
+done < <(grep "pattern" file.txt)
+
+# Check if file is readable
+if [ -r file.txt ]; then
+    cat file.txt
+else
+    echo "Cannot read file"
+fi</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="writing" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# WRITING FILES
+# ============================================
+
+# Overwrite file
+echo "Hello World" > file.txt
+
+# Append to file
+echo "New line" >> file.txt
+
+# Write multiple lines
+cat > config.txt << EOF
+host=localhost
+port=5432
+database=mydb
+EOF
+
+# Write without variable expansion
+cat > script.sh << 'EOF'
+#!/bin/bash
+echo "Value: $1"
+EOF
+
+# Write from command output
+ls -la > file_list.txt
+date >> log.txt
+
+# Tee: write to file and stdout
+echo "Message" | tee output.txt
+echo "Append" | tee -a output.txt
+
+# Write to multiple files
+echo "Data" | tee file1.txt file2.txt file3.txt
+
+# Atomic write (write to temp, then move)
+TEMP=$(mktemp)
+echo "Important data" > "$TEMP"
+mv "$TEMP" final.txt
+
+# Write with specific permissions
+umask 077
+echo "Secret" > secret.txt
+umask 022
+
+# Printf for formatted output
+printf "%-10s %5d %8.2f\n" "Item" 42 3.14 > formatted.txt</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="batch" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# BATCH FILE PROCESSING
+# ============================================
+
+# Process all CSV files
+for file in *.csv; do
+    [ -f "$file" ] || continue
+    echo "Processing: $file"
+    wc -l "$file"
+done
+
+# Rename files with pattern
+for file in *.txt; do
+    mv "$file" "${file%.txt}.bak"
+done
+
+# Batch convert encoding
+for file in *.csv; do
+    iconv -f ISO-8859-1 -t UTF-8 "$file" > "${file%.csv}_utf8.csv"
+done
+
+# Process files in parallel
+find . -name "*.csv" | xargs -P 4 -I {} wc -l {}
+
+# Archive old files
+find . -name "*.log" -mtime +30 -exec gzip {} \;
+
+# Combine CSV files
+head -1 file1.csv > combined.csv
+for file in *.csv; do
+    tail -n +2 "$file" >> combined.csv
+done
+
+# Split large file
+split -l 10000 large.csv chunk_
+# Creates chunk_aa, chunk_ab, etc.
+
+# Process with progress
+TOTAL=$(find . -name "*.csv" | wc -l)
+COUNT=0
+for file in *.csv; do
+    ((COUNT++))
+    echo "[$COUNT/$TOTAL] Processing: $file"
+    # Process file...
+done
+
+# Safe batch operations
+process_files() {
+    local dir="$1"
+    find "$dir" -name "*.csv" -print0 | while IFS= read -r -d '' file; do
+        echo "Processing: $file"
+    done
+}</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../04_functions/index.html" style="color: var(--text-muted);">&larr; Previous: Functions</a>
+                <a href="../06_text_processing/index.html" style="color: var(--accent-primary);">Next: Text Processing &rarr;</a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+        </div>
+    </footer>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', {
+                backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 0x1a1a2e : 0xf8f9fa,
+                cameraPosition: { x: 6, y: 4, z: 6 }
+            });
+            
+            // File system visualization
+            viz.createDataNode({ type: 'cube', size: 0.8, color: 0x4dabf7, position: { x: 0, y: 1.5, z: 0 } });
+            viz.createLabel('Directory', { x: 0, y: 2.3, z: 0 });
+            
+            const files = [
+                { name: 'file1.csv', x: -1.5, color: 0x198754 },
+                { name: 'file2.csv', x: 0, color: 0x198754 },
+                { name: 'file3.csv', x: 1.5, color: 0x198754 }
+            ];
+            
+            files.forEach(f => {
+                viz.createDataNode({ type: 'cube', size: 0.4, color: f.color, position: { x: f.x, y: 0, z: 0 } });
+                viz.createLabel(f.name, { x: f.x, y: -0.7, z: 0 });
+                viz.createArrow({ x: 0, y: 1.1, z: 0 }, { x: f.x, y: 0.3, z: 0 }, { color: 0x888888 });
+            });
+            
+            viz.createLabel('File System Structure', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        });
+    </script>
+</body>
+</html>

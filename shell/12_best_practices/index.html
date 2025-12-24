@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Best Practices - Shell Scripting Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </a>
+            <nav class="nav">
+                <a href="../../index.html#shell" class="nav-link active">Shell</a>
+                <button class="theme-toggle">&#127769;</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="section">
+            <h1>Shell Scripting Best Practices</h1>
+            <p>Write maintainable, secure, and efficient shell scripts following industry best practices and coding standards.</p>
+
+            <h2>3D Visualization</h2>
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="structure">Script Structure</button>
+                <button class="tab" data-tab="security">Security</button>
+                <button class="tab" data-tab="performance">Performance</button>
+                <button class="tab" data-tab="template">Template</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="structure" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# SCRIPT STRUCTURE BEST PRACTICES
+# ============================================
+
+# 1. Always use shebang
+#!/bin/bash
+#!/usr/bin/env bash  # More portable
+
+# 2. Enable strict mode
+set -euo pipefail
+
+# 3. Script metadata
+# Script: data_pipeline.sh
+# Author: Your Name
+# Date: 2024-01-01
+# Description: Daily data pipeline for sales data
+# Usage: ./data_pipeline.sh [--date YYYY-MM-DD]
+
+# 4. Constants at the top
+readonly SCRIPT_NAME=$(basename "$0")
+readonly SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+readonly VERSION="1.0.0"
+
+# 5. Configuration with defaults
+CONFIG_FILE="${CONFIG_FILE:-/etc/myapp/config}"
+LOG_LEVEL="${LOG_LEVEL:-INFO}"
+DRY_RUN="${DRY_RUN:-false}"
+
+# 6. Logging functions
+log() {
+    local level="$1"
+    shift
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*"
+}
+
+log_info() { log "INFO" "$@"; }
+log_warn() { log "WARN" "$@" >&2; }
+log_error() { log "ERROR" "$@" >&2; }
+log_debug() { [[ "$LOG_LEVEL" == "DEBUG" ]] && log "DEBUG" "$@"; }
+
+# 7. Help function
+show_help() {
+    cat << EOF
+Usage: $SCRIPT_NAME [OPTIONS]
+
+Options:
+    -h, --help      Show this help message
+    -v, --version   Show version
+    -d, --date      Process date (YYYY-MM-DD)
+    --dry-run       Run without making changes
+
+Examples:
+    $SCRIPT_NAME --date 2024-01-01
+    $SCRIPT_NAME --dry-run
+EOF
+}
+
+# 8. Argument parsing
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            -v|--version)
+                echo "$VERSION"
+                exit 0
+                ;;
+            -d|--date)
+                PROCESS_DATE="$2"
+                shift 2
+                ;;
+            --dry-run)
+                DRY_RUN=true
+                shift
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                show_help
+                exit 1
+                ;;
+        esac
+    done
+}
+
+# 9. Validation function
+validate() {
+    # Check required commands
+    local required_cmds=(curl jq awk)
+    for cmd in "${required_cmds[@]}"; do
+        if ! command -v "$cmd" &> /dev/null; then
+            log_error "Required command not found: $cmd"
+            exit 1
+        fi
+    done
+    
+    # Validate arguments
+    if [[ -n "${PROCESS_DATE:-}" ]]; then
+        if ! date -d "$PROCESS_DATE" &> /dev/null; then
+            log_error "Invalid date format: $PROCESS_DATE"
+            exit 1
+        fi
+    fi
+}
+
+# 10. Main function
+main() {
+    parse_args "$@"
+    validate
+    
+    log_info "Starting $SCRIPT_NAME v$VERSION"
+    
+    # Your logic here
+    
+    log_info "Completed successfully"
+}
+
+# 11. Entry point
+main "$@"</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="security" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# SECURITY BEST PRACTICES
+# ============================================
+
+# 1. Quote all variables
+file="$1"
+echo "Processing: $file"  # Correct
+# echo "Processing: $file"  # Wrong - word splitting
+
+# 2. Use [[ ]] instead of [ ]
+if [[ -f "$file" ]]; then
+    echo "File exists"
+fi
+
+# 3. Never use eval with user input
+# BAD: eval "$user_input"
+# GOOD: Use case statements or whitelists
+
+# 4. Secure temporary files
+TEMP_FILE=$(mktemp)
+chmod 600 "$TEMP_FILE"
+trap 'rm -f "$TEMP_FILE"' EXIT
+
+# 5. Secure directory creation
+TEMP_DIR=$(mktemp -d)
+chmod 700 "$TEMP_DIR"
+
+# 6. Avoid storing secrets in scripts
+# BAD: PASSWORD="secret123"
+# GOOD: Read from environment or secure store
+PASSWORD="${DB_PASSWORD:?DB_PASSWORD not set}"
+
+# 7. Use read for sensitive input
+read -sp "Enter password: " password
+echo ""
+
+# 8. Validate and sanitize input
+sanitize_input() {
+    local input="$1"
+    # Remove dangerous characters
+    echo "$input" | tr -cd '[:alnum:]._-'
+}
+
+validate_filename() {
+    local filename="$1"
+    # Prevent path traversal
+    if [[ "$filename" == *".."* ]] || [[ "$filename" == /* ]]; then
+        log_error "Invalid filename: $filename"
+        return 1
+    fi
+    return 0
+}
+
+# 9. Use absolute paths for commands
+/usr/bin/curl -s "$url"
+/bin/rm -f "$file"
+
+# 10. Set secure umask
+umask 077  # Only owner can read/write
+
+# 11. Check file permissions before sourcing
+source_config() {
+    local config="$1"
+    
+    # Check ownership
+    if [[ $(stat -c %U "$config") != "root" ]]; then
+        log_error "Config must be owned by root"
+        return 1
+    fi
+    
+    # Check permissions
+    local perms=$(stat -c %a "$config")
+    if [[ "$perms" != "600" ]] && [[ "$perms" != "400" ]]; then
+        log_error "Config permissions too open"
+        return 1
+    fi
+    
+    source "$config"
+}
+
+# 12. Avoid command injection
+# BAD: grep "$user_pattern" file
+# GOOD: Use -- to end options
+grep -- "$user_pattern" file
+grep -F "$user_pattern" file  # Fixed string
+
+# 13. Secure network operations
+curl --fail --silent --show-error \
+     --max-time 30 \
+     --retry 3 \
+     "$url"</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="performance" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# PERFORMANCE BEST PRACTICES
+# ============================================
+
+# 1. Avoid subshells when possible
+# BAD: result=$(echo "$var" | tr 'a-z' 'A-Z')
+# GOOD: Use parameter expansion
+result="${var^^}"
+
+# 2. Use built-in string operations
+string="hello world"
+# BAD: length=$(echo "$string" | wc -c)
+# GOOD:
+length=${#string}
+
+# 3. Read files efficiently
+# BAD: for line in $(cat file); do ...
+# GOOD:
+while IFS= read -r line; do
+    echo "$line"
+done < file
+
+# 4. Use arrays instead of string splitting
+# BAD: items="a b c"; for i in $items; do ...
+# GOOD:
+items=("a" "b" "c")
+for i in "${items[@]}"; do
+    echo "$i"
+done
+
+# 5. Minimize external command calls
+# BAD: Multiple grep/sed/awk calls
+# GOOD: Single awk command
+awk -F',' '
+    NR > 1 {
+        sum += $3
+        count++
+    }
+    END {
+        print "Sum:", sum
+        print "Count:", count
+        print "Avg:", sum/count
+    }
+' data.csv
+
+# 6. Use process substitution
+# Instead of temp files
+diff <(sort file1) <(sort file2)
+
+# 7. Parallel processing
+# Process files in parallel
+find . -name "*.csv" -print0 | \
+    xargs -0 -P 4 -I {} process_file {}
+
+# 8. Use mapfile for reading into array
+mapfile -t lines < file.txt
+
+# 9. Avoid unnecessary cat
+# BAD: cat file | grep pattern
+# GOOD:
+grep pattern file
+
+# 10. Use printf instead of echo for complex output
+printf "%-20s %10d %8.2f\n" "$name" "$count" "$value"
+
+# 11. Cache expensive operations
+get_config() {
+    if [[ -z "${_CONFIG_CACHE:-}" ]]; then
+        _CONFIG_CACHE=$(expensive_config_load)
+    fi
+    echo "$_CONFIG_CACHE"
+}
+
+# 12. Use local variables in functions
+process_data() {
+    local input="$1"
+    local result=""
+    # Process...
+    echo "$result"
+}
+
+# 13. Batch database operations
+# Instead of individual inserts, use bulk load
+psql -c "\COPY table FROM 'data.csv' WITH CSV"</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="template" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/usr/bin/env bash
+#===============================================================================
+# SCRIPT: template.sh
+# AUTHOR: Your Name <your.email@example.com>
+# DATE: 2024-01-01
+# VERSION: 1.0.0
+# DESCRIPTION: Template for production-ready shell scripts
+# USAGE: ./template.sh [OPTIONS] <arguments>
+#===============================================================================
+
+set -euo pipefail
+IFS=$'\n\t'
+
+#-------------------------------------------------------------------------------
+# CONSTANTS
+#-------------------------------------------------------------------------------
+readonly SCRIPT_NAME=$(basename "${BASH_SOURCE[0]}")
+readonly SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+readonly VERSION="1.0.0"
+
+#-------------------------------------------------------------------------------
+# CONFIGURATION
+#-------------------------------------------------------------------------------
+LOG_LEVEL="${LOG_LEVEL:-INFO}"
+LOG_FILE="${LOG_FILE:-/var/log/${SCRIPT_NAME%.sh}.log}"
+DRY_RUN="${DRY_RUN:-false}"
+
+#-------------------------------------------------------------------------------
+# LOGGING
+#-------------------------------------------------------------------------------
+log() {
+    local level="$1"; shift
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    printf "[%s] [%-5s] %s\n" "$timestamp" "$level" "$*" | tee -a "$LOG_FILE"
+}
+
+log_info()  { log "INFO" "$@"; }
+log_warn()  { log "WARN" "$@" >&2; }
+log_error() { log "ERROR" "$@" >&2; }
+log_debug() { [[ "$LOG_LEVEL" == "DEBUG" ]] && log "DEBUG" "$@" || true; }
+
+die() { log_error "$1"; exit "${2:-1}"; }
+
+#-------------------------------------------------------------------------------
+# CLEANUP
+#-------------------------------------------------------------------------------
+declare -a CLEANUP_TASKS=()
+
+cleanup() {
+    local exit_code=$?
+    log_debug "Running cleanup tasks..."
+    for task in "${CLEANUP_TASKS[@]:-}"; do
+        eval "$task" || true
+    done
+    exit $exit_code
+}
+
+trap cleanup EXIT INT TERM
+
+add_cleanup() { CLEANUP_TASKS+=("$1"); }
+
+#-------------------------------------------------------------------------------
+# HELP
+#-------------------------------------------------------------------------------
+show_help() {
+    cat << EOF
+Usage: $SCRIPT_NAME [OPTIONS] <input>
+
+Description:
+    Brief description of what this script does.
+
+Options:
+    -h, --help          Show this help message
+    -v, --version       Show version information
+    -d, --debug         Enable debug mode
+    -n, --dry-run       Run without making changes
+    -c, --config FILE   Use specified config file
+
+Arguments:
+    input               Input file or directory to process
+
+Examples:
+    $SCRIPT_NAME input.csv
+    $SCRIPT_NAME --dry-run --config custom.conf input.csv
+
+Environment Variables:
+    LOG_LEVEL           Logging level (DEBUG, INFO, WARN, ERROR)
+    LOG_FILE            Log file path
+
+Exit Codes:
+    0   Success
+    1   General error
+    2   Invalid arguments
+EOF
+}
+
+#-------------------------------------------------------------------------------
+# ARGUMENT PARSING
+#-------------------------------------------------------------------------------
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)    show_help; exit 0 ;;
+            -v|--version) echo "$VERSION"; exit 0 ;;
+            -d|--debug)   LOG_LEVEL="DEBUG"; shift ;;
+            -n|--dry-run) DRY_RUN=true; shift ;;
+            -c|--config)  CONFIG_FILE="$2"; shift 2 ;;
+            --)           shift; break ;;
+            -*)           die "Unknown option: $1" 2 ;;
+            *)            break ;;
+        esac
+    done
+    
+    INPUT="${1:-}"
+    [[ -z "$INPUT" ]] && die "Input required. Use --help for usage." 2
+}
+
+#-------------------------------------------------------------------------------
+# VALIDATION
+#-------------------------------------------------------------------------------
+validate() {
+    log_debug "Validating prerequisites..."
+    
+    # Check required commands
+    for cmd in awk grep sed; do
+        command -v "$cmd" &>/dev/null || die "Required: $cmd"
+    done
+    
+    # Validate input
+    [[ -f "$INPUT" ]] || die "File not found: $INPUT"
+}
+
+#-------------------------------------------------------------------------------
+# MAIN LOGIC
+#-------------------------------------------------------------------------------
+process() {
+    log_info "Processing: $INPUT"
+    
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[DRY RUN] Would process $INPUT"
+        return 0
+    fi
+    
+    # Your processing logic here
+    
+    log_info "Processing complete"
+}
+
+#-------------------------------------------------------------------------------
+# ENTRY POINT
+#-------------------------------------------------------------------------------
+main() {
+    log_info "Starting $SCRIPT_NAME v$VERSION"
+    
+    parse_args "$@"
+    validate
+    process
+    
+    log_info "Completed successfully"
+}
+
+main "$@"</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../11_error_handling/index.html" style="color: var(--text-muted);">&larr; Previous: Error Handling</a>
+                <span style="color: var(--text-muted);">Last Topic</span>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+        </div>
+    </footer>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', {
+                backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 0x1a1a2e : 0xf8f9fa,
+                cameraPosition: { x: 6, y: 4, z: 6 }
+            });
+            
+            // Best practices pillars
+            const pillars = [
+                { name: 'Structure', color: 0x4dabf7, x: -2 },
+                { name: 'Security', color: 0xdc3545, x: -0.7 },
+                { name: 'Performance', color: 0x198754, x: 0.7 },
+                { name: 'Maintainability', color: 0xe25a1c, x: 2 }
+            ];
+            
+            pillars.forEach(p => {
+                viz.createDataNode({ type: 'cylinder', size: 0.4, color: p.color, position: { x: p.x, y: 0.8, z: 0 } });
+                viz.createLabel(p.name, { x: p.x, y: 1.8, z: 0 });
+            });
+            
+            // Base
+            viz.createDataNode({ type: 'cube', size: 0.3, color: 0x888888, position: { x: 0, y: 0, z: 0 }, opacity: 0.5 });
+            
+            viz.createLabel('Shell Scripting Best Practices', { x: 0, y: -1, z: 0 });
+            viz.createGrid(10, 10);
+        });
+    </script>
+</body>
+</html>

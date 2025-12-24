@@ -27,6 +27,7 @@
                 <a href="#sql" class="nav-link">SQL</a>
                 <a href="#etl" class="nav-link">ETL</a>
                 <a href="#datawarehouse" class="nav-link">Data Warehouse</a>
+                <a href="#shell" class="nav-link">Shell</a>
                 <button class="theme-toggle" aria-label="Toggle theme">🌙</button>
             </nav>
         </div>
@@ -50,11 +51,11 @@
             <!-- Stats -->
             <div style="display: flex; justify-content: center; gap: 3rem; margin-top: 2rem;">
                 <div style="text-align: center;">
-                    <div style="font-size: 2.5rem; font-weight: 700; color: var(--accent-primary);">69</div>
+                    <div style="font-size: 2.5rem; font-weight: 700; color: var(--accent-primary);">83</div>
                     <div style="color: var(--text-muted);">Concepts</div>
                 </div>
                 <div style="text-align: center;">
-                    <div style="font-size: 2.5rem; font-weight: 700; color: var(--accent-primary);">5</div>
+                    <div style="font-size: 2.5rem; font-weight: 700; color: var(--accent-primary);">6</div>
                     <div style="color: var(--text-muted);">Categories</div>
                 </div>
                 <div style="text-align: center;">
@@ -568,6 +569,95 @@
                     <div class="card-icon" style="background: rgba(139, 92, 246, 0.1); color: var(--dw-color);">🏆</div>
                     <h3 class="card-title">DW Best Practices</h3>
                     <p class="card-description">Industry best practices for data warehouse design</p>
+                    <div class="card-meta"><span>35 min</span><span>Advanced</span></div>
+                </a>
+            </div>
+        </section>
+
+        <!-- Shell Scripting Section -->
+        <section id="shell" class="category-section section">
+            <div class="category-header">
+                <div class="category-icon shell" style="background: rgba(40, 167, 69, 0.1);">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M4 17l6-6-6-6 1.5-1.5L13 10l-7.5 7.5L4 17zm8 0h8v2h-8v-2z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h2>Shell Scripting</h2>
+                    <p style="margin: 0; color: var(--text-muted);">Bash & Shell - Automation and Data Pipeline Scripts</p>
+                </div>
+            </div>
+            <div class="card-grid">
+                <a href="shell/01_bash_basics/index.html" class="card shell">
+                    <div class="card-icon" style="background: rgba(40, 167, 69, 0.1); color: #28a745;">💻</div>
+                    <h3 class="card-title">Bash Basics</h3>
+                    <p class="card-description">Introduction to bash shell, commands, and scripting fundamentals</p>
+                    <div class="card-meta"><span>20 min</span><span>Beginner</span></div>
+                </a>
+                <a href="shell/02_variables_data_types/index.html" class="card shell">
+                    <div class="card-icon" style="background: rgba(40, 167, 69, 0.1); color: #28a745;">📝</div>
+                    <h3 class="card-title">Variables & Data Types</h3>
+                    <p class="card-description">Variables, arrays, strings, and data manipulation in bash</p>
+                    <div class="card-meta"><span>25 min</span><span>Beginner</span></div>
+                </a>
+                <a href="shell/03_control_structures/index.html" class="card shell">
+                    <div class="card-icon" style="background: rgba(40, 167, 69, 0.1); color: #28a745;">🔀</div>
+                    <h3 class="card-title">Control Structures</h3>
+                    <p class="card-description">Conditionals, loops, and case statements</p>
+                    <div class="card-meta"><span>25 min</span><span>Beginner</span></div>
+                </a>
+                <a href="shell/04_functions/index.html" class="card shell">
+                    <div class="card-icon" style="background: rgba(40, 167, 69, 0.1); color: #28a745;">🔧</div>
+                    <h3 class="card-title">Functions</h3>
+                    <p class="card-description">Define and use functions for modular scripts</p>
+                    <div class="card-meta"><span>25 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="shell/05_file_operations/index.html" class="card shell">
+                    <div class="card-icon" style="background: rgba(40, 167, 69, 0.1); color: #28a745;">📁</div>
+                    <h3 class="card-title">File Operations</h3>
+                    <p class="card-description">Read, write, copy, move, and manage files</p>
+                    <div class="card-meta"><span>30 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="shell/06_text_processing/index.html" class="card shell">
+                    <div class="card-icon" style="background: rgba(40, 167, 69, 0.1); color: #28a745;">📄</div>
+                    <h3 class="card-title">Text Processing</h3>
+                    <p class="card-description">grep, sed, awk, and text manipulation tools</p>
+                    <div class="card-meta"><span>35 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="shell/07_data_pipeline_scripts/index.html" class="card shell">
+                    <div class="card-icon" style="background: rgba(40, 167, 69, 0.1); color: #28a745;">🔄</div>
+                    <h3 class="card-title">Data Pipeline Scripts</h3>
+                    <p class="card-description">Build ETL pipelines with shell scripts</p>
+                    <div class="card-meta"><span>40 min</span><span>Advanced</span></div>
+                </a>
+                <a href="shell/08_etl_automation/index.html" class="card shell">
+                    <div class="card-icon" style="background: rgba(40, 167, 69, 0.1); color: #28a745;">⚙️</div>
+                    <h3 class="card-title">ETL Automation</h3>
+                    <p class="card-description">Automate ETL workflows with scheduling and orchestration</p>
+                    <div class="card-meta"><span>35 min</span><span>Advanced</span></div>
+                </a>
+                <a href="shell/09_log_processing/index.html" class="card shell">
+                    <div class="card-icon" style="background: rgba(40, 167, 69, 0.1); color: #28a745;">📊</div>
+                    <h3 class="card-title">Log Processing</h3>
+                    <p class="card-description">Analyze and process log files for monitoring</p>
+                    <div class="card-meta"><span>30 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="shell/10_cron_scheduling/index.html" class="card shell">
+                    <div class="card-icon" style="background: rgba(40, 167, 69, 0.1); color: #28a745;">⏰</div>
+                    <h3 class="card-title">Cron Scheduling</h3>
+                    <p class="card-description">Schedule recurring tasks with cron</p>
+                    <div class="card-meta"><span>25 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="shell/11_error_handling/index.html" class="card shell">
+                    <div class="card-icon" style="background: rgba(40, 167, 69, 0.1); color: #28a745;">🛡️</div>
+                    <h3 class="card-title">Error Handling</h3>
+                    <p class="card-description">Build robust scripts with proper error handling</p>
+                    <div class="card-meta"><span>30 min</span><span>Advanced</span></div>
+                </a>
+                <a href="shell/12_best_practices/index.html" class="card shell">
+                    <div class="card-icon" style="background: rgba(40, 167, 69, 0.1); color: #28a745;">🏆</div>
+                    <h3 class="card-title">Best Practices</h3>
+                    <p class="card-description">Write maintainable, secure, and efficient scripts</p>
                     <div class="card-meta"><span>35 min</span><span>Advanced</span></div>
                 </a>
             </div>

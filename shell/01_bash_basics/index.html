@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bash Basics - Shell Scripting Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </a>
+            <nav class="nav">
+                <a href="../../index.html#pyspark" class="nav-link">PySpark</a>
+                <a href="../../index.html#pandas" class="nav-link">Pandas</a>
+                <a href="../../index.html#sql" class="nav-link">SQL</a>
+                <a href="../../index.html#etl" class="nav-link">ETL</a>
+                <a href="../../index.html#datawarehouse" class="nav-link">Data Warehouse</a>
+                <a href="../../index.html#shell" class="nav-link active">Shell</a>
+                <button class="theme-toggle">&#127769;</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <nav class="breadcrumb">
+            <span class="breadcrumb-item"><a href="../../index.html">Home</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item"><a href="../../index.html#shell">Shell Scripting</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item">Bash Basics</span>
+        </nav>
+
+        <section class="section">
+            <h1>Bash Basics</h1>
+            <p>Bash (Bourne Again SHell) is the default command-line interpreter for most Linux distributions and macOS. It's essential for data engineers to automate tasks, process data, and manage systems efficiently.</p>
+
+            <div class="info-box info">
+                <strong>Key Concept:</strong> Shell scripts are text files containing a sequence of commands that the shell executes. They enable automation, batch processing, and complex data pipelines.
+            </div>
+
+            <h2>3D Visualization: Shell Command Flow</h2>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showCommandFlow()">Command Flow</button>
+                <button class="viz-btn" onclick="showPipeline()">Pipeline</button>
+                <button class="viz-btn" onclick="showRedirection()">I/O Redirection</button>
+            </div>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="basics">Basic Commands</button>
+                <button class="tab" data-tab="script">First Script</button>
+                <button class="tab" data-tab="pipeline">Pipelines</button>
+                <button class="tab" data-tab="redirection">I/O Redirection</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="basics" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# BASIC BASH COMMANDS FOR DATA ENGINEERING
+# ============================================
+
+# Navigation and File System
+pwd                          # Print working directory
+ls -la                       # List files with details
+cd /path/to/directory        # Change directory
+mkdir -p data/raw data/processed  # Create nested directories
+
+# File Operations
+touch file.txt               # Create empty file
+cp source.csv dest.csv       # Copy file
+mv old.csv new.csv           # Move/rename file
+rm -f unwanted.csv           # Remove file (force)
+rm -rf temp_directory/       # Remove directory recursively
+
+# File Content
+cat file.csv                 # Display file content
+head -n 10 data.csv          # First 10 lines
+tail -n 20 data.csv          # Last 20 lines
+tail -f /var/log/app.log     # Follow log file in real-time
+wc -l data.csv               # Count lines
+wc -w document.txt           # Count words
+
+# File Information
+file data.csv                # Determine file type
+stat data.csv                # Detailed file statistics
+du -sh directory/            # Directory size
+df -h                        # Disk space usage
+
+# Searching
+find . -name "*.csv"         # Find files by name
+find . -type f -mtime -7     # Files modified in last 7 days
+find . -size +100M           # Files larger than 100MB
+locate filename              # Quick file search (uses index)
+
+# Text Search with grep
+grep "error" logfile.log     # Search for pattern
+grep -i "warning" log.txt    # Case-insensitive search
+grep -r "TODO" ./src/        # Recursive search in directory
+grep -c "pattern" file.txt   # Count matches
+grep -n "error" file.log     # Show line numbers
+grep -v "debug" file.log     # Invert match (exclude)
+
+# Permissions
+chmod +x script.sh           # Make executable
+chmod 755 script.sh          # rwxr-xr-x
+chmod 644 data.csv           # rw-r--r--
+chown user:group file.txt    # Change ownership
+
+# Process Management
+ps aux                       # List all processes
+ps aux | grep python         # Find Python processes
+top                          # Interactive process viewer
+htop                         # Better process viewer
+kill -9 PID                  # Force kill process
+nohup ./script.sh &          # Run in background, persist after logout
+
+# System Information
+uname -a                     # System information
+hostname                     # Machine name
+whoami                       # Current user
+date                         # Current date/time
+date +"%Y-%m-%d %H:%M:%S"    # Formatted date
+uptime                       # System uptime</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="script" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# YOUR FIRST BASH SCRIPT
+# ============================================
+# Save as: my_first_script.sh
+# Run: chmod +x my_first_script.sh && ./my_first_script.sh
+
+# Shebang - tells system which interpreter to use
+#!/bin/bash
+
+# Script metadata (good practice)
+# Author: Your Name
+# Date: 2024-01-01
+# Description: Example data processing script
+
+# Exit on error (recommended for data pipelines)
+set -e
+
+# Exit on undefined variable
+set -u
+
+# Fail on pipe errors
+set -o pipefail
+
+# Debug mode (uncomment to enable)
+# set -x
+
+# ============================================
+# VARIABLES
+# ============================================
+# No spaces around = sign!
+NAME="Data Pipeline"
+VERSION="1.0"
+DATA_DIR="/home/user/data"
+LOG_FILE="/var/log/pipeline.log"
+
+# Command substitution
+CURRENT_DATE=$(date +"%Y-%m-%d")
+FILE_COUNT=$(ls -1 *.csv 2>/dev/null | wc -l)
+
+# Arithmetic
+COUNT=5
+NEXT=$((COUNT + 1))
+DOUBLED=$((COUNT * 2))
+
+# ============================================
+# OUTPUT
+# ============================================
+echo "Hello, World!"
+echo "Script: $NAME v$VERSION"
+echo "Date: $CURRENT_DATE"
+echo "Files found: $FILE_COUNT"
+
+# Printf for formatted output
+printf "%-20s %10s\n" "Name" "Value"
+printf "%-20s %10d\n" "Count" "$COUNT"
+printf "%-20s %10d\n" "Doubled" "$DOUBLED"
+
+# Colors (for terminal output)
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo -e "${GREEN}Success!${NC}"
+echo -e "${RED}Error!${NC}"
+echo -e "${YELLOW}Warning!${NC}"
+
+# ============================================
+# USER INPUT
+# ============================================
+echo "Enter your name:"
+read USER_NAME
+echo "Hello, $USER_NAME!"
+
+# Read with prompt
+read -p "Enter filename: " FILENAME
+
+# Read password (hidden input)
+read -sp "Enter password: " PASSWORD
+echo ""  # New line after hidden input
+
+# Read with default value
+read -p "Enter directory [/tmp]: " DIR
+DIR=${DIR:-/tmp}
+
+# ============================================
+# COMMAND LINE ARGUMENTS
+# ============================================
+echo "Script name: $0"
+echo "First argument: $1"
+echo "Second argument: $2"
+echo "All arguments: $@"
+echo "Number of arguments: $#"
+
+# Check if argument provided
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 <input_file>"
+    exit 1
+fi
+
+# ============================================
+# SCRIPT EXIT
+# ============================================
+# Exit codes: 0 = success, non-zero = error
+exit 0</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="pipeline" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# BASH PIPELINES - CHAIN COMMANDS TOGETHER
+# ============================================
+
+# Basic pipeline: output of one command becomes input of next
+# command1 | command2 | command3
+
+# ============================================
+# DATA PROCESSING PIPELINES
+# ============================================
+
+# Count unique values in a column
+cat data.csv | cut -d',' -f2 | sort | uniq -c | sort -rn
+
+# Explained:
+# cat data.csv       - Read file
+# cut -d',' -f2      - Extract 2nd column (comma delimiter)
+# sort               - Sort alphabetically
+# uniq -c            - Count unique values
+# sort -rn           - Sort by count (reverse numeric)
+
+# Find top 10 most common values
+cat sales.csv | cut -d',' -f3 | sort | uniq -c | sort -rn | head -10
+
+# Filter and count
+cat access.log | grep "ERROR" | wc -l
+
+# Extract, transform, load pattern
+cat raw_data.csv | \
+    grep -v "^#" | \          # Remove comments
+    sed 's/"//g' | \          # Remove quotes
+    awk -F',' '{print $1,$3}' | \  # Select columns
+    sort -u > processed_data.txt   # Sort unique, save
+
+# ============================================
+# WORKING WITH CSV DATA
+# ============================================
+
+# Skip header and process data
+tail -n +2 data.csv | while read line; do
+    echo "Processing: $line"
+done
+
+# Extract specific columns
+cat data.csv | awk -F',' '{print $1, $3, $5}'
+
+# Filter rows by condition
+cat sales.csv | awk -F',' '$4 > 1000 {print $0}'
+
+# Calculate sum of a column
+cat sales.csv | tail -n +2 | awk -F',' '{sum += $4} END {print "Total:", sum}'
+
+# Calculate average
+cat data.csv | tail -n +2 | awk -F',' '{sum += $3; count++} END {print "Average:", sum/count}'
+
+# ============================================
+# LOG ANALYSIS PIPELINES
+# ============================================
+
+# Count requests per IP
+cat access.log | awk '{print $1}' | sort | uniq -c | sort -rn | head -20
+
+# Find error patterns
+cat app.log | grep -i "error" | awk '{print $4}' | sort | uniq -c
+
+# Extract timestamps and count by hour
+cat access.log | awk '{print $4}' | cut -d':' -f2 | sort | uniq -c
+
+# Monitor log in real-time with filtering
+tail -f /var/log/app.log | grep --line-buffered "ERROR"
+
+# ============================================
+# COMBINING MULTIPLE FILES
+# ============================================
+
+# Concatenate all CSV files
+cat *.csv > combined.csv
+
+# Concatenate with headers handled
+head -1 file1.csv > combined.csv
+tail -n +2 -q *.csv >> combined.csv
+
+# Process multiple files
+for file in *.csv; do
+    echo "Processing $file..."
+    cat "$file" | wc -l
+done
+
+# Parallel processing with xargs
+find . -name "*.csv" | xargs -P 4 -I {} wc -l {}
+
+# ============================================
+# ADVANCED PIPELINE PATTERNS
+# ============================================
+
+# Tee: split output to file and continue pipeline
+cat data.csv | tee backup.csv | grep "important" > filtered.csv
+
+# Process substitution: use command output as file
+diff <(sort file1.txt) <(sort file2.txt)
+
+# Named pipes (FIFOs)
+mkfifo mypipe
+cat data.csv > mypipe &
+grep "pattern" < mypipe
+
+# Check pipeline exit status
+cat data.csv | grep "pattern" | wc -l
+echo "Pipeline exit codes: ${PIPESTATUS[@]}"</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="redirection" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# I/O REDIRECTION IN BASH
+# ============================================
+
+# File Descriptors:
+# 0 = stdin  (standard input)
+# 1 = stdout (standard output)
+# 2 = stderr (standard error)
+
+# ============================================
+# OUTPUT REDIRECTION
+# ============================================
+
+# Redirect stdout to file (overwrite)
+echo "Hello" > output.txt
+ls -la > file_list.txt
+
+# Redirect stdout to file (append)
+echo "World" >> output.txt
+date >> log.txt
+
+# Redirect stderr to file
+command_that_fails 2> errors.txt
+
+# Redirect both stdout and stderr to same file
+command 2>&1 > all_output.txt
+# Or more simply:
+command &> all_output.txt
+
+# Redirect stdout and stderr to different files
+command > output.txt 2> errors.txt
+
+# Discard output (send to /dev/null)
+command > /dev/null           # Discard stdout
+command 2> /dev/null          # Discard stderr
+command &> /dev/null          # Discard both
+
+# ============================================
+# INPUT REDIRECTION
+# ============================================
+
+# Read from file instead of keyboard
+sort < unsorted.txt
+wc -l < data.csv
+
+# Here document (multi-line input)
+cat << EOF
+This is a multi-line
+text block that will be
+passed to the cat command.
+Variable expansion works: $HOME
+EOF
+
+# Here document to file
+cat << EOF > config.txt
+database=mydb
+host=localhost
+port=5432
+EOF
+
+# Here string (single line)
+grep "pattern" <<< "search in this string"
+
+# ============================================
+# PRACTICAL EXAMPLES
+# ============================================
+
+# Log script output
+exec > >(tee -a script.log) 2>&1
+echo "This goes to both console and log file"
+
+# Process file line by line
+while IFS= read -r line; do
+    echo "Processing: $line"
+done < input.txt
+
+# Read CSV with custom delimiter
+while IFS=',' read -r col1 col2 col3; do
+    echo "Column 1: $col1, Column 2: $col2"
+done < data.csv
+
+# Create file with specific content
+cat > script_output.txt << 'ENDOFFILE'
+Report generated on $(date)
+==========================
+Data processing complete.
+ENDOFFILE
+
+# Note: Single quotes around delimiter prevents variable expansion
+
+# ============================================
+# ADVANCED REDIRECTION
+# ============================================
+
+# Open file descriptor for reading
+exec 3< input.txt
+read line <&3
+echo "First line: $line"
+exec 3<&-  # Close file descriptor
+
+# Open file descriptor for writing
+exec 4> output.txt
+echo "Writing to fd 4" >&4
+exec 4>&-  # Close file descriptor
+
+# Swap stdout and stderr
+command 3>&1 1>&2 2>&3
+
+# Redirect within a block
+{
+    echo "Line 1"
+    echo "Line 2"
+    echo "Line 3"
+} > block_output.txt
+
+# Conditional redirection
+if [ -w /var/log/app.log ]; then
+    exec >> /var/log/app.log 2>&1
+else
+    exec >> ~/app.log 2>&1
+fi</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <span style="color: var(--text-muted);">First Topic</span>
+                <a href="../02_variables_data_types/index.html" style="color: var(--accent-primary);">Next: Variables & Data Types &rarr;</a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+        </div>
+    </footer>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', {
+                backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 0x1a1a2e : 0xf8f9fa,
+                cameraPosition: { x: 6, y: 4, z: 6 }
+            });
+            showCommandFlow();
+        });
+
+        function showCommandFlow() {
+            viz.clear();
+            
+            // Terminal
+            viz.createDataNode({ type: 'cube', size: 0.8, color: 0x2d2d2d, position: { x: -3, y: 0.5, z: 0 } });
+            viz.createLabel('Terminal', { x: -3, y: 1.5, z: 0 });
+
+            // Command
+            viz.createDataNode({ type: 'sphere', size: 0.5, color: 0xe25a1c, position: { x: -1, y: 0.5, z: 0 } });
+            viz.createLabel('Command', { x: -1, y: 1.5, z: 0 });
+
+            // Shell
+            viz.createDataNode({ type: 'cylinder', size: 0.6, color: 0x198754, position: { x: 1, y: 0.5, z: 0 } });
+            viz.createLabel('Shell', { x: 1, y: 1.5, z: 0 });
+
+            // Output
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0x4dabf7, position: { x: 3, y: 0.5, z: 0 } });
+            viz.createLabel('Output', { x: 3, y: 1.5, z: 0 });
+
+            viz.createArrow({ x: -2.5, y: 0.5, z: 0 }, { x: -1.5, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: -0.5, y: 0.5, z: 0 }, { x: 0.5, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 1.5, y: 0.5, z: 0 }, { x: 2.5, y: 0.5, z: 0 }, { color: 0x888888 });
+
+            viz.createLabel('Command Execution Flow', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showPipeline() {
+            viz.clear();
+            
+            // Pipeline stages
+            const stages = ['cat', 'grep', 'sort', 'uniq'];
+            const colors = [0x4dabf7, 0xe25a1c, 0x198754, 0x8b5cf6];
+            
+            stages.forEach((stage, i) => {
+                viz.createDataNode({
+                    type: 'cylinder', size: 0.5, color: colors[i],
+                    position: { x: -3 + i * 2, y: 0.5, z: 0 }
+                });
+                viz.createLabel(stage, { x: -3 + i * 2, y: 1.5, z: 0 });
+                
+                if (i < stages.length - 1) {
+                    // Pipe symbol
+                    viz.createDataNode({
+                        type: 'cube', size: 0.2, color: 0xffc107,
+                        position: { x: -2 + i * 2, y: 0.5, z: 0 }
+                    });
+                }
+            });
+
+            // Data flowing through
+            for (let i = 0; i < 3; i++) {
+                viz.createDataNode({
+                    type: 'sphere', size: 0.15, color: 0xffffff,
+                    position: { x: -3.5 + i * 0.3, y: 0.5, z: 0.5 }
+                });
+            }
+
+            viz.createLabel('cat file | grep pattern | sort | uniq', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showRedirection() {
+            viz.clear();
+            
+            // Command in center
+            viz.createDataNode({ type: 'sphere', size: 0.8, color: 0xe25a1c, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('Command', { x: 0, y: 1.5, z: 0 });
+
+            // stdin
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x4dabf7, position: { x: -2.5, y: 0.5, z: 0 } });
+            viz.createLabel('stdin (0)', { x: -2.5, y: 1.5, z: 0 });
+            viz.createArrow({ x: -2, y: 0.5, z: 0 }, { x: -0.5, y: 0.5, z: 0 }, { color: 0x4dabf7 });
+
+            // stdout
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x198754, position: { x: 2.5, y: 1, z: 0 } });
+            viz.createLabel('stdout (1)', { x: 2.5, y: 2, z: 0 });
+            viz.createArrow({ x: 0.5, y: 0.7, z: 0 }, { x: 2, y: 1, z: 0 }, { color: 0x198754 });
+
+            // stderr
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0xdc3545, position: { x: 2.5, y: 0, z: 0 } });
+            viz.createLabel('stderr (2)', { x: 2.5, y: -0.8, z: 0 });
+            viz.createArrow({ x: 0.5, y: 0.3, z: 0 }, { x: 2, y: 0, z: 0 }, { color: 0xdc3545 });
+
+            viz.createLabel('I/O Streams & Redirection', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

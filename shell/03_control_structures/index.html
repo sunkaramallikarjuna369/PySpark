@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control Structures - Shell Scripting Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </a>
+            <nav class="nav">
+                <a href="../../index.html#shell" class="nav-link active">Shell</a>
+                <button class="theme-toggle">&#127769;</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="section">
+            <h1>Control Structures</h1>
+            <p>Control structures in bash allow you to make decisions, repeat actions, and control the flow of your scripts. Master if/else, loops, and case statements for powerful automation.</p>
+
+            <div class="info-box info">
+                <strong>Key Concept:</strong> Bash uses exit codes (0 = true/success, non-zero = false/failure) for conditional logic, which is opposite to most programming languages.
+            </div>
+
+            <h2>3D Visualization: Control Flow</h2>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showIfElse()">If/Else</button>
+                <button class="viz-btn" onclick="showLoops()">Loops</button>
+                <button class="viz-btn" onclick="showCase()">Case Statement</button>
+            </div>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="conditionals">Conditionals</button>
+                <button class="tab" data-tab="loops">Loops</button>
+                <button class="tab" data-tab="case">Case Statement</button>
+                <button class="tab" data-tab="tests">Test Operators</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="conditionals" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# CONDITIONAL STATEMENTS
+# ============================================
+
+# Basic if statement
+if [ condition ]; then
+    # commands
+fi
+
+# If-else
+if [ condition ]; then
+    # true branch
+else
+    # false branch
+fi
+
+# If-elif-else
+if [ condition1 ]; then
+    # branch 1
+elif [ condition2 ]; then
+    # branch 2
+else
+    # default branch
+fi
+
+# ============================================
+# PRACTICAL EXAMPLES
+# ============================================
+
+# Check if file exists
+FILE="/etc/passwd"
+if [ -f "$FILE" ]; then
+    echo "$FILE exists"
+else
+    echo "$FILE does not exist"
+fi
+
+# Check if directory exists
+DIR="/tmp"
+if [ -d "$DIR" ]; then
+    echo "$DIR is a directory"
+fi
+
+# Numeric comparison
+AGE=25
+if [ $AGE -ge 18 ]; then
+    echo "Adult"
+else
+    echo "Minor"
+fi
+
+# String comparison
+STATUS="active"
+if [ "$STATUS" = "active" ]; then
+    echo "System is active"
+fi
+
+# Multiple conditions with AND
+if [ -f "$FILE" ] && [ -r "$FILE" ]; then
+    echo "File exists and is readable"
+fi
+
+# Multiple conditions with OR
+if [ "$STATUS" = "active" ] || [ "$STATUS" = "running" ]; then
+    echo "System is operational"
+fi
+
+# ============================================
+# MODERN [[ ]] SYNTAX (Preferred)
+# ============================================
+
+# Pattern matching
+NAME="data_pipeline_v2"
+if [[ "$NAME" == data_* ]]; then
+    echo "This is a data pipeline"
+fi
+
+# Regex matching
+EMAIL="user@example.com"
+if [[ "$EMAIL" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
+    echo "Valid email format"
+fi
+
+# No word splitting issues
+FILE_PATH="/path/with spaces/file.txt"
+if [[ -f "$FILE_PATH" ]]; then
+    echo "File exists"
+fi
+
+# ============================================
+# TERNARY-LIKE EXPRESSIONS
+# ============================================
+
+# Using && and ||
+[ $AGE -ge 18 ] && echo "Adult" || echo "Minor"
+
+# Assign based on condition
+RESULT=$( [ $AGE -ge 18 ] && echo "adult" || echo "minor" )
+echo "Status: $RESULT"
+
+# ============================================
+# ARITHMETIC CONDITIONS
+# ============================================
+
+COUNT=10
+if (( COUNT > 5 )); then
+    echo "Count is greater than 5"
+fi
+
+if (( COUNT >= 10 && COUNT <= 20 )); then
+    echo "Count is between 10 and 20"
+fi
+
+# Increment in condition
+if (( ++COUNT > 10 )); then
+    echo "Incremented count: $COUNT"
+fi</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="loops" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# LOOPS IN BASH
+# ============================================
+
+# ============================================
+# FOR LOOPS
+# ============================================
+
+# Basic for loop with list
+for item in apple banana cherry; do
+    echo "Fruit: $item"
+done
+
+# For loop with range
+for i in {1..5}; do
+    echo "Number: $i"
+done
+
+# Range with step
+for i in {0..10..2}; do
+    echo "Even: $i"
+done
+
+# C-style for loop
+for ((i=0; i<5; i++)); do
+    echo "Index: $i"
+done
+
+# Loop over array
+FILES=("data.csv" "config.json" "script.sh")
+for file in "${FILES[@]}"; do
+    echo "Processing: $file"
+done
+
+# Loop over command output
+for file in $(ls *.csv 2>/dev/null); do
+    echo "CSV file: $file"
+done
+
+# Loop over lines in file
+while IFS= read -r line; do
+    echo "Line: $line"
+done < input.txt
+
+# ============================================
+# WHILE LOOPS
+# ============================================
+
+# Basic while loop
+COUNT=5
+while [ $COUNT -gt 0 ]; do
+    echo "Countdown: $COUNT"
+    ((COUNT--))
+done
+
+# Infinite loop with break
+while true; do
+    read -p "Enter 'quit' to exit: " INPUT
+    if [ "$INPUT" = "quit" ]; then
+        break
+    fi
+    echo "You entered: $INPUT"
+done
+
+# Read file line by line
+while IFS= read -r line; do
+    # Skip empty lines
+    [ -z "$line" ] && continue
+    # Skip comments
+    [[ "$line" =~ ^# ]] && continue
+    echo "Config: $line"
+done < config.txt
+
+# Process CSV data
+while IFS=',' read -r id name value; do
+    echo "ID: $id, Name: $name, Value: $value"
+done < data.csv
+
+# ============================================
+# UNTIL LOOPS
+# ============================================
+
+# Until loop (opposite of while)
+COUNT=0
+until [ $COUNT -ge 5 ]; do
+    echo "Count: $COUNT"
+    ((COUNT++))
+done
+
+# Wait for condition
+until [ -f /tmp/ready.flag ]; do
+    echo "Waiting for ready flag..."
+    sleep 1
+done
+
+# ============================================
+# LOOP CONTROL
+# ============================================
+
+# Break - exit loop
+for i in {1..10}; do
+    if [ $i -eq 5 ]; then
+        break
+    fi
+    echo "Number: $i"
+done
+
+# Continue - skip iteration
+for i in {1..5}; do
+    if [ $i -eq 3 ]; then
+        continue
+    fi
+    echo "Number: $i"
+done
+
+# Break from nested loops
+for i in {1..3}; do
+    for j in {1..3}; do
+        if [ $j -eq 2 ]; then
+            break 2  # Break both loops
+        fi
+        echo "i=$i, j=$j"
+    done
+done
+
+# ============================================
+# PRACTICAL DATA PROCESSING
+# ============================================
+
+# Process multiple files
+for file in /data/*.csv; do
+    [ -f "$file" ] || continue
+    echo "Processing: $file"
+    LINE_COUNT=$(wc -l < "$file")
+    echo "  Lines: $LINE_COUNT"
+done
+
+# Retry logic
+MAX_RETRIES=3
+RETRY=0
+while [ $RETRY -lt $MAX_RETRIES ]; do
+    if some_command 2>/dev/null; then
+        echo "Success!"
+        break
+    fi
+    ((RETRY++))
+    echo "Retry $RETRY of $MAX_RETRIES"
+    sleep 2
+done</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="case" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# CASE STATEMENTS
+# ============================================
+
+# Basic case statement
+case "$VARIABLE" in
+    pattern1)
+        # commands for pattern1
+        ;;
+    pattern2)
+        # commands for pattern2
+        ;;
+    *)
+        # default case
+        ;;
+esac
+
+# ============================================
+# PRACTICAL EXAMPLES
+# ============================================
+
+# Menu selection
+echo "Select an option:"
+echo "1) Start"
+echo "2) Stop"
+echo "3) Restart"
+read -p "Choice: " CHOICE
+
+case "$CHOICE" in
+    1|start|Start)
+        echo "Starting service..."
+        ;;
+    2|stop|Stop)
+        echo "Stopping service..."
+        ;;
+    3|restart|Restart)
+        echo "Restarting service..."
+        ;;
+    *)
+        echo "Invalid option"
+        exit 1
+        ;;
+esac
+
+# File type handling
+FILE="document.pdf"
+case "$FILE" in
+    *.csv)
+        echo "Processing CSV file"
+        ;;
+    *.json)
+        echo "Processing JSON file"
+        ;;
+    *.xml)
+        echo "Processing XML file"
+        ;;
+    *.txt|*.log)
+        echo "Processing text file"
+        ;;
+    *)
+        echo "Unknown file type"
+        ;;
+esac
+
+# Environment-based configuration
+ENV="${ENVIRONMENT:-development}"
+case "$ENV" in
+    development|dev)
+        DB_HOST="localhost"
+        DEBUG=true
+        ;;
+    staging|stg)
+        DB_HOST="staging-db.example.com"
+        DEBUG=true
+        ;;
+    production|prod)
+        DB_HOST="prod-db.example.com"
+        DEBUG=false
+        ;;
+    *)
+        echo "Unknown environment: $ENV"
+        exit 1
+        ;;
+esac
+
+# Command-line argument parsing
+case "$1" in
+    -h|--help)
+        echo "Usage: $0 [options]"
+        echo "  -h, --help     Show help"
+        echo "  -v, --version  Show version"
+        echo "  -f, --file     Specify input file"
+        ;;
+    -v|--version)
+        echo "Version 1.0.0"
+        ;;
+    -f|--file)
+        INPUT_FILE="$2"
+        echo "Input file: $INPUT_FILE"
+        ;;
+    *)
+        echo "Unknown option: $1"
+        ;;
+esac
+
+# ============================================
+# ADVANCED PATTERNS
+# ============================================
+
+# Character class patterns
+read -p "Enter a character: " CHAR
+case "$CHAR" in
+    [a-z])
+        echo "Lowercase letter"
+        ;;
+    [A-Z])
+        echo "Uppercase letter"
+        ;;
+    [0-9])
+        echo "Digit"
+        ;;
+    *)
+        echo "Special character"
+        ;;
+esac
+
+# Fall-through (Bash 4+)
+case "$VALUE" in
+    pattern1)
+        echo "Matched pattern1"
+        ;;&  # Continue checking
+    pattern2)
+        echo "Matched pattern2"
+        ;;
+esac</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tests" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# TEST OPERATORS
+# ============================================
+
+# ============================================
+# FILE TESTS
+# ============================================
+[ -e FILE ]    # File exists
+[ -f FILE ]    # Regular file
+[ -d FILE ]    # Directory
+[ -L FILE ]    # Symbolic link
+[ -r FILE ]    # Readable
+[ -w FILE ]    # Writable
+[ -x FILE ]    # Executable
+[ -s FILE ]    # Size > 0
+[ -O FILE ]    # Owned by current user
+[ -G FILE ]    # Owned by current group
+[ FILE1 -nt FILE2 ]  # FILE1 newer than FILE2
+[ FILE1 -ot FILE2 ]  # FILE1 older than FILE2
+
+# ============================================
+# STRING TESTS
+# ============================================
+[ -z STRING ]      # String is empty
+[ -n STRING ]      # String is not empty
+[ STRING1 = STRING2 ]   # Strings equal
+[ STRING1 != STRING2 ]  # Strings not equal
+[ STRING1 < STRING2 ]   # String1 sorts before
+[ STRING1 > STRING2 ]   # String1 sorts after
+
+# With [[ ]] (preferred)
+[[ STRING == PATTERN ]]   # Pattern matching
+[[ STRING =~ REGEX ]]     # Regex matching
+
+# ============================================
+# NUMERIC TESTS
+# ============================================
+[ NUM1 -eq NUM2 ]  # Equal
+[ NUM1 -ne NUM2 ]  # Not equal
+[ NUM1 -lt NUM2 ]  # Less than
+[ NUM1 -le NUM2 ]  # Less than or equal
+[ NUM1 -gt NUM2 ]  # Greater than
+[ NUM1 -ge NUM2 ]  # Greater than or equal
+
+# With (( )) (preferred for arithmetic)
+(( NUM1 == NUM2 ))
+(( NUM1 != NUM2 ))
+(( NUM1 < NUM2 ))
+(( NUM1 <= NUM2 ))
+(( NUM1 > NUM2 ))
+(( NUM1 >= NUM2 ))
+
+# ============================================
+# LOGICAL OPERATORS
+# ============================================
+
+# With [ ]
+[ COND1 ] && [ COND2 ]  # AND
+[ COND1 ] || [ COND2 ]  # OR
+[ ! COND ]              # NOT
+
+# With [[ ]] (preferred)
+[[ COND1 && COND2 ]]    # AND
+[[ COND1 || COND2 ]]    # OR
+[[ ! COND ]]            # NOT
+
+# ============================================
+# PRACTICAL EXAMPLES
+# ============================================
+
+# Validate input file
+validate_file() {
+    local file="$1"
+    
+    if [[ ! -e "$file" ]]; then
+        echo "Error: File does not exist"
+        return 1
+    fi
+    
+    if [[ ! -f "$file" ]]; then
+        echo "Error: Not a regular file"
+        return 1
+    fi
+    
+    if [[ ! -r "$file" ]]; then
+        echo "Error: File not readable"
+        return 1
+    fi
+    
+    if [[ ! -s "$file" ]]; then
+        echo "Warning: File is empty"
+    fi
+    
+    echo "File validation passed"
+    return 0
+}
+
+# Check environment
+check_environment() {
+    local errors=0
+    
+    # Check required commands
+    for cmd in python3 pip docker; do
+        if ! command -v "$cmd" &> /dev/null; then
+            echo "Missing: $cmd"
+            ((errors++))
+        fi
+    done
+    
+    # Check required variables
+    for var in DATABASE_URL API_KEY; do
+        if [[ -z "${!var:-}" ]]; then
+            echo "Missing env var: $var"
+            ((errors++))
+        fi
+    done
+    
+    return $errors
+}</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../02_variables_data_types/index.html" style="color: var(--text-muted);">&larr; Previous: Variables</a>
+                <a href="../04_functions/index.html" style="color: var(--accent-primary);">Next: Functions &rarr;</a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+        </div>
+    </footer>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', {
+                backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 0x1a1a2e : 0xf8f9fa,
+                cameraPosition: { x: 6, y: 4, z: 6 }
+            });
+            showIfElse();
+        });
+
+        function showIfElse() {
+            viz.clear();
+            
+            // Condition diamond
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0xffc107, position: { x: 0, y: 1.5, z: 0 } });
+            viz.createLabel('Condition', { x: 0, y: 2.3, z: 0 });
+            
+            // True branch
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x198754, position: { x: -1.5, y: 0, z: 0 } });
+            viz.createLabel('True', { x: -1.5, y: 0.8, z: 0 });
+            
+            // False branch
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0xdc3545, position: { x: 1.5, y: 0, z: 0 } });
+            viz.createLabel('False', { x: 1.5, y: 0.8, z: 0 });
+            
+            // Merge point
+            viz.createDataNode({ type: 'sphere', size: 0.3, color: 0x4dabf7, position: { x: 0, y: -1.5, z: 0 } });
+            
+            viz.createArrow({ x: -0.3, y: 1.2, z: 0 }, { x: -1.2, y: 0.3, z: 0 }, { color: 0x198754 });
+            viz.createArrow({ x: 0.3, y: 1.2, z: 0 }, { x: 1.2, y: 0.3, z: 0 }, { color: 0xdc3545 });
+            viz.createArrow({ x: -1.5, y: -0.3, z: 0 }, { x: -0.2, y: -1.3, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 1.5, y: -0.3, z: 0 }, { x: 0.2, y: -1.3, z: 0 }, { color: 0x888888 });
+
+            viz.createLabel('If-Else Flow', { x: 0, y: -2.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showLoops() {
+            viz.clear();
+            
+            // Loop start
+            viz.createDataNode({ type: 'sphere', size: 0.4, color: 0x4dabf7, position: { x: 0, y: 1.5, z: 0 } });
+            viz.createLabel('Start', { x: 0, y: 2.2, z: 0 });
+            
+            // Condition
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0xffc107, position: { x: 0, y: 0, z: 0 } });
+            viz.createLabel('Condition', { x: 0, y: 0.8, z: 0 });
+            
+            // Loop body
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x198754, position: { x: 1.5, y: 0, z: 0 } });
+            viz.createLabel('Body', { x: 1.5, y: 0.8, z: 0 });
+            
+            // Exit
+            viz.createDataNode({ type: 'sphere', size: 0.4, color: 0xdc3545, position: { x: 0, y: -1.5, z: 0 } });
+            viz.createLabel('Exit', { x: 0, y: -2.2, z: 0 });
+            
+            // Arrows
+            viz.createArrow({ x: 0, y: 1.1, z: 0 }, { x: 0, y: 0.3, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.3, y: 0, z: 0 }, { x: 1.2, y: 0, z: 0 }, { color: 0x198754 });
+            viz.createArrow({ x: 1.5, y: -0.3, z: 0 }, { x: 1.5, y: -0.8, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0, y: -0.3, z: 0 }, { x: 0, y: -1.2, z: 0 }, { color: 0xdc3545 });
+
+            viz.createLabel('Loop Flow', { x: 0, y: -3, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showCase() {
+            viz.clear();
+            
+            // Input
+            viz.createDataNode({ type: 'sphere', size: 0.5, color: 0x4dabf7, position: { x: 0, y: 2, z: 0 } });
+            viz.createLabel('Input', { x: 0, y: 2.8, z: 0 });
+            
+            // Cases
+            const cases = [
+                { label: 'Case 1', color: 0xe25a1c, x: -2 },
+                { label: 'Case 2', color: 0x198754, x: 0 },
+                { label: 'Case 3', color: 0x8b5cf6, x: 2 }
+            ];
+            
+            cases.forEach(c => {
+                viz.createDataNode({ type: 'cube', size: 0.5, color: c.color, position: { x: c.x, y: 0, z: 0 } });
+                viz.createLabel(c.label, { x: c.x, y: 0.8, z: 0 });
+                viz.createArrow({ x: 0, y: 1.5, z: 0 }, { x: c.x, y: 0.3, z: 0 }, { color: c.color });
+            });
+
+            viz.createLabel('Case Statement', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

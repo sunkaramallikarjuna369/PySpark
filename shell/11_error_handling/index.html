@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error Handling - Shell Scripting Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </a>
+            <nav class="nav">
+                <a href="../../index.html#shell" class="nav-link active">Shell</a>
+                <button class="theme-toggle">&#127769;</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="section">
+            <h1>Error Handling</h1>
+            <p>Build robust shell scripts with proper error handling, exit codes, traps, and recovery mechanisms.</p>
+
+            <h2>3D Visualization</h2>
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="basics">Exit Codes</button>
+                <button class="tab" data-tab="traps">Traps & Cleanup</button>
+                <button class="tab" data-tab="patterns">Error Patterns</button>
+                <button class="tab" data-tab="retry">Retry Logic</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="basics" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# EXIT CODES AND BASIC ERROR HANDLING
+# ============================================
+
+# Exit codes:
+# 0     - Success
+# 1     - General errors
+# 2     - Misuse of shell command
+# 126   - Command not executable
+# 127   - Command not found
+# 128+n - Fatal error signal n
+
+# Check last command's exit code
+some_command
+if [ $? -eq 0 ]; then
+    echo "Command succeeded"
+else
+    echo "Command failed with exit code: $?"
+fi
+
+# Inline error checking
+some_command || echo "Command failed"
+some_command || exit 1
+some_command || { echo "Failed"; exit 1; }
+
+# Strict mode (recommended for scripts)
+set -e          # Exit on error
+set -u          # Exit on undefined variable
+set -o pipefail # Exit on pipe failure
+# Combined: set -euo pipefail
+
+# Disable strict mode temporarily
+set +e
+risky_command
+result=$?
+set -e
+
+# Custom exit codes
+EXIT_SUCCESS=0
+EXIT_INVALID_ARGS=1
+EXIT_FILE_NOT_FOUND=2
+EXIT_PERMISSION_DENIED=3
+EXIT_NETWORK_ERROR=4
+
+validate_args() {
+    if [ $# -lt 2 ]; then
+        echo "Usage: $0 <input> <output>" >&2
+        exit $EXIT_INVALID_ARGS
+    fi
+}
+
+check_file() {
+    local file="$1"
+    if [ ! -f "$file" ]; then
+        echo "Error: File not found: $file" >&2
+        exit $EXIT_FILE_NOT_FOUND
+    fi
+    if [ ! -r "$file" ]; then
+        echo "Error: Cannot read file: $file" >&2
+        exit $EXIT_PERMISSION_DENIED
+    fi
+}
+
+# Return vs Exit
+# return - exits function, returns to caller
+# exit   - exits entire script
+
+my_function() {
+    if [ -z "$1" ]; then
+        return 1  # Return to caller
+    fi
+    echo "Processing: $1"
+    return 0
+}
+
+if ! my_function "$input"; then
+    echo "Function failed"
+    exit 1  # Exit script
+fi</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="traps" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# TRAPS AND CLEANUP
+# ============================================
+
+# Trap signals:
+# EXIT    - Script exit (any reason)
+# ERR     - Command error (with set -e)
+# INT     - Interrupt (Ctrl+C)
+# TERM    - Termination signal
+# HUP     - Hangup
+# DEBUG   - Before each command
+
+# Basic cleanup trap
+TEMP_DIR=""
+
+cleanup() {
+    echo "Cleaning up..."
+    [ -n "$TEMP_DIR" ] && rm -rf "$TEMP_DIR"
+}
+
+trap cleanup EXIT
+
+TEMP_DIR=$(mktemp -d)
+echo "Working in: $TEMP_DIR"
+
+# Error trap with line number
+error_handler() {
+    local line_no=$1
+    local error_code=$2
+    echo "Error on line $line_no (exit code: $error_code)" >&2
+}
+
+trap 'error_handler ${LINENO} $?' ERR
+
+# Interrupt handling
+interrupt_handler() {
+    echo ""
+    echo "Interrupted by user"
+    cleanup
+    exit 130
+}
+
+trap interrupt_handler INT TERM
+
+# Multiple traps
+setup_traps() {
+    trap cleanup EXIT
+    trap 'error_handler ${LINENO} $?' ERR
+    trap interrupt_handler INT TERM
+}
+
+# Trap with context
+trap_with_context() {
+    local script_name="$0"
+    local start_time=$(date +%s)
+    
+    finish() {
+        local end_time=$(date +%s)
+        local duration=$((end_time - start_time))
+        echo "Script: $script_name"
+        echo "Duration: ${duration}s"
+        echo "Exit code: $?"
+    }
+    
+    trap finish EXIT
+}
+
+# Disable trap temporarily
+trap '' INT  # Ignore interrupt
+critical_section
+trap interrupt_handler INT  # Re-enable
+
+# Remove trap
+trap - EXIT  # Remove EXIT trap
+
+# ============================================
+# PRACTICAL CLEANUP PATTERN
+# ============================================
+
+declare -a CLEANUP_TASKS
+
+add_cleanup() {
+    CLEANUP_TASKS+=("$1")
+}
+
+run_cleanup() {
+    for ((i=${#CLEANUP_TASKS[@]}-1; i>=0; i--)); do
+        eval "${CLEANUP_TASKS[$i]}" || true
+    done
+}
+
+trap run_cleanup EXIT
+
+# Usage
+TEMP_FILE=$(mktemp)
+add_cleanup "rm -f $TEMP_FILE"
+
+LOCK_FILE="/var/lock/myapp.lock"
+touch "$LOCK_FILE"
+add_cleanup "rm -f $LOCK_FILE"</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="patterns" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# ERROR HANDLING PATTERNS
+# ============================================
+
+# Logging functions
+log_info() { echo "[INFO] $(date '+%Y-%m-%d %H:%M:%S') $*"; }
+log_warn() { echo "[WARN] $(date '+%Y-%m-%d %H:%M:%S') $*" >&2; }
+log_error() { echo "[ERROR] $(date '+%Y-%m-%d %H:%M:%S') $*" >&2; }
+
+# Die function
+die() {
+    log_error "$1"
+    exit "${2:-1}"
+}
+
+# Assert function
+assert() {
+    local condition="$1"
+    local message="${2:-Assertion failed}"
+    
+    if ! eval "$condition"; then
+        die "$message"
+    fi
+}
+
+# Usage
+assert '[ -f "$CONFIG_FILE" ]' "Config file not found"
+assert '[ -n "$DATABASE_URL" ]' "DATABASE_URL not set"
+
+# Try-catch pattern
+try() {
+    set +e
+    "$@"
+    local status=$?
+    set -e
+    return $status
+}
+
+catch() {
+    local status=$?
+    if [ $status -ne 0 ]; then
+        "$@"
+    fi
+    return $status
+}
+
+# Usage
+if ! try risky_command; then
+    catch log_error "risky_command failed"
+    catch send_alert "Command failed"
+fi
+
+# Safe command execution
+safe_exec() {
+    local cmd="$1"
+    local error_msg="${2:-Command failed}"
+    
+    if ! eval "$cmd"; then
+        log_error "$error_msg: $cmd"
+        return 1
+    fi
+    return 0
+}
+
+# Validate prerequisites
+check_prerequisites() {
+    local missing=()
+    
+    # Check commands
+    for cmd in curl jq aws; do
+        if ! command -v "$cmd" &> /dev/null; then
+            missing+=("$cmd")
+        fi
+    done
+    
+    # Check environment variables
+    for var in DATABASE_URL API_KEY; do
+        if [ -z "${!var:-}" ]; then
+            missing+=("env:$var")
+        fi
+    done
+    
+    if [ ${#missing[@]} -gt 0 ]; then
+        die "Missing prerequisites: ${missing[*]}"
+    fi
+}
+
+# Timeout wrapper
+with_timeout() {
+    local timeout=$1
+    shift
+    
+    timeout "$timeout" "$@"
+    local status=$?
+    
+    if [ $status -eq 124 ]; then
+        log_error "Command timed out after ${timeout}s"
+    fi
+    
+    return $status
+}</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="retry" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# RETRY LOGIC
+# ============================================
+
+# Simple retry
+retry() {
+    local max_attempts=$1
+    local delay=$2
+    shift 2
+    local cmd="$@"
+    
+    local attempt=1
+    while [ $attempt -le $max_attempts ]; do
+        log_info "Attempt $attempt of $max_attempts: $cmd"
+        
+        if eval "$cmd"; then
+            log_info "Success on attempt $attempt"
+            return 0
+        fi
+        
+        if [ $attempt -lt $max_attempts ]; then
+            log_warn "Failed, retrying in ${delay}s..."
+            sleep "$delay"
+        fi
+        
+        ((attempt++))
+    done
+    
+    log_error "All $max_attempts attempts failed"
+    return 1
+}
+
+# Usage
+retry 3 5 curl -s http://api.example.com/health
+
+# Exponential backoff
+retry_with_backoff() {
+    local max_attempts=$1
+    local base_delay=$2
+    shift 2
+    local cmd="$@"
+    
+    local attempt=1
+    local delay=$base_delay
+    
+    while [ $attempt -le $max_attempts ]; do
+        if eval "$cmd"; then
+            return 0
+        fi
+        
+        if [ $attempt -lt $max_attempts ]; then
+            log_warn "Attempt $attempt failed, retrying in ${delay}s..."
+            sleep "$delay"
+            delay=$((delay * 2))  # Exponential backoff
+        fi
+        
+        ((attempt++))
+    done
+    
+    return 1
+}
+
+# Retry with jitter
+retry_with_jitter() {
+    local max_attempts=$1
+    local base_delay=$2
+    shift 2
+    local cmd="$@"
+    
+    local attempt=1
+    
+    while [ $attempt -le $max_attempts ]; do
+        if eval "$cmd"; then
+            return 0
+        fi
+        
+        if [ $attempt -lt $max_attempts ]; then
+            # Add random jitter (0-50% of delay)
+            local jitter=$((RANDOM % (base_delay / 2)))
+            local delay=$((base_delay + jitter))
+            sleep "$delay"
+        fi
+        
+        ((attempt++))
+    done
+    
+    return 1
+}
+
+# Retry specific exit codes
+retry_on_codes() {
+    local max_attempts=$1
+    local delay=$2
+    local retry_codes=$3
+    shift 3
+    local cmd="$@"
+    
+    local attempt=1
+    
+    while [ $attempt -le $max_attempts ]; do
+        eval "$cmd"
+        local status=$?
+        
+        if [ $status -eq 0 ]; then
+            return 0
+        fi
+        
+        # Check if we should retry this exit code
+        if ! echo "$retry_codes" | grep -q "$status"; then
+            log_error "Non-retryable error: $status"
+            return $status
+        fi
+        
+        if [ $attempt -lt $max_attempts ]; then
+            sleep "$delay"
+        fi
+        
+        ((attempt++))
+    done
+    
+    return 1
+}
+
+# Usage: retry only on exit codes 1, 2, 3
+retry_on_codes 3 5 "1 2 3" some_command</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../10_cron_scheduling/index.html" style="color: var(--text-muted);">&larr; Previous: Cron Scheduling</a>
+                <a href="../12_best_practices/index.html" style="color: var(--accent-primary);">Next: Best Practices &rarr;</a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+        </div>
+    </footer>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', {
+                backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 0x1a1a2e : 0xf8f9fa,
+                cameraPosition: { x: 6, y: 4, z: 6 }
+            });
+            
+            // Error handling flow
+            viz.createDataNode({ type: 'sphere', size: 0.5, color: 0x4dabf7, position: { x: -2, y: 1, z: 0 } });
+            viz.createLabel('Try', { x: -2, y: 1.7, z: 0 });
+            
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0xffc107, position: { x: 0, y: 1, z: 0 } });
+            viz.createLabel('Check', { x: 0, y: 1.7, z: 0 });
+            
+            viz.createDataNode({ type: 'sphere', size: 0.4, color: 0x198754, position: { x: 2, y: 1.5, z: 0 } });
+            viz.createLabel('Success', { x: 2, y: 2.2, z: 0 });
+            
+            viz.createDataNode({ type: 'sphere', size: 0.4, color: 0xdc3545, position: { x: 2, y: 0.5, z: 0 } });
+            viz.createLabel('Handle', { x: 2, y: -0.2, z: 0 });
+            
+            viz.createArrow({ x: -1.5, y: 1, z: 0 }, { x: -0.3, y: 1, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.3, y: 1.2, z: 0 }, { x: 1.5, y: 1.4, z: 0 }, { color: 0x198754 });
+            viz.createArrow({ x: 0.3, y: 0.8, z: 0 }, { x: 1.5, y: 0.6, z: 0 }, { color: 0xdc3545 });
+            
+            viz.createLabel('Error Handling Flow', { x: 0, y: -1, z: 0 });
+            viz.createGrid(10, 10);
+        });
+    </script>
+</body>
+</html>

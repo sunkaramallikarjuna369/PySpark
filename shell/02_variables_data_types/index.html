@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Variables & Data Types - Shell Scripting Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </a>
+            <nav class="nav">
+                <a href="../../index.html#pyspark" class="nav-link">PySpark</a>
+                <a href="../../index.html#pandas" class="nav-link">Pandas</a>
+                <a href="../../index.html#sql" class="nav-link">SQL</a>
+                <a href="../../index.html#etl" class="nav-link">ETL</a>
+                <a href="../../index.html#datawarehouse" class="nav-link">Data Warehouse</a>
+                <a href="../../index.html#shell" class="nav-link active">Shell</a>
+                <button class="theme-toggle">&#127769;</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <nav class="breadcrumb">
+            <span class="breadcrumb-item"><a href="../../index.html">Home</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item"><a href="../../index.html#shell">Shell Scripting</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item">Variables & Data Types</span>
+        </nav>
+
+        <section class="section">
+            <h1>Variables & Data Types</h1>
+            <p>Bash variables store data for use in scripts. Unlike strongly-typed languages, bash treats all variables as strings by default, but provides mechanisms for numeric operations and arrays.</p>
+
+            <div class="info-box info">
+                <strong>Key Concept:</strong> In bash, variables are untyped by default. The context determines how a variable is interpreted - as a string, number, or array element.
+            </div>
+
+            <h2>3D Visualization: Variable Types</h2>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showVariableTypes()">Variable Types</button>
+                <button class="viz-btn" onclick="showScope()">Variable Scope</button>
+                <button class="viz-btn" onclick="showArrays()">Arrays</button>
+            </div>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="basic">Basic Variables</button>
+                <button class="tab" data-tab="arrays">Arrays</button>
+                <button class="tab" data-tab="special">Special Variables</button>
+                <button class="tab" data-tab="scope">Scope & Export</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="basic" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# BASIC VARIABLES IN BASH
+# ============================================
+
+# Variable assignment (NO SPACES around =)
+NAME="John Doe"
+AGE=30
+SALARY=75000.50
+
+# Correct:
+VAR="value"
+
+# Wrong (will cause errors):
+# VAR = "value"    # Spaces around =
+# VAR= "value"     # Space after =
+
+# ============================================
+# VARIABLE EXPANSION
+# ============================================
+
+# Basic expansion
+echo "Name: $NAME"
+echo "Name: ${NAME}"  # Preferred for clarity
+
+# Concatenation
+FIRST="Data"
+LAST="Engineer"
+FULL="${FIRST} ${LAST}"
+echo "Title: $FULL"
+
+# Without braces (ambiguous)
+echo "$FIRSTname"     # Looks for variable FIRSTname
+echo "${FIRST}name"   # Correctly outputs: Dataname
+
+# ============================================
+# COMMAND SUBSTITUTION
+# ============================================
+
+# Modern syntax (preferred)
+CURRENT_DATE=$(date +"%Y-%m-%d")
+FILE_COUNT=$(ls -1 | wc -l)
+HOSTNAME=$(hostname)
+
+# Legacy syntax (backticks)
+CURRENT_DATE=`date +"%Y-%m-%d"`
+
+# Nested command substitution
+PARENT_DIR=$(basename $(dirname $(pwd)))
+
+echo "Date: $CURRENT_DATE"
+echo "Files: $FILE_COUNT"
+echo "Host: $HOSTNAME"
+
+# ============================================
+# ARITHMETIC OPERATIONS
+# ============================================
+
+# Integer arithmetic with $(( ))
+A=10
+B=3
+
+SUM=$((A + B))
+DIFF=$((A - B))
+PROD=$((A * B))
+QUOT=$((A / B))
+MOD=$((A % B))
+POW=$((A ** 2))
+
+echo "Sum: $SUM"        # 13
+echo "Difference: $DIFF" # 7
+echo "Product: $PROD"    # 30
+echo "Quotient: $QUOT"   # 3
+echo "Modulo: $MOD"      # 1
+echo "Power: $POW"       # 100
+
+# Increment/Decrement
+((A++))
+((B--))
+((A += 5))
+((B *= 2))
+
+# Floating point with bc
+FLOAT_RESULT=$(echo "scale=2; 10 / 3" | bc)
+echo "Float division: $FLOAT_RESULT"  # 3.33
+
+# ============================================
+# STRING OPERATIONS
+# ============================================
+
+STRING="Hello, World!"
+
+# Length
+echo "Length: ${#STRING}"  # 13
+
+# Substring extraction
+echo "${STRING:0:5}"   # Hello (start:length)
+echo "${STRING:7}"     # World! (from position 7)
+echo "${STRING: -6}"   # World! (last 6 chars, note space)
+
+# Substring replacement
+echo "${STRING/World/Bash}"      # Hello, Bash!
+echo "${STRING//o/0}"            # Hell0, W0rld! (replace all)
+
+# Remove pattern
+FILE="document.txt.bak"
+echo "${FILE%.bak}"      # document.txt (remove suffix)
+echo "${FILE%.*}"        # document.txt (remove last extension)
+echo "${FILE%%.*}"       # document (remove all extensions)
+echo "${FILE#*.}"        # txt.bak (remove prefix)
+echo "${FILE##*.}"       # bak (remove longest prefix)
+
+# Case conversion (Bash 4+)
+echo "${STRING^^}"       # HELLO, WORLD! (uppercase)
+echo "${STRING,,}"       # hello, world! (lowercase)
+echo "${STRING^}"        # Hello, World! (capitalize first)
+
+# ============================================
+# DEFAULT VALUES
+# ============================================
+
+# Use default if unset or null
+echo "${UNDEFINED:-default}"     # default
+echo "${NAME:-default}"          # John Doe (NAME is set)
+
+# Assign default if unset
+echo "${NEWVAR:=assigned}"       # assigned (also sets NEWVAR)
+echo "$NEWVAR"                   # assigned
+
+# Error if unset
+# echo "${REQUIRED:?Variable not set}"  # Exits with error
+
+# Use alternate value if set
+echo "${NAME:+is set}"           # is set (NAME exists)
+echo "${UNDEFINED:+is set}"      # (empty, UNDEFINED not set)</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="arrays" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# ARRAYS IN BASH
+# ============================================
+
+# ============================================
+# INDEXED ARRAYS
+# ============================================
+
+# Declaration methods
+FRUITS=("apple" "banana" "cherry" "date")
+declare -a VEGETABLES
+VEGETABLES[0]="carrot"
+VEGETABLES[1]="broccoli"
+VEGETABLES[2]="spinach"
+
+# Access elements
+echo "First fruit: ${FRUITS[0]}"
+echo "Third fruit: ${FRUITS[2]}"
+
+# All elements
+echo "All fruits: ${FRUITS[@]}"
+echo "All fruits: ${FRUITS[*]}"
+
+# Number of elements
+echo "Count: ${#FRUITS[@]}"
+
+# Array indices
+echo "Indices: ${!FRUITS[@]}"
+
+# Length of specific element
+echo "Length of first: ${#FRUITS[0]}"
+
+# ============================================
+# ARRAY OPERATIONS
+# ============================================
+
+# Append element
+FRUITS+=("elderberry")
+FRUITS+=("fig" "grape")
+
+# Insert at specific index
+FRUITS[10]="kiwi"  # Sparse array OK
+
+# Remove element
+unset FRUITS[1]    # Removes "banana"
+
+# Slice array
+echo "Slice [1:3]: ${FRUITS[@]:1:3}"
+
+# Copy array
+FRUITS_COPY=("${FRUITS[@]}")
+
+# ============================================
+# ITERATING ARRAYS
+# ============================================
+
+# Iterate over values
+echo "Fruits:"
+for fruit in "${FRUITS[@]}"; do
+    echo "  - $fruit"
+done
+
+# Iterate with index
+echo "Indexed:"
+for i in "${!FRUITS[@]}"; do
+    echo "  [$i] = ${FRUITS[$i]}"
+done
+
+# ============================================
+# ASSOCIATIVE ARRAYS (Bash 4+)
+# ============================================
+
+# Must declare explicitly
+declare -A CONFIG
+declare -A USER_INFO
+
+# Assignment
+CONFIG["host"]="localhost"
+CONFIG["port"]="5432"
+CONFIG["database"]="mydb"
+CONFIG["user"]="admin"
+
+USER_INFO=(
+    [name]="John Doe"
+    [email]="john@example.com"
+    [role]="engineer"
+)
+
+# Access
+echo "Host: ${CONFIG[host]}"
+echo "User: ${USER_INFO[name]}"
+
+# All keys
+echo "Config keys: ${!CONFIG[@]}"
+
+# All values
+echo "Config values: ${CONFIG[@]}"
+
+# Check if key exists
+if [[ -v CONFIG[host] ]]; then
+    echo "Host is configured"
+fi
+
+# Iterate associative array
+echo "Configuration:"
+for key in "${!CONFIG[@]}"; do
+    echo "  $key = ${CONFIG[$key]}"
+done
+
+# ============================================
+# PRACTICAL EXAMPLES
+# ============================================
+
+# Parse CSV into array
+IFS=',' read -ra COLUMNS <<< "id,name,email,status"
+echo "CSV columns: ${COLUMNS[@]}"
+
+# Build array from command output
+mapfile -t FILES < <(ls -1 *.sh 2>/dev/null)
+echo "Shell scripts: ${FILES[@]}"
+
+# Array as function argument
+process_items() {
+    local items=("$@")
+    for item in "${items[@]}"; do
+        echo "Processing: $item"
+    done
+}
+process_items "${FRUITS[@]}"
+
+# Return array from function
+get_numbers() {
+    local nums=(1 2 3 4 5)
+    echo "${nums[@]}"
+}
+NUMBERS=($(get_numbers))
+echo "Numbers: ${NUMBERS[@]}"
+
+# ============================================
+# DATA PROCESSING WITH ARRAYS
+# ============================================
+
+# Store CSV data
+declare -a DATA
+DATA+=("1,Alice,100")
+DATA+=("2,Bob,200")
+DATA+=("3,Charlie,150")
+
+# Process each row
+echo "Processing data:"
+for row in "${DATA[@]}"; do
+    IFS=',' read -r id name value <<< "$row"
+    echo "  ID: $id, Name: $name, Value: $value"
+done
+
+# Calculate sum
+TOTAL=0
+for row in "${DATA[@]}"; do
+    IFS=',' read -r id name value <<< "$row"
+    ((TOTAL += value))
+done
+echo "Total: $TOTAL"</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="special" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# SPECIAL VARIABLES IN BASH
+# ============================================
+
+# ============================================
+# POSITIONAL PARAMETERS
+# ============================================
+
+echo "Script name: $0"
+echo "First argument: $1"
+echo "Second argument: $2"
+echo "Third argument: $3"
+
+# All arguments
+echo "All args (\$@): $@"
+echo "All args (\$*): $*"
+
+# Number of arguments
+echo "Argument count: $#"
+
+# Difference between $@ and $*
+# $@ - Each argument as separate word
+# $* - All arguments as single word
+
+demo_args() {
+    echo "Using \$@:"
+    for arg in "$@"; do
+        echo "  '$arg'"
+    done
+    
+    echo "Using \$*:"
+    for arg in "$*"; do
+        echo "  '$arg'"
+    done
+}
+
+# demo_args "arg one" "arg two" "arg three"
+
+# Shift arguments
+# shift      # Remove $1, shift others down
+# shift 2    # Remove $1 and $2
+
+# ============================================
+# PROCESS VARIABLES
+# ============================================
+
+echo "Current PID: $$"
+echo "Parent PID: $PPID"
+echo "Last background PID: $!"
+
+# Run background process
+sleep 1 &
+BACKGROUND_PID=$!
+echo "Background process: $BACKGROUND_PID"
+
+# ============================================
+# EXIT STATUS
+# ============================================
+
+# Last command exit status
+ls /tmp > /dev/null 2>&1
+echo "Exit status: $?"  # 0 = success
+
+ls /nonexistent 2>/dev/null
+echo "Exit status: $?"  # Non-zero = failure
+
+# PIPESTATUS array (exit status of pipeline)
+cat /etc/passwd | grep root | wc -l
+echo "Pipeline status: ${PIPESTATUS[@]}"
+
+# ============================================
+# ENVIRONMENT VARIABLES
+# ============================================
+
+echo "Home directory: $HOME"
+echo "Current user: $USER"
+echo "Shell: $SHELL"
+echo "Path: $PATH"
+echo "Working directory: $PWD"
+echo "Previous directory: $OLDPWD"
+echo "Hostname: $HOSTNAME"
+echo "Random number: $RANDOM"
+echo "Seconds since start: $SECONDS"
+echo "Current line number: $LINENO"
+
+# ============================================
+# BASH-SPECIFIC VARIABLES
+# ============================================
+
+echo "Bash version: $BASH_VERSION"
+echo "Bash major version: ${BASH_VERSINFO[0]}"
+
+# IFS - Internal Field Separator
+echo "IFS: '$IFS'"  # Default: space, tab, newline
+
+# Custom IFS for parsing
+OLD_IFS="$IFS"
+IFS=','
+read -ra PARTS <<< "a,b,c,d"
+echo "Parts: ${PARTS[@]}"
+IFS="$OLD_IFS"
+
+# PS1 - Primary prompt
+# PS2 - Secondary prompt (continuation)
+# PS4 - Debug prompt (set -x)
+
+# ============================================
+# USEFUL SPECIAL PATTERNS
+# ============================================
+
+# Check if running as root
+if [ "$EUID" -eq 0 ]; then
+    echo "Running as root"
+else
+    echo "Running as user: $USER"
+fi
+
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+echo "Script directory: $SCRIPT_DIR"
+
+# Check if interactive shell
+if [[ $- == *i* ]]; then
+    echo "Interactive shell"
+else
+    echo "Non-interactive shell"
+fi
+
+# Check if sourced or executed
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "Script is being executed"
+else
+    echo "Script is being sourced"
+fi</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="scope" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# VARIABLE SCOPE AND EXPORT
+# ============================================
+
+# ============================================
+# LOCAL VS GLOBAL VARIABLES
+# ============================================
+
+GLOBAL_VAR="I am global"
+
+my_function() {
+    local LOCAL_VAR="I am local"
+    GLOBAL_VAR="Modified global"
+    NEW_GLOBAL="Created in function"
+    
+    echo "Inside function:"
+    echo "  LOCAL_VAR: $LOCAL_VAR"
+    echo "  GLOBAL_VAR: $GLOBAL_VAR"
+}
+
+echo "Before function:"
+echo "  GLOBAL_VAR: $GLOBAL_VAR"
+
+my_function
+
+echo "After function:"
+echo "  GLOBAL_VAR: $GLOBAL_VAR"
+echo "  NEW_GLOBAL: $NEW_GLOBAL"
+echo "  LOCAL_VAR: $LOCAL_VAR"  # Empty - out of scope
+
+# ============================================
+# EXPORT - ENVIRONMENT VARIABLES
+# ============================================
+
+# Regular variable (not inherited by child processes)
+REGULAR_VAR="not exported"
+
+# Exported variable (inherited by child processes)
+export EXPORTED_VAR="I am exported"
+
+# Export existing variable
+MY_VAR="value"
+export MY_VAR
+
+# Export and assign in one line
+export DATABASE_URL="postgresql://localhost/mydb"
+
+# Check if variable is exported
+if declare -p EXPORTED_VAR 2>/dev/null | grep -q 'declare -x'; then
+    echo "EXPORTED_VAR is exported"
+fi
+
+# List all exported variables
+# export -p
+
+# Remove export (keep variable)
+export -n EXPORTED_VAR
+
+# ============================================
+# SUBSHELL BEHAVIOR
+# ============================================
+
+PARENT_VAR="parent value"
+
+# Subshell (parentheses)
+(
+    PARENT_VAR="modified in subshell"
+    SUBSHELL_VAR="created in subshell"
+    echo "In subshell: $PARENT_VAR"
+)
+
+echo "After subshell: $PARENT_VAR"  # Unchanged
+echo "SUBSHELL_VAR: $SUBSHELL_VAR"  # Empty
+
+# Pipeline creates subshell
+echo "hello" | read PIPE_VAR
+echo "PIPE_VAR: $PIPE_VAR"  # Empty (read was in subshell)
+
+# Solution: use process substitution or lastpipe
+shopt -s lastpipe 2>/dev/null
+echo "hello" | read PIPE_VAR
+echo "PIPE_VAR: $PIPE_VAR"  # Works with lastpipe
+
+# ============================================
+# READONLY VARIABLES
+# ============================================
+
+readonly CONSTANT="cannot change"
+declare -r ANOTHER_CONSTANT="also readonly"
+
+# Attempting to modify will cause error
+# CONSTANT="new value"  # Error!
+
+# ============================================
+# DECLARE OPTIONS
+# ============================================
+
+# Integer variable
+declare -i NUMBER=10
+NUMBER=NUMBER+5  # Arithmetic without $(( ))
+echo "Number: $NUMBER"  # 15
+
+# Lowercase
+declare -l LOWER="HELLO"
+echo "Lower: $LOWER"  # hello
+
+# Uppercase
+declare -u UPPER="hello"
+echo "Upper: $UPPER"  # HELLO
+
+# Array
+declare -a MY_ARRAY
+
+# Associative array
+declare -A MY_HASH
+
+# Export
+declare -x EXPORTED="value"
+
+# Readonly
+declare -r READONLY="constant"
+
+# Print variable attributes
+declare -p NUMBER
+
+# ============================================
+# PRACTICAL EXAMPLES
+# ============================================
+
+# Configuration with defaults
+load_config() {
+    export DB_HOST="${DB_HOST:-localhost}"
+    export DB_PORT="${DB_PORT:-5432}"
+    export DB_NAME="${DB_NAME:-mydb}"
+    export LOG_LEVEL="${LOG_LEVEL:-INFO}"
+}
+
+load_config
+echo "Database: $DB_HOST:$DB_PORT/$DB_NAME"
+
+# Scoped configuration
+run_with_config() {
+    local OLD_PATH="$PATH"
+    export PATH="/custom/bin:$PATH"
+    
+    # Run command with modified PATH
+    "$@"
+    
+    export PATH="$OLD_PATH"
+}
+
+# Environment for child process
+(
+    export CUSTOM_ENV="value"
+    ./child_script.sh 2>/dev/null || true
+)
+# CUSTOM_ENV not visible here</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../01_bash_basics/index.html" style="color: var(--text-muted);">&larr; Previous: Bash Basics</a>
+                <a href="../03_control_structures/index.html" style="color: var(--accent-primary);">Next: Control Structures &rarr;</a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+        </div>
+    </footer>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', {
+                backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 0x1a1a2e : 0xf8f9fa,
+                cameraPosition: { x: 6, y: 4, z: 6 }
+            });
+            showVariableTypes();
+        });
+
+        function showVariableTypes() {
+            viz.clear();
+            
+            const types = [
+                { name: 'String', color: 0x4dabf7, x: -2 },
+                { name: 'Integer', color: 0x198754, x: 0 },
+                { name: 'Array', color: 0xe25a1c, x: 2 }
+            ];
+            
+            types.forEach(t => {
+                viz.createDataNode({ type: 'cube', size: 0.8, color: t.color, position: { x: t.x, y: 0.5, z: 0 } });
+                viz.createLabel(t.name, { x: t.x, y: 1.5, z: 0 });
+            });
+
+            viz.createLabel('Bash Variable Types', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showScope() {
+            viz.clear();
+            
+            // Global scope
+            viz.createDataNode({ type: 'cube', size: 2, color: 0x4dabf7, position: { x: 0, y: 0.2, z: 0 }, opacity: 0.3 });
+            viz.createLabel('Global Scope', { x: 0, y: 1.5, z: 0 });
+            
+            // Local scope (function)
+            viz.createDataNode({ type: 'cube', size: 1, color: 0x198754, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('Local (function)', { x: 0, y: 0.5, z: 1 });
+            
+            // Export arrow
+            viz.createDataNode({ type: 'sphere', size: 0.3, color: 0xe25a1c, position: { x: 2, y: 0.5, z: 0 } });
+            viz.createLabel('Exported', { x: 2, y: 1.2, z: 0 });
+            viz.createArrow({ x: 1.2, y: 0.5, z: 0 }, { x: 1.7, y: 0.5, z: 0 }, { color: 0xe25a1c });
+
+            viz.createLabel('Variable Scope', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showArrays() {
+            viz.clear();
+            
+            // Indexed array
+            for (let i = 0; i < 5; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.4, color: 0x4dabf7,
+                    position: { x: -2 + i * 0.5, y: 1, z: 0 }
+                });
+            }
+            viz.createLabel('Indexed Array [0,1,2,3,4]', { x: 0, y: 2, z: 0 });
+            
+            // Associative array
+            const keys = ['host', 'port', 'db'];
+            keys.forEach((key, i) => {
+                viz.createDataNode({
+                    type: 'sphere', size: 0.3, color: 0x198754,
+                    position: { x: -1.5 + i * 1.5, y: -0.5, z: 0 }
+                });
+                viz.createLabel(key, { x: -1.5 + i * 1.5, y: -1.2, z: 0 });
+            });
+            viz.createLabel('Associative Array {key: value}', { x: 0, y: 0.3, z: 0 });
+
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log Processing - Shell Scripting Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </a>
+            <nav class="nav">
+                <a href="../../index.html#shell" class="nav-link active">Shell</a>
+                <button class="theme-toggle">&#127769;</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="section">
+            <h1>Log Processing</h1>
+            <p>Analyze and process log files efficiently using shell scripts for monitoring, debugging, and data extraction.</p>
+
+            <h2>3D Visualization</h2>
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="analysis">Log Analysis</button>
+                <button class="tab" data-tab="parsing">Log Parsing</button>
+                <button class="tab" data-tab="monitoring">Real-time Monitoring</button>
+                <button class="tab" data-tab="rotation">Log Rotation</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="analysis" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# LOG ANALYSIS
+# ============================================
+
+LOG_FILE="/var/log/app.log"
+
+# Count log levels
+count_log_levels() {
+    echo "Log Level Distribution:"
+    grep -oE "\[(INFO|WARN|ERROR|DEBUG)\]" "$LOG_FILE" | \
+        sort | uniq -c | sort -rn
+}
+
+# Find errors in last hour
+recent_errors() {
+    local hours="${1:-1}"
+    local since=$(date -d "$hours hours ago" '+%Y-%m-%d %H:%M')
+    
+    awk -v since="$since" '
+        $1 " " $2 >= since && /ERROR/ {print}
+    ' "$LOG_FILE"
+}
+
+# Top error messages
+top_errors() {
+    local count="${1:-10}"
+    
+    grep "ERROR" "$LOG_FILE" | \
+        sed 's/.*ERROR[^:]*: //' | \
+        sort | uniq -c | sort -rn | head -n "$count"
+}
+
+# Requests per minute
+requests_per_minute() {
+    awk '{print $1, substr($2, 1, 5)}' "$LOG_FILE" | \
+        sort | uniq -c | \
+        awk '{print $2, $3, $1}'
+}
+
+# Response time analysis
+response_time_stats() {
+    grep -oE "response_time=[0-9.]+" "$LOG_FILE" | \
+        cut -d= -f2 | \
+        awk '
+            {
+                sum += $1
+                count++
+                if ($1 > max) max = $1
+                if (min == 0 || $1 < min) min = $1
+            }
+            END {
+                print "Count:", count
+                print "Min:", min, "ms"
+                print "Max:", max, "ms"
+                print "Avg:", sum/count, "ms"
+            }
+        '
+}
+
+# Find slow requests
+slow_requests() {
+    local threshold="${1:-1000}"
+    
+    grep -E "response_time=[0-9]+" "$LOG_FILE" | \
+        awk -v thresh="$threshold" '
+            match($0, /response_time=([0-9]+)/, arr) {
+                if (arr[1] > thresh) print
+            }
+        '
+}
+
+# Error rate calculation
+error_rate() {
+    local total=$(wc -l < "$LOG_FILE")
+    local errors=$(grep -c "ERROR" "$LOG_FILE")
+    
+    echo "Total: $total"
+    echo "Errors: $errors"
+    echo "Rate: $(echo "scale=2; $errors * 100 / $total" | bc)%"
+}</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="parsing" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# LOG PARSING
+# ============================================
+
+# Parse Apache/Nginx access log
+parse_access_log() {
+    local log_file="$1"
+    
+    # Format: IP - - [timestamp] "request" status size
+    awk '{
+        ip = $1
+        timestamp = $4 " " $5
+        gsub(/[\[\]]/, "", timestamp)
+        request = $6 " " $7 " " $8
+        gsub(/"/, "", request)
+        status = $9
+        size = $10
+        
+        print ip, timestamp, request, status, size
+    }' "$log_file"
+}
+
+# Extract IPs with most requests
+top_ips() {
+    local log_file="$1"
+    local count="${2:-10}"
+    
+    awk '{print $1}' "$log_file" | \
+        sort | uniq -c | sort -rn | head -n "$count"
+}
+
+# Parse JSON logs
+parse_json_log() {
+    local log_file="$1"
+    
+    while IFS= read -r line; do
+        # Extract fields using jq
+        timestamp=$(echo "$line" | jq -r '.timestamp // empty')
+        level=$(echo "$line" | jq -r '.level // empty')
+        message=$(echo "$line" | jq -r '.message // empty')
+        
+        echo "$timestamp [$level] $message"
+    done < "$log_file"
+}
+
+# Parse custom log format
+parse_custom_log() {
+    local log_file="$1"
+    
+    # Example: 2024-01-01 12:00:00 [INFO] user=john action=login status=success
+    while IFS= read -r line; do
+        timestamp=$(echo "$line" | cut -d' ' -f1-2)
+        level=$(echo "$line" | grep -oP '\[\K[^\]]+')
+        
+        # Extract key=value pairs
+        declare -A fields
+        for kv in $(echo "$line" | grep -oE '[a-z]+=[^ ]+'); do
+            key="${kv%%=*}"
+            value="${kv#*=}"
+            fields[$key]="$value"
+        done
+        
+        echo "Time: $timestamp, Level: $level, User: ${fields[user]}, Action: ${fields[action]}"
+    done < "$log_file"
+}
+
+# Convert log to CSV
+log_to_csv() {
+    local log_file="$1"
+    local output_file="$2"
+    
+    echo "timestamp,level,message" > "$output_file"
+    
+    grep -oP '\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}.*' "$log_file" | \
+        sed 's/\[\([A-Z]*\)\]/,\1,/' >> "$output_file"
+}</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="monitoring" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# REAL-TIME LOG MONITORING
+# ============================================
+
+# Follow log with filtering
+monitor_errors() {
+    local log_file="$1"
+    
+    tail -f "$log_file" | grep --line-buffered "ERROR"
+}
+
+# Monitor with alerts
+monitor_with_alerts() {
+    local log_file="$1"
+    local alert_pattern="$2"
+    local alert_command="$3"
+    
+    tail -f "$log_file" | while read -r line; do
+        if echo "$line" | grep -q "$alert_pattern"; then
+            echo "ALERT: $line"
+            eval "$alert_command"
+        fi
+    done
+}
+
+# Monitor multiple logs
+monitor_multiple() {
+    tail -f /var/log/app1.log /var/log/app2.log | \
+        grep --line-buffered -E "ERROR|CRITICAL"
+}
+
+# Rate monitoring
+monitor_rate() {
+    local log_file="$1"
+    local pattern="$2"
+    local interval="${3:-60}"
+    
+    while true; do
+        count=$(tail -n 1000 "$log_file" | grep -c "$pattern" || true)
+        timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+        echo "$timestamp: $count matches in last 1000 lines"
+        
+        if [ "$count" -gt 100 ]; then
+            echo "WARNING: High rate detected!"
+        fi
+        
+        sleep "$interval"
+    done
+}
+
+# Dashboard-style monitoring
+log_dashboard() {
+    local log_file="$1"
+    
+    while true; do
+        clear
+        echo "=== Log Dashboard $(date) ==="
+        echo ""
+        
+        echo "Last 5 errors:"
+        grep "ERROR" "$log_file" | tail -5
+        echo ""
+        
+        echo "Log level counts (last 1000 lines):"
+        tail -1000 "$log_file" | \
+            grep -oE "\[(INFO|WARN|ERROR)\]" | \
+            sort | uniq -c
+        echo ""
+        
+        echo "Requests per second:"
+        tail -100 "$log_file" | wc -l
+        
+        sleep 5
+    done
+}</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="rotation" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# LOG ROTATION AND MANAGEMENT
+# ============================================
+
+# Simple log rotation
+rotate_log() {
+    local log_file="$1"
+    local max_files="${2:-7}"
+    
+    # Rotate existing files
+    for ((i=max_files-1; i>=1; i--)); do
+        if [ -f "${log_file}.$i" ]; then
+            mv "${log_file}.$i" "${log_file}.$((i+1))"
+        fi
+    done
+    
+    # Rotate current log
+    if [ -f "$log_file" ]; then
+        mv "$log_file" "${log_file}.1"
+    fi
+    
+    # Create new log file
+    touch "$log_file"
+}
+
+# Rotate with compression
+rotate_and_compress() {
+    local log_file="$1"
+    local max_days="${2:-30}"
+    
+    local date_suffix=$(date +%Y%m%d)
+    local archive="${log_file}.${date_suffix}.gz"
+    
+    # Compress current log
+    gzip -c "$log_file" > "$archive"
+    
+    # Truncate original
+    : > "$log_file"
+    
+    # Remove old archives
+    find "$(dirname "$log_file")" -name "$(basename "$log_file").*.gz" \
+        -mtime +$max_days -delete
+}
+
+# Size-based rotation
+rotate_by_size() {
+    local log_file="$1"
+    local max_size_mb="${2:-100}"
+    
+    local size=$(stat -f%z "$log_file" 2>/dev/null || stat -c%s "$log_file")
+    local max_bytes=$((max_size_mb * 1024 * 1024))
+    
+    if [ "$size" -gt "$max_bytes" ]; then
+        rotate_log "$log_file"
+        echo "Rotated $log_file (was ${size} bytes)"
+    fi
+}
+
+# Cleanup old logs
+cleanup_old_logs() {
+    local log_dir="$1"
+    local days="${2:-30}"
+    
+    echo "Cleaning logs older than $days days in $log_dir"
+    
+    find "$log_dir" -name "*.log*" -mtime +$days -print -delete
+    find "$log_dir" -name "*.gz" -mtime +$days -print -delete
+}
+
+# Logrotate config generator
+generate_logrotate_config() {
+    local log_path="$1"
+    local output_file="$2"
+    
+    cat > "$output_file" << EOF
+$log_path {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 644 root root
+    postrotate
+        systemctl reload app 2>/dev/null || true
+    endscript
+}
+EOF
+}</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../08_etl_automation/index.html" style="color: var(--text-muted);">&larr; Previous: ETL Automation</a>
+                <a href="../10_cron_scheduling/index.html" style="color: var(--accent-primary);">Next: Cron Scheduling &rarr;</a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+        </div>
+    </footer>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', {
+                backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 0x1a1a2e : 0xf8f9fa,
+                cameraPosition: { x: 6, y: 4, z: 6 }
+            });
+            
+            // Log processing visualization
+            viz.createDataNode({ type: 'cylinder', size: 0.6, color: 0x4dabf7, position: { x: -2, y: 0.5, z: 0 } });
+            viz.createLabel('Log Files', { x: -2, y: 1.4, z: 0 });
+            
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0xe25a1c, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('Parser', { x: 0, y: 1.4, z: 0 });
+            
+            viz.createDataNode({ type: 'sphere', size: 0.5, color: 0x198754, position: { x: 2, y: 0.5, z: 0 } });
+            viz.createLabel('Insights', { x: 2, y: 1.4, z: 0 });
+            
+            viz.createArrow({ x: -1.3, y: 0.5, z: 0 }, { x: -0.4, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.4, y: 0.5, z: 0 }, { x: 1.5, y: 0.5, z: 0 }, { color: 0x888888 });
+            
+            viz.createLabel('Log Processing Pipeline', { x: 0, y: -1, z: 0 });
+            viz.createGrid(10, 10);
+        });
+    </script>
+</body>
+</html>

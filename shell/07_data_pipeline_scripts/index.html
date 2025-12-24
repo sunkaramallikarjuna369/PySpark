@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Pipeline Scripts - Shell Scripting Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </a>
+            <nav class="nav">
+                <a href="../../index.html#shell" class="nav-link active">Shell</a>
+                <button class="theme-toggle">&#127769;</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="section">
+            <h1>Data Pipeline Scripts</h1>
+            <p>Build robust data pipelines using shell scripts for extraction, transformation, and loading of data across systems.</p>
+
+            <h2>3D Visualization</h2>
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="extract">Data Extraction</button>
+                <button class="tab" data-tab="transform">Transformation</button>
+                <button class="tab" data-tab="load">Data Loading</button>
+                <button class="tab" data-tab="pipeline">Full Pipeline</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="extract" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# DATA EXTRACTION SCRIPTS
+# ============================================
+
+# Extract from API
+extract_from_api() {
+    local endpoint="$1"
+    local output_file="$2"
+    local api_key="${API_KEY:-}"
+    
+    curl -s -H "Authorization: Bearer $api_key" \
+         -H "Content-Type: application/json" \
+         "$endpoint" > "$output_file"
+    
+    if [ $? -eq 0 ] && [ -s "$output_file" ]; then
+        echo "Extracted data to $output_file"
+        return 0
+    else
+        echo "Extraction failed" >&2
+        return 1
+    fi
+}
+
+# Extract from database
+extract_from_postgres() {
+    local query="$1"
+    local output_file="$2"
+    
+    PGPASSWORD="$DB_PASSWORD" psql \
+        -h "$DB_HOST" \
+        -U "$DB_USER" \
+        -d "$DB_NAME" \
+        -c "COPY ($query) TO STDOUT WITH CSV HEADER" \
+        > "$output_file"
+}
+
+# Extract from S3
+extract_from_s3() {
+    local s3_path="$1"
+    local local_path="$2"
+    
+    aws s3 cp "$s3_path" "$local_path" --recursive
+}
+
+# Extract with pagination
+extract_paginated_api() {
+    local base_url="$1"
+    local output_dir="$2"
+    local page=1
+    local has_more=true
+    
+    mkdir -p "$output_dir"
+    
+    while $has_more; do
+        local url="${base_url}?page=${page}&limit=100"
+        local output_file="${output_dir}/page_${page}.json"
+        
+        curl -s "$url" > "$output_file"
+        
+        # Check if more pages
+        local count=$(jq '.data | length' "$output_file")
+        if [ "$count" -lt 100 ]; then
+            has_more=false
+        fi
+        
+        ((page++))
+    done
+    
+    echo "Extracted $((page-1)) pages"
+}
+
+# Extract incremental data
+extract_incremental() {
+    local table="$1"
+    local timestamp_col="$2"
+    local last_run_file="$3"
+    local output_file="$4"
+    
+    local last_timestamp="1970-01-01"
+    if [ -f "$last_run_file" ]; then
+        last_timestamp=$(cat "$last_run_file")
+    fi
+    
+    local query="SELECT * FROM $table WHERE $timestamp_col > '$last_timestamp'"
+    extract_from_postgres "$query" "$output_file"
+    
+    # Update last run timestamp
+    date -Iseconds > "$last_run_file"
+}</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="transform" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# DATA TRANSFORMATION SCRIPTS
+# ============================================
+
+# Clean CSV data
+clean_csv() {
+    local input="$1"
+    local output="$2"
+    
+    # Remove BOM, normalize line endings, trim whitespace
+    sed 's/^\xEF\xBB\xBF//' "$input" | \
+    tr -d '\r' | \
+    sed 's/^[ \t]*//;s/[ \t]*$//' | \
+    sed '/^$/d' > "$output"
+}
+
+# Transform JSON to CSV
+json_to_csv() {
+    local input="$1"
+    local output="$2"
+    
+    jq -r '
+        (.[0] | keys_unsorted) as $keys |
+        $keys, (.[] | [.[$keys[]]] | @csv)
+    ' "$input" > "$output"
+}
+
+# Aggregate data
+aggregate_sales() {
+    local input="$1"
+    local output="$2"
+    
+    echo "date,total_sales,transaction_count,avg_sale" > "$output"
+    
+    tail -n +2 "$input" | \
+    awk -F',' '
+        {
+            date = $1
+            amount = $4
+            sales[date] += amount
+            count[date]++
+        }
+        END {
+            for (d in sales) {
+                printf "%s,%.2f,%d,%.2f\n", d, sales[d], count[d], sales[d]/count[d]
+            }
+        }
+    ' | sort >> "$output"
+}
+
+# Join datasets
+join_datasets() {
+    local file1="$1"
+    local file2="$2"
+    local output="$3"
+    local key_col="${4:-1}"
+    
+    # Sort both files by key column
+    sort -t',' -k"$key_col" "$file1" > /tmp/sorted1.csv
+    sort -t',' -k"$key_col" "$file2" > /tmp/sorted2.csv
+    
+    # Join on key column
+    join -t',' -1 "$key_col" -2 "$key_col" \
+        /tmp/sorted1.csv /tmp/sorted2.csv > "$output"
+    
+    rm /tmp/sorted1.csv /tmp/sorted2.csv
+}
+
+# Data validation
+validate_data() {
+    local file="$1"
+    local errors=0
+    
+    # Check for required columns
+    local header=$(head -1 "$file")
+    for col in "id" "name" "value"; do
+        if ! echo "$header" | grep -q "$col"; then
+            echo "Missing column: $col" >&2
+            ((errors++))
+        fi
+    done
+    
+    # Check for null values in required fields
+    local null_count=$(awk -F',' 'NR>1 && ($1=="" || $2=="")' "$file" | wc -l)
+    if [ "$null_count" -gt 0 ]; then
+        echo "Found $null_count rows with null required fields" >&2
+        ((errors++))
+    fi
+    
+    return $errors
+}
+
+# Deduplicate data
+deduplicate() {
+    local input="$1"
+    local output="$2"
+    local key_cols="${3:-1}"
+    
+    head -1 "$input" > "$output"
+    tail -n +2 "$input" | sort -t',' -k"$key_cols" -u >> "$output"
+}</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="load" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# DATA LOADING SCRIPTS
+# ============================================
+
+# Load to PostgreSQL
+load_to_postgres() {
+    local file="$1"
+    local table="$2"
+    
+    PGPASSWORD="$DB_PASSWORD" psql \
+        -h "$DB_HOST" \
+        -U "$DB_USER" \
+        -d "$DB_NAME" \
+        -c "\COPY $table FROM '$file' WITH CSV HEADER"
+}
+
+# Load to S3
+load_to_s3() {
+    local file="$1"
+    local s3_path="$2"
+    
+    aws s3 cp "$file" "$s3_path" \
+        --storage-class STANDARD_IA
+}
+
+# Load with upsert (PostgreSQL)
+upsert_to_postgres() {
+    local file="$1"
+    local table="$2"
+    local key_col="$3"
+    
+    local temp_table="${table}_temp"
+    
+    # Create temp table and load data
+    PGPASSWORD="$DB_PASSWORD" psql \
+        -h "$DB_HOST" \
+        -U "$DB_USER" \
+        -d "$DB_NAME" << EOF
+        CREATE TEMP TABLE $temp_table (LIKE $table);
+        \COPY $temp_table FROM '$file' WITH CSV HEADER;
+        
+        INSERT INTO $table
+        SELECT * FROM $temp_table
+        ON CONFLICT ($key_col) DO UPDATE SET
+            name = EXCLUDED.name,
+            value = EXCLUDED.value,
+            updated_at = NOW();
+        
+        DROP TABLE $temp_table;
+EOF
+}
+
+# Bulk load with batching
+bulk_load() {
+    local file="$1"
+    local table="$2"
+    local batch_size="${3:-10000}"
+    
+    local total_lines=$(wc -l < "$file")
+    local header=$(head -1 "$file")
+    local batches=$(( (total_lines - 1) / batch_size + 1 ))
+    
+    echo "Loading $total_lines records in $batches batches"
+    
+    for ((i=0; i<batches; i++)); do
+        local start=$((i * batch_size + 2))
+        local end=$((start + batch_size - 1))
+        
+        {
+            echo "$header"
+            sed -n "${start},${end}p" "$file"
+        } > /tmp/batch_$i.csv
+        
+        load_to_postgres "/tmp/batch_$i.csv" "$table"
+        rm /tmp/batch_$i.csv
+        
+        echo "Loaded batch $((i+1))/$batches"
+    done
+}
+
+# Archive loaded data
+archive_data() {
+    local file="$1"
+    local archive_dir="$2"
+    
+    local date=$(date +%Y%m%d)
+    local archive_file="${archive_dir}/${date}_$(basename "$file").gz"
+    
+    mkdir -p "$archive_dir"
+    gzip -c "$file" > "$archive_file"
+    echo "Archived to $archive_file"
+}</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="pipeline" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# COMPLETE DATA PIPELINE
+# ============================================
+set -euo pipefail
+
+# Configuration
+PIPELINE_NAME="sales_pipeline"
+DATA_DIR="/data/pipelines/$PIPELINE_NAME"
+LOG_FILE="/var/log/$PIPELINE_NAME.log"
+
+# Logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Error handling
+cleanup() {
+    log "Cleaning up temporary files..."
+    rm -rf "$DATA_DIR/tmp"
+}
+trap cleanup EXIT
+
+# Main pipeline
+run_pipeline() {
+    local run_date="${1:-$(date +%Y-%m-%d)}"
+    
+    log "Starting pipeline for $run_date"
+    
+    mkdir -p "$DATA_DIR"/{raw,processed,tmp}
+    
+    # Step 1: Extract
+    log "Step 1: Extracting data..."
+    extract_from_api \
+        "https://api.example.com/sales?date=$run_date" \
+        "$DATA_DIR/raw/sales_$run_date.json"
+    
+    # Step 2: Transform
+    log "Step 2: Transforming data..."
+    json_to_csv \
+        "$DATA_DIR/raw/sales_$run_date.json" \
+        "$DATA_DIR/tmp/sales_$run_date.csv"
+    
+    clean_csv \
+        "$DATA_DIR/tmp/sales_$run_date.csv" \
+        "$DATA_DIR/processed/sales_$run_date.csv"
+    
+    # Step 3: Validate
+    log "Step 3: Validating data..."
+    if ! validate_data "$DATA_DIR/processed/sales_$run_date.csv"; then
+        log "ERROR: Validation failed"
+        return 1
+    fi
+    
+    # Step 4: Load
+    log "Step 4: Loading data..."
+    load_to_postgres \
+        "$DATA_DIR/processed/sales_$run_date.csv" \
+        "sales_fact"
+    
+    # Step 5: Archive
+    log "Step 5: Archiving data..."
+    archive_data \
+        "$DATA_DIR/processed/sales_$run_date.csv" \
+        "$DATA_DIR/archive"
+    
+    log "Pipeline completed successfully"
+}
+
+# Run with error handling
+main() {
+    if run_pipeline "$@"; then
+        log "SUCCESS: Pipeline finished"
+        exit 0
+    else
+        log "FAILURE: Pipeline failed"
+        exit 1
+    fi
+}
+
+main "$@"</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../06_text_processing/index.html" style="color: var(--text-muted);">&larr; Previous: Text Processing</a>
+                <a href="../08_etl_automation/index.html" style="color: var(--accent-primary);">Next: ETL Automation &rarr;</a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+        </div>
+    </footer>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', {
+                backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 0x1a1a2e : 0xf8f9fa,
+                cameraPosition: { x: 6, y: 4, z: 6 }
+            });
+            
+            // ETL Pipeline visualization
+            const stages = [
+                { name: 'Extract', color: 0x4dabf7, x: -2 },
+                { name: 'Transform', color: 0xe25a1c, x: 0 },
+                { name: 'Load', color: 0x198754, x: 2 }
+            ];
+            
+            stages.forEach((s, i) => {
+                viz.createDataNode({ type: 'cube', size: 0.7, color: s.color, position: { x: s.x, y: 0.5, z: 0 } });
+                viz.createLabel(s.name, { x: s.x, y: 1.4, z: 0 });
+                if (i < stages.length - 1) {
+                    viz.createArrow({ x: s.x + 0.5, y: 0.5, z: 0 }, { x: s.x + 1.5, y: 0.5, z: 0 }, { color: 0x888888 });
+                }
+            });
+            
+            viz.createLabel('Data Pipeline Flow', { x: 0, y: -1, z: 0 });
+            viz.createGrid(10, 10);
+        });
+    </script>
+</body>
+</html>

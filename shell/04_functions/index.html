@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Functions - Shell Scripting Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </a>
+            <nav class="nav">
+                <a href="../../index.html#shell" class="nav-link active">Shell</a>
+                <button class="theme-toggle">&#127769;</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="section">
+            <h1>Functions</h1>
+            <p>Functions in bash allow you to organize code into reusable blocks, making scripts more maintainable and modular. Learn to create functions with parameters, return values, and local variables.</p>
+
+            <h2>3D Visualization</h2>
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="basic">Basic Functions</button>
+                <button class="tab" data-tab="params">Parameters</button>
+                <button class="tab" data-tab="returns">Return Values</button>
+                <button class="tab" data-tab="advanced">Advanced</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="basic" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# BASIC FUNCTIONS
+# ============================================
+
+# Function definition (two syntaxes)
+function greet() {
+    echo "Hello, World!"
+}
+
+say_hello() {
+    echo "Hello from say_hello!"
+}
+
+# Call functions
+greet
+say_hello
+
+# Function with local variables
+calculate() {
+    local a=10
+    local b=20
+    local result=$((a + b))
+    echo "Result: $result"
+}
+
+calculate
+
+# Function order matters - define before calling
+# Functions can call other functions
+
+log_message() {
+    local level="$1"
+    local message="$2"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $message"
+}
+
+log_info() {
+    log_message "INFO" "$1"
+}
+
+log_error() {
+    log_message "ERROR" "$1"
+}
+
+log_info "Script started"
+log_error "Something went wrong"</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="params" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# FUNCTION PARAMETERS
+# ============================================
+
+# Parameters accessed via $1, $2, etc.
+greet_user() {
+    local name="$1"
+    local greeting="${2:-Hello}"  # Default value
+    echo "$greeting, $name!"
+}
+
+greet_user "Alice"
+greet_user "Bob" "Hi"
+
+# All parameters
+print_all() {
+    echo "Number of args: $#"
+    echo "All args: $@"
+    
+    local count=1
+    for arg in "$@"; do
+        echo "  Arg $count: $arg"
+        ((count++))
+    done
+}
+
+print_all "one" "two" "three"
+
+# Array as parameter
+process_array() {
+    local arr=("$@")
+    echo "Array has ${#arr[@]} elements"
+    for item in "${arr[@]}"; do
+        echo "  - $item"
+    done
+}
+
+MY_ARRAY=("apple" "banana" "cherry")
+process_array "${MY_ARRAY[@]}"
+
+# Named parameters pattern
+create_user() {
+    local name=""
+    local email=""
+    local role="user"
+    
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --name) name="$2"; shift 2 ;;
+            --email) email="$2"; shift 2 ;;
+            --role) role="$2"; shift 2 ;;
+            *) shift ;;
+        esac
+    done
+    
+    echo "Creating user: $name ($email) - Role: $role"
+}
+
+create_user --name "John" --email "john@example.com" --role "admin"</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="returns" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# RETURN VALUES
+# ============================================
+
+# Return exit code (0-255)
+is_even() {
+    local num=$1
+    if (( num % 2 == 0 )); then
+        return 0  # Success/true
+    else
+        return 1  # Failure/false
+    fi
+}
+
+if is_even 4; then
+    echo "4 is even"
+fi
+
+# Return value via echo (capture with $())
+calculate_sum() {
+    local a=$1
+    local b=$2
+    echo $((a + b))
+}
+
+RESULT=$(calculate_sum 10 20)
+echo "Sum: $RESULT"
+
+# Return multiple values
+get_file_info() {
+    local file="$1"
+    local size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null)
+    local lines=$(wc -l < "$file" 2>/dev/null || echo 0)
+    echo "$size $lines"
+}
+
+read SIZE LINES <<< $(get_file_info "/etc/passwd")
+echo "Size: $SIZE, Lines: $LINES"
+
+# Return array
+get_numbers() {
+    echo "1 2 3 4 5"
+}
+
+NUMBERS=($(get_numbers))
+echo "Numbers: ${NUMBERS[@]}"
+
+# Global variable (not recommended but works)
+GLOBAL_RESULT=""
+
+set_global() {
+    GLOBAL_RESULT="$1"
+}
+
+set_global "value from function"
+echo "Global: $GLOBAL_RESULT"</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="advanced" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Bash</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>#!/bin/bash
+# ============================================
+# ADVANCED FUNCTION PATTERNS
+# ============================================
+
+# Recursive function
+factorial() {
+    local n=$1
+    if (( n <= 1 )); then
+        echo 1
+    else
+        local prev=$(factorial $((n - 1)))
+        echo $((n * prev))
+    fi
+}
+
+echo "5! = $(factorial 5)"
+
+# Function library pattern
+# utils.sh
+declare -A _UTILS_LOADED
+
+utils_init() {
+    [[ -n "${_UTILS_LOADED[init]}" ]] && return
+    _UTILS_LOADED[init]=1
+    echo "Utils initialized"
+}
+
+# Decorator pattern
+with_logging() {
+    local func="$1"
+    shift
+    echo "[START] $func"
+    "$func" "$@"
+    local status=$?
+    echo "[END] $func (status: $status)"
+    return $status
+}
+
+my_task() {
+    echo "Doing work..."
+    sleep 1
+}
+
+with_logging my_task
+
+# Error handling wrapper
+safe_execute() {
+    local cmd="$1"
+    shift
+    
+    if ! "$cmd" "$@" 2>/dev/null; then
+        echo "Error executing: $cmd" >&2
+        return 1
+    fi
+    return 0
+}
+
+# Retry pattern
+retry() {
+    local max_attempts=$1
+    local delay=$2
+    shift 2
+    local cmd="$@"
+    
+    local attempt=1
+    while (( attempt <= max_attempts )); do
+        if $cmd; then
+            return 0
+        fi
+        echo "Attempt $attempt failed, retrying in ${delay}s..."
+        sleep $delay
+        ((attempt++))
+    done
+    
+    echo "All $max_attempts attempts failed"
+    return 1
+}
+
+# retry 3 2 curl -s http://example.com</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../03_control_structures/index.html" style="color: var(--text-muted);">&larr; Previous: Control Structures</a>
+                <a href="../05_file_operations/index.html" style="color: var(--accent-primary);">Next: File Operations &rarr;</a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+        </div>
+    </footer>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', {
+                backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 0x1a1a2e : 0xf8f9fa,
+                cameraPosition: { x: 6, y: 4, z: 6 }
+            });
+            
+            // Function call visualization
+            viz.createDataNode({ type: 'sphere', size: 0.5, color: 0x4dabf7, position: { x: -2, y: 0.5, z: 0 } });
+            viz.createLabel('Caller', { x: -2, y: 1.3, z: 0 });
+            
+            viz.createDataNode({ type: 'cube', size: 0.8, color: 0xe25a1c, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('Function', { x: 0, y: 1.5, z: 0 });
+            
+            viz.createDataNode({ type: 'sphere', size: 0.4, color: 0x198754, position: { x: 2, y: 0.5, z: 0 } });
+            viz.createLabel('Return', { x: 2, y: 1.3, z: 0 });
+            
+            viz.createArrow({ x: -1.5, y: 0.5, z: 0 }, { x: -0.5, y: 0.5, z: 0 }, { color: 0x4dabf7 });
+            viz.createArrow({ x: 0.5, y: 0.5, z: 0 }, { x: 1.5, y: 0.5, z: 0 }, { color: 0x198754 });
+            
+            viz.createLabel('Function Call Flow', { x: 0, y: -1, z: 0 });
+            viz.createGrid(10, 10);
+        });
+    </script>
+</body>
+</html>
