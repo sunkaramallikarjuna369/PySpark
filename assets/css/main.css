@@ -24,6 +24,13 @@
     --sql-color: #336791;
     --etl-color: #00a86b;
     --dw-color: #8b5cf6;
+    --deltalake-color: #009688;
+    --pyspark-ml-color: #9c27b0;
+    --shell-color: #4caf50;
+    --projects-color: #ff5722;
+    --performance-color: #ffd43b;
+    --quality-color: #51cf66;
+    --interview-color: #4dabf7;
     
     /* Spacing */
     --spacing-xs: 0.25rem;
@@ -283,6 +290,13 @@ a:hover {
 .card.sql { --card-accent: var(--sql-color); }
 .card.etl { --card-accent: var(--etl-color); }
 .card.dw { --card-accent: var(--dw-color); }
+.card.deltalake { --card-accent: var(--deltalake-color); }
+.card.pyspark_ml { --card-accent: var(--pyspark-ml-color); }
+.card.shell { --card-accent: var(--shell-color); }
+.card.projects { --card-accent: var(--projects-color); }
+.card.performance { --card-accent: var(--performance-color); }
+.card.quality { --card-accent: var(--quality-color); }
+.card.interview { --card-accent: var(--interview-color); }
 
 /* Category Sections */
 .category-section {
@@ -314,6 +328,13 @@ a:hover {
 .category-icon.sql { background: var(--sql-color); }
 .category-icon.etl { background: var(--etl-color); }
 .category-icon.dw { background: var(--dw-color); }
+.category-icon.deltalake { background: var(--deltalake-color); }
+.category-icon.pyspark_ml { background: var(--pyspark-ml-color); }
+.category-icon.shell { background: var(--shell-color); }
+.category-icon.projects { background: var(--projects-color); }
+.category-icon.performance { background: var(--performance-color); }
+.category-icon.quality { background: var(--quality-color); }
+.category-icon.interview { background: var(--interview-color); }
 
 /* 3D Visualization Container */
 .visualization-container {
