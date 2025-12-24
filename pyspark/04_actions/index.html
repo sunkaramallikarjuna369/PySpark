@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Actions - PySpark Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </a>
+            <nav class="nav">
+                <a href="../../index.html#pyspark" class="nav-link active">PySpark</a>
+                <a href="../../index.html#pandas" class="nav-link">Pandas</a>
+                <a href="../../index.html#sql" class="nav-link">SQL</a>
+                <a href="../../index.html#etl" class="nav-link">ETL</a>
+                <a href="../../index.html#datawarehouse" class="nav-link">Data Warehouse</a>
+                <button class="theme-toggle">🌙</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <nav class="breadcrumb">
+            <span class="breadcrumb-item"><a href="../../index.html">Home</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item"><a href="../../index.html#pyspark">PySpark</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item">Actions</span>
+        </nav>
+
+        <section class="section">
+            <h1>Spark Actions</h1>
+            <p>Actions are operations that trigger the execution of transformations and return results to the driver program or write data to external storage. Unlike transformations, actions are eager and execute immediately.</p>
+
+            <div class="info-box info">
+                <strong>Key Concept:</strong> Actions trigger the execution of the DAG (Directed Acyclic Graph) built by transformations. They either return values to the driver or write data to storage.
+            </div>
+
+            <h2>3D Visualization: Action Execution</h2>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showCollect()">collect()</button>
+                <button class="viz-btn" onclick="showReduce()">reduce()</button>
+                <button class="viz-btn" onclick="showSave()">saveAsTextFile()</button>
+            </div>
+
+            <h2>Types of Actions</h2>
+            
+            <h3>Actions that Return Values</h3>
+            <ul style="color: var(--text-secondary); margin-left: 1.5rem;">
+                <li><code>collect()</code> - Return all elements as a list</li>
+                <li><code>count()</code> - Count number of elements</li>
+                <li><code>first()</code> - Return first element</li>
+                <li><code>take(n)</code> - Return first n elements</li>
+                <li><code>reduce()</code> - Aggregate elements using a function</li>
+            </ul>
+
+            <h3>Actions that Write Data</h3>
+            <ul style="color: var(--text-secondary); margin-left: 1.5rem;">
+                <li><code>saveAsTextFile()</code> - Save to text files</li>
+                <li><code>saveAsSequenceFile()</code> - Save as Hadoop sequence file</li>
+                <li><code>foreach()</code> - Apply function to each element</li>
+            </ul>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="basic">Basic Actions</button>
+                <button class="tab" data-tab="aggregate">Aggregation Actions</button>
+                <button class="tab" data-tab="df">DataFrame Actions</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="basic" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark import SparkContext
+
+sc = SparkContext("local[*]", "Basic Actions")
+
+numbers = sc.parallelize([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+
+# collect() - Return all elements as a list
+all_data = numbers.collect()
+print(f"collect(): {all_data}")
+# Output: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+# count() - Count number of elements
+total = numbers.count()
+print(f"count(): {total}")
+# Output: 10
+
+# first() - Return the first element
+first_elem = numbers.first()
+print(f"first(): {first_elem}")
+# Output: 1
+
+# take(n) - Return first n elements
+first_five = numbers.take(5)
+print(f"take(5): {first_five}")
+# Output: [1, 2, 3, 4, 5]
+
+# takeOrdered(n) - Return first n in sorted order
+top_three = numbers.takeOrdered(3)
+print(f"takeOrdered(3): {top_three}")
+# Output: [1, 2, 3]
+
+# takeOrdered with custom key
+bottom_three = numbers.takeOrdered(3, key=lambda x: -x)
+print(f"takeOrdered(3, desc): {bottom_three}")
+# Output: [10, 9, 8]
+
+# top(n) - Return top n elements (descending)
+top_five = numbers.top(5)
+print(f"top(5): {top_five}")
+# Output: [10, 9, 8, 7, 6]
+
+# takeSample() - Return random sample
+sample = numbers.takeSample(withReplacement=False, num=3, seed=42)
+print(f"takeSample(3): {sample}")
+
+# isEmpty() - Check if RDD is empty
+print(f"isEmpty(): {numbers.isEmpty()}")
+# Output: False
+
+# foreach() - Apply function to each element (no return)
+def print_element(x):
+    print(f"Element: {x}")
+
+# Note: foreach runs on executors, not driver
+numbers.foreach(print_element)
+
+# foreachPartition() - Apply function to each partition
+def process_partition(iterator):
+    for item in iterator:
+        print(f"Processing: {item}")
+
+numbers.foreachPartition(process_partition)
+
+sc.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="aggregate" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark import SparkContext
+
+sc = SparkContext("local[*]", "Aggregation Actions")
+
+numbers = sc.parallelize([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+
+# reduce() - Aggregate elements using a function
+total_sum = numbers.reduce(lambda a, b: a + b)
+print(f"reduce(sum): {total_sum}")
+# Output: 55
+
+product = numbers.reduce(lambda a, b: a * b)
+print(f"reduce(product): {product}")
+# Output: 3628800
+
+maximum = numbers.reduce(lambda a, b: a if a > b else b)
+print(f"reduce(max): {maximum}")
+# Output: 10
+
+# fold() - Aggregate with initial value
+# Note: zero value is applied per partition AND when combining
+sum_with_init = numbers.fold(0, lambda a, b: a + b)
+print(f"fold(0, sum): {sum_with_init}")
+# Output: 55
+
+# aggregate() - Most flexible aggregation
+# (zero_value, seq_op, comb_op)
+# Calculate sum and count in one pass
+sum_count = numbers.aggregate(
+    (0, 0),  # Initial value: (sum, count)
+    lambda acc, val: (acc[0] + val, acc[1] + 1),  # Sequence op (within partition)
+    lambda acc1, acc2: (acc1[0] + acc2[0], acc1[1] + acc2[1])  # Combine op (across partitions)
+)
+print(f"aggregate(sum, count): {sum_count}")
+# Output: (55, 10)
+
+# Calculate average using aggregate
+avg = sum_count[0] / sum_count[1]
+print(f"Average: {avg}")
+# Output: 5.5
+
+# Built-in numeric actions
+print(f"sum(): {numbers.sum()}")
+print(f"mean(): {numbers.mean()}")
+print(f"max(): {numbers.max()}")
+print(f"min(): {numbers.min()}")
+print(f"stdev(): {numbers.stdev():.2f}")
+print(f"variance(): {numbers.variance():.2f}")
+
+# countByValue() - Count occurrences of each value
+data = sc.parallelize([1, 2, 2, 3, 3, 3, 4, 4, 4, 4])
+counts = data.countByValue()
+print(f"countByValue(): {dict(counts)}")
+# Output: {1: 1, 2: 2, 3: 3, 4: 4}
+
+# countByKey() - Count by key (for pair RDDs)
+pairs = sc.parallelize([("a", 1), ("b", 2), ("a", 3), ("b", 4), ("a", 5)])
+key_counts = pairs.countByKey()
+print(f"countByKey(): {dict(key_counts)}")
+# Output: {'a': 3, 'b': 2}
+
+# collectAsMap() - Collect pair RDD as dictionary
+pair_rdd = sc.parallelize([("a", 1), ("b", 2), ("c", 3)])
+as_map = pair_rdd.collectAsMap()
+print(f"collectAsMap(): {as_map}")
+# Output: {'a': 1, 'b': 2, 'c': 3}
+
+# lookup() - Return values for a key
+values = pairs.lookup("a")
+print(f"lookup('a'): {values}")
+# Output: [1, 3, 5]
+
+sc.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="df" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
+
+spark = SparkSession.builder.appName("DataFrame Actions").getOrCreate()
+
+data = [
+    ("Alice", 25, "Engineering", 50000),
+    ("Bob", 30, "Marketing", 60000),
+    ("Charlie", 35, "Engineering", 75000),
+    ("Diana", 28, "Sales", 55000),
+    ("Eve", 32, "Engineering", 80000)
+]
+df = spark.createDataFrame(data, ["name", "age", "department", "salary"])
+
+# show() - Display DataFrame
+print("show():")
+df.show()
+
+# show with parameters
+df.show(n=3, truncate=False, vertical=False)
+
+# collect() - Return all rows as list of Row objects
+rows = df.collect()
+print(f"\ncollect(): {len(rows)} rows")
+for row in rows[:2]:
+    print(f"  {row}")
+
+# count() - Count rows
+print(f"\ncount(): {df.count()}")
+
+# first() - Return first row
+print(f"first(): {df.first()}")
+
+# head(n) - Return first n rows
+print(f"head(3): {df.head(3)}")
+
+# take(n) - Return first n rows
+print(f"take(2): {df.take(2)}")
+
+# tail(n) - Return last n rows
+print(f"tail(2): {df.tail(2)}")
+
+# toPandas() - Convert to Pandas DataFrame
+pandas_df = df.toPandas()
+print(f"\ntoPandas():\n{pandas_df}")
+
+# describe() - Summary statistics
+print("\ndescribe():")
+df.describe().show()
+
+# summary() - Extended statistics
+print("summary():")
+df.summary().show()
+
+# printSchema() - Print schema
+print("printSchema():")
+df.printSchema()
+
+# explain() - Show execution plan
+print("explain():")
+df.filter(col("age") > 25).explain()
+
+# Write actions
+# write.csv()
+df.write.mode("overwrite").csv("/tmp/output_csv", header=True)
+
+# write.json()
+df.write.mode("overwrite").json("/tmp/output_json")
+
+# write.parquet()
+df.write.mode("overwrite").parquet("/tmp/output_parquet")
+
+# write.saveAsTable() - Save as Hive table
+# df.write.saveAsTable("employees")
+
+# write with partitioning
+df.write.mode("overwrite").partitionBy("department").parquet("/tmp/output_partitioned")
+
+print("\nData written to /tmp/output_*")
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-box warning">
+                <strong>Warning:</strong> Be careful with <code>collect()</code> on large datasets - it brings all data to the driver and can cause out-of-memory errors. Use <code>take()</code> or <code>sample()</code> for large datasets.
+            </div>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../03_transformations/index.html" style="color: var(--text-muted);">← Previous: Transformations</a>
+                <a href="../05_joins/index.html" style="color: var(--accent-primary);">Next: Joins →</a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+        </div>
+    </footer>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', {
+                backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 0x1a1a2e : 0xf8f9fa,
+                cameraPosition: { x: 5, y: 3, z: 5 }
+            });
+            showCollect();
+        });
+
+        function showCollect() {
+            viz.clear();
+            
+            // Distributed partitions
+            for (let p = 0; p < 3; p++) {
+                for (let i = 0; i < 3; i++) {
+                    viz.createDataNode({
+                        type: 'cube', size: 0.35, color: 0xe25a1c,
+                        position: { x: -3 + p * 1.5, y: 1 - i * 0.6, z: 0 }
+                    });
+                }
+                viz.createLabel(`P${p}`, { x: -3 + p * 1.5, y: 1.8, z: 0 });
+            }
+            viz.createLabel('Distributed Data', { x: -1.5, y: 2.5, z: 0 });
+
+            // Driver
+            viz.createDataNode({
+                type: 'sphere', size: 1, color: 0x4dabf7,
+                position: { x: 3, y: 0.5, z: 0 },
+                animate: (obj) => { obj.scale.x = obj.scale.y = obj.scale.z = 1 + Math.sin(Date.now() * 0.003) * 0.1; }
+            });
+            viz.createLabel('Driver', { x: 3, y: 2, z: 0 });
+
+            // Arrows
+            for (let p = 0; p < 3; p++) {
+                viz.createArrow(
+                    { x: -2.5 + p * 1.5, y: 0.5, z: 0 },
+                    { x: 2, y: 0.5, z: 0 },
+                    { color: 0x198754 }
+                );
+            }
+
+            viz.createLabel('collect() - All data to driver', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showReduce() {
+            viz.clear();
+            
+            // Partitions with partial results
+            const partitions = [
+                { x: -3, values: [1, 2, 3], sum: 6 },
+                { x: -1, values: [4, 5, 6], sum: 15 },
+                { x: 1, values: [7, 8, 9], sum: 24 }
+            ];
+
+            partitions.forEach((p, idx) => {
+                viz.createDataNode({
+                    type: 'cube', size: 0.6, color: 0xe25a1c,
+                    position: { x: p.x, y: 1, z: 0 }
+                });
+                viz.createLabel(`Sum: ${p.sum}`, { x: p.x, y: 0.2, z: 0 });
+            });
+            viz.createLabel('Partial Aggregations', { x: -1, y: 2, z: 0 });
+
+            // Final result
+            viz.createDataNode({
+                type: 'sphere', size: 0.8, color: 0x198754,
+                position: { x: 3, y: 0.5, z: 0 },
+                animate: (obj) => { obj.rotation.y += 0.02; }
+            });
+            viz.createLabel('Total: 45', { x: 3, y: -0.5, z: 0 });
+
+            // Arrows
+            partitions.forEach(p => {
+                viz.createArrow({ x: p.x + 0.4, y: 0.8, z: 0 }, { x: 2.2, y: 0.5, z: 0 }, { color: 0x888888 });
+            });
+
+            viz.createLabel('reduce() - Aggregate across partitions', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showSave() {
+            viz.clear();
+            
+            // Partitions
+            for (let p = 0; p < 3; p++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.5, color: 0xe25a1c,
+                    position: { x: -2, y: 1 - p * 1, z: 0 }
+                });
+            }
+            viz.createLabel('Partitions', { x: -2, y: 2.2, z: 0 });
+
+            // Output files
+            for (let f = 0; f < 3; f++) {
+                viz.createDataNode({
+                    type: 'cylinder', size: 0.5, color: 0x4dabf7,
+                    position: { x: 2, y: 1 - f * 1, z: 0 }
+                });
+                viz.createLabel(`part-${f}.txt`, { x: 3.5, y: 1 - f * 1, z: 0 });
+            }
+            viz.createLabel('Output Files', { x: 2, y: 2.2, z: 0 });
+
+            // Arrows
+            for (let i = 0; i < 3; i++) {
+                viz.createArrow(
+                    { x: -1.5, y: 1 - i * 1, z: 0 },
+                    { x: 1.5, y: 1 - i * 1, z: 0 },
+                    { color: 0x198754 }
+                );
+            }
+
+            viz.createLabel('saveAsTextFile() - Write to storage', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

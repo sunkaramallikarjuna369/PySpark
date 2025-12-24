@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Broadcast Variables - PySpark Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </a>
+            <nav class="nav">
+                <a href="../../index.html#pyspark" class="nav-link active">PySpark</a>
+                <a href="../../index.html#pandas" class="nav-link">Pandas</a>
+                <a href="../../index.html#sql" class="nav-link">SQL</a>
+                <a href="../../index.html#etl" class="nav-link">ETL</a>
+                <a href="../../index.html#datawarehouse" class="nav-link">Data Warehouse</a>
+                <button class="theme-toggle">🌙</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <nav class="breadcrumb">
+            <span class="breadcrumb-item"><a href="../../index.html">Home</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item"><a href="../../index.html#pyspark">PySpark</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item">Broadcast Variables</span>
+        </nav>
+
+        <section class="section">
+            <h1>Broadcast Variables</h1>
+            <p>Broadcast variables allow you to efficiently share read-only data across all executors. Instead of shipping data with each task, the data is broadcast once and cached on each executor.</p>
+
+            <div class="info-box info">
+                <strong>Key Concept:</strong> Broadcast variables are ideal for lookup tables, configuration data, or any read-only data that needs to be accessed by all tasks.
+            </div>
+
+            <h2>3D Visualization: Broadcast Distribution</h2>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showWithoutBroadcast()">Without Broadcast</button>
+                <button class="viz-btn" onclick="showWithBroadcast()">With Broadcast</button>
+            </div>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="basic">Basic Broadcast</button>
+                <button class="tab" data-tab="join">Broadcast Join</button>
+                <button class="tab" data-tab="udf">Broadcast in UDF</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="basic" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("Broadcast Variables").getOrCreate()
+sc = spark.sparkContext
+
+# Create a lookup dictionary
+country_codes = {
+    "US": "United States",
+    "UK": "United Kingdom",
+    "CA": "Canada",
+    "DE": "Germany",
+    "FR": "France"
+}
+
+# Broadcast the dictionary
+broadcast_countries = sc.broadcast(country_codes)
+
+# Sample data
+data = [("Alice", "US"), ("Bob", "UK"), ("Charlie", "CA"), ("Diana", "DE")]
+rdd = sc.parallelize(data)
+
+# Use broadcast variable in transformation
+def lookup_country(record):
+    name, code = record
+    country_name = broadcast_countries.value.get(code, "Unknown")
+    return (name, code, country_name)
+
+result = rdd.map(lookup_country).collect()
+print("Results with broadcast lookup:")
+for r in result:
+    print(f"  {r}")
+
+# Access broadcast value
+print(f"\nBroadcast value: {broadcast_countries.value}")
+
+# Unpersist broadcast variable when done
+broadcast_countries.unpersist()
+
+# Destroy broadcast variable (cannot be used after this)
+# broadcast_countries.destroy()
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="join" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import broadcast, col
+
+spark = SparkSession.builder.appName("Broadcast Join").getOrCreate()
+
+# Large fact table
+sales = spark.createDataFrame([
+    (1, 101, 1000.0),
+    (2, 102, 1500.0),
+    (3, 101, 800.0),
+    (4, 103, 2000.0),
+    (5, 102, 1200.0)
+], ["sale_id", "product_id", "amount"])
+
+# Small dimension table (good candidate for broadcast)
+products = spark.createDataFrame([
+    (101, "Laptop", "Electronics"),
+    (102, "Phone", "Electronics"),
+    (103, "Desk", "Furniture")
+], ["product_id", "product_name", "category"])
+
+# Regular join (may cause shuffle)
+print("Regular Join Plan:")
+sales.join(products, "product_id").explain()
+
+# Broadcast join (no shuffle for small table)
+print("\nBroadcast Join Plan:")
+sales.join(broadcast(products), "product_id").explain()
+
+# Execute broadcast join
+result = sales.join(broadcast(products), "product_id")
+print("\nBroadcast Join Result:")
+result.show()
+
+# Auto broadcast threshold
+print(f"Auto broadcast threshold: {spark.conf.get('spark.sql.autoBroadcastJoinThreshold')}")
+
+# Disable auto broadcast
+spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "-1")
+
+# Force broadcast with hint
+result_hint = sales.join(products.hint("broadcast"), "product_id")
+result_hint.explain()
+
+# Re-enable auto broadcast
+spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "10485760")  # 10MB
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="udf" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import udf, col
+from pyspark.sql.types import StringType, FloatType
+
+spark = SparkSession.builder.appName("Broadcast in UDF").getOrCreate()
+sc = spark.sparkContext
+
+# Lookup data
+tax_rates = {
+    "Electronics": 0.08,
+    "Clothing": 0.05,
+    "Food": 0.02,
+    "Furniture": 0.07
+}
+
+# Broadcast the lookup
+broadcast_tax = sc.broadcast(tax_rates)
+
+# UDF using broadcast variable
+@udf(returnType=FloatType())
+def calculate_tax(category, amount):
+    rate = broadcast_tax.value.get(category, 0.0)
+    return float(amount) * rate
+
+# Sample data
+data = [
+    ("Laptop", "Electronics", 1000.0),
+    ("Shirt", "Clothing", 50.0),
+    ("Apple", "Food", 5.0),
+    ("Chair", "Furniture", 200.0)
+]
+df = spark.createDataFrame(data, ["product", "category", "price"])
+
+# Apply UDF with broadcast
+result = df.withColumn("tax", calculate_tax(col("category"), col("price")))
+result.show()
+
+# Complex lookup with broadcast
+product_info = {
+    "Laptop": {"brand": "Dell", "warranty": 2},
+    "Shirt": {"brand": "Nike", "warranty": 0},
+    "Apple": {"brand": "Organic", "warranty": 0},
+    "Chair": {"brand": "IKEA", "warranty": 1}
+}
+broadcast_info = sc.broadcast(product_info)
+
+@udf(returnType=StringType())
+def get_brand(product):
+    info = broadcast_info.value.get(product, {})
+    return info.get("brand", "Unknown")
+
+df.withColumn("brand", get_brand(col("product"))).show()
+
+# Cleanup
+broadcast_tax.unpersist()
+broadcast_info.unpersist()
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-box tip">
+                <strong>Best Practice:</strong> Broadcast variables should be small enough to fit in executor memory. The default auto-broadcast threshold is 10MB. For larger lookup tables, consider using a broadcast join instead.
+            </div>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../11_caching_persistence/index.html" style="color: var(--text-muted);">← Previous: Caching & Persistence</a>
+                <a href="../13_accumulators/index.html" style="color: var(--accent-primary);">Next: Accumulators →</a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+        </div>
+    </footer>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', {
+                backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 0x1a1a2e : 0xf8f9fa,
+                cameraPosition: { x: 6, y: 4, z: 6 }
+            });
+            showWithBroadcast();
+        });
+
+        function showWithoutBroadcast() {
+            viz.clear();
+            
+            // Driver
+            viz.createDataNode({ type: 'sphere', size: 0.8, color: 0x4dabf7, position: { x: 0, y: 2, z: 0 } });
+            viz.createLabel('Driver', { x: 0, y: 3, z: 0 });
+
+            // Executors with duplicate data
+            const executors = [
+                { x: -2, y: -0.5 },
+                { x: 0, y: -0.5 },
+                { x: 2, y: -0.5 }
+            ];
+
+            executors.forEach((e, i) => {
+                viz.createDataNode({ type: 'cube', size: 0.6, color: 0xe25a1c, position: { x: e.x, y: e.y, z: 0 } });
+                viz.createLabel(`Executor ${i + 1}`, { x: e.x, y: e.y - 1, z: 0 });
+                
+                // Data sent with each task
+                for (let t = 0; t < 3; t++) {
+                    viz.createDataNode({
+                        type: 'cube', size: 0.15, color: 0xffc107,
+                        position: { x: e.x - 0.2 + t * 0.2, y: e.y + 0.5, z: 0 }
+                    });
+                }
+                
+                viz.createArrow({ x: 0, y: 1.5, z: 0 }, { x: e.x, y: e.y + 0.3, z: 0 }, { color: 0x888888 });
+            });
+
+            viz.createLabel('Without Broadcast - Data sent with each task', { x: 0, y: -2.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showWithBroadcast() {
+            viz.clear();
+            
+            // Driver with broadcast data
+            viz.createDataNode({ type: 'sphere', size: 0.8, color: 0x4dabf7, position: { x: 0, y: 2, z: 0 } });
+            viz.createLabel('Driver', { x: 0, y: 3, z: 0 });
+            
+            // Broadcast data
+            viz.createDataNode({ type: 'cube', size: 0.4, color: 0x198754, position: { x: 0, y: 1.2, z: 0 } });
+            viz.createLabel('Broadcast', { x: 0.8, y: 1.2, z: 0 });
+
+            // Executors with single copy of broadcast data
+            const executors = [
+                { x: -2, y: -0.5 },
+                { x: 0, y: -0.5 },
+                { x: 2, y: -0.5 }
+            ];
+
+            executors.forEach((e, i) => {
+                viz.createDataNode({ type: 'cube', size: 0.6, color: 0xe25a1c, position: { x: e.x, y: e.y, z: 0 } });
+                viz.createLabel(`Executor ${i + 1}`, { x: e.x, y: e.y - 1, z: 0 });
+                
+                // Single cached copy
+                viz.createDataNode({
+                    type: 'cube', size: 0.25, color: 0x198754,
+                    position: { x: e.x, y: e.y + 0.5, z: 0 }
+                });
+                
+                viz.createArrow({ x: 0, y: 0.8, z: 0 }, { x: e.x, y: e.y + 0.3, z: 0 }, { color: 0x198754 });
+            });
+
+            viz.createLabel('With Broadcast - Single copy per executor', { x: 0, y: -2.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

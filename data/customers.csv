@@ -1,0 +1,16 @@
+customer_id,first_name,last_name,email,phone,city,state,country,segment,registration_date
+C001,Alice,Smith,alice.smith@email.com,555-0101,New York,NY,USA,Enterprise,2023-01-15
+C002,Bob,Johnson,bob.johnson@email.com,555-0102,Los Angeles,CA,USA,SMB,2023-02-20
+C003,Charlie,Brown,charlie.brown@email.com,555-0103,Chicago,IL,USA,Consumer,2023-03-10
+C004,Diana,Williams,diana.williams@email.com,555-0104,Houston,TX,USA,Enterprise,2023-04-05
+C005,Edward,Davis,edward.davis@email.com,555-0105,Phoenix,AZ,USA,SMB,2023-05-12
+C006,Fiona,Miller,fiona.miller@email.com,555-0106,Philadelphia,PA,USA,Consumer,2023-06-18
+C007,George,Wilson,george.wilson@email.com,555-0107,San Antonio,TX,USA,Enterprise,2023-07-22
+C008,Hannah,Moore,hannah.moore@email.com,555-0108,San Diego,CA,USA,SMB,2023-08-30
+C009,Ivan,Taylor,ivan.taylor@email.com,555-0109,Dallas,TX,USA,Consumer,2023-09-14
+C010,Julia,Anderson,julia.anderson@email.com,555-0110,San Jose,CA,USA,Enterprise,2023-10-25
+C011,Kevin,Thomas,kevin.thomas@email.com,555-0111,Austin,TX,USA,SMB,2023-11-08
+C012,Laura,Jackson,laura.jackson@email.com,555-0112,Jacksonville,FL,USA,Consumer,2023-12-01
+C013,Michael,White,michael.white@email.com,555-0113,Fort Worth,TX,USA,Enterprise,2024-01-10
+C014,Nancy,Harris,nancy.harris@email.com,555-0114,Columbus,OH,USA,SMB,2024-01-15
+C015,Oscar,Martin,oscar.martin@email.com,555-0115,Charlotte,NC,USA,Consumer,2024-01-20

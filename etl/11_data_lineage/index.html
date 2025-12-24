@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Lineage - ETL Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#etl" class="nav-link active">ETL</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Data Lineage</h1>
+            <p>Data lineage tracks data's journey from source to destination, including all transformations. It enables impact analysis, debugging, and compliance.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showLineage()">Lineage Graph</button>
+                <button class="viz-btn" onclick="showImpact()">Impact Analysis</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="concepts">Lineage Concepts</button>
+                <button class="tab" data-tab="implementation">Implementation</button>
+                <button class="tab" data-tab="tools">Lineage Tools</button>
+            </div>
+            <div class="tab-contents">
+                <div id="concepts" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Data Lineage Types:
+
+1. Table-level Lineage
+   - Which tables feed into which tables
+   - Source -> Staging -> Warehouse -> Mart
+
+2. Column-level Lineage
+   - Which columns derive from which source columns
+   - customer_name = CONCAT(first_name, ' ', last_name)
+
+3. Row-level Lineage
+   - Track individual records through pipeline
+   - Useful for debugging and auditing
+
+Benefits:
+- Impact Analysis: What breaks if source changes?
+- Root Cause Analysis: Where did bad data come from?
+- Compliance: GDPR, CCPA data tracking
+- Documentation: Auto-generated data flow docs
+"""
+
+from dataclasses import dataclass
+from typing import List, Dict, Optional
+from datetime import datetime
+
+@dataclass
+class LineageNode:
+    """Represents a data asset in lineage graph"""
+    id: str
+    name: str
+    type: str  # table, column, file
+    metadata: Dict[str, str]
+
+@dataclass
+class LineageEdge:
+    """Represents transformation between nodes"""
+    source_id: str
+    target_id: str
+    transformation: str
+    timestamp: datetime
+
+class LineageGraph:
+    def __init__(self):
+        self.nodes: Dict[str, LineageNode] = {}
+        self.edges: List[LineageEdge] = []
+    
+    def add_node(self, node: LineageNode):
+        self.nodes[node.id] = node
+    
+    def add_edge(self, edge: LineageEdge):
+        self.edges.append(edge)
+    
+    def get_upstream(self, node_id: str) -> List[str]:
+        """Get all upstream dependencies"""
+        return [e.source_id for e in self.edges if e.target_id == node_id]
+    
+    def get_downstream(self, node_id: str) -> List[str]:
+        """Get all downstream dependents"""
+        return [e.target_id for e in self.edges if e.source_id == node_id]</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="implementation" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+import json
+
+class SparkLineageTracker:
+    """Track lineage from Spark operations"""
+    
+    def __init__(self, spark: SparkSession):
+        self.spark = spark
+        self.lineage_events = []
+    
+    def capture_read(self, path: str, format: str):
+        """Capture data read operation"""
+        self.lineage_events.append({
+            "operation": "READ",
+            "source": path,
+            "format": format,
+            "timestamp": datetime.now().isoformat()
+        })
+    
+    def capture_write(self, path: str, format: str, source_tables: List[str]):
+        """Capture data write operation"""
+        self.lineage_events.append({
+            "operation": "WRITE",
+            "target": path,
+            "format": format,
+            "sources": source_tables,
+            "timestamp": datetime.now().isoformat()
+        })
+    
+    def capture_transformation(self, input_cols: List[str], output_col: str, expr: str):
+        """Capture column transformation"""
+        self.lineage_events.append({
+            "operation": "TRANSFORM",
+            "inputs": input_cols,
+            "output": output_col,
+            "expression": expr,
+            "timestamp": datetime.now().isoformat()
+        })
+    
+    def export_lineage(self, path: str):
+        """Export lineage to file"""
+        with open(path, 'w') as f:
+            json.dump(self.lineage_events, f, indent=2)
+
+# Usage example
+tracker = SparkLineageTracker(spark)
+tracker.capture_read("/data/customers.parquet", "parquet")
+tracker.capture_transformation(
+    ["first_name", "last_name"], 
+    "full_name", 
+    "CONCAT(first_name, ' ', last_name)"
+)
+tracker.capture_write("/data/processed/customers", "delta", ["customers"])</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="tools" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre># Popular Data Lineage Tools
+
+# 1. Apache Atlas (Hadoop ecosystem)
+from pyatlasclient import AtlasClient
+atlas = AtlasClient(host="atlas-host", port=21000)
+# Create entity
+atlas.entity_post(data={
+    "entity": {
+        "typeName": "spark_process",
+        "attributes": {
+            "name": "etl_job",
+            "inputs": [{"guid": "source-guid"}],
+            "outputs": [{"guid": "target-guid"}]
+        }
+    }
+})
+
+# 2. OpenLineage (Open standard)
+from openlineage.client import OpenLineageClient
+from openlineage.client.run import RunEvent, RunState, Job, Run
+
+client = OpenLineageClient(url="http://lineage-server:5000")
+client.emit(
+    RunEvent(
+        eventType=RunState.START,
+        job=Job(namespace="spark", name="etl_pipeline"),
+        run=Run(runId="unique-run-id"),
+        inputs=[{"namespace": "db", "name": "source_table"}],
+        outputs=[{"namespace": "db", "name": "target_table"}]
+    )
+)
+
+# 3. DataHub (LinkedIn)
+# 4. Marquez (WeWork)
+# 5. Amundsen (Lyft)
+# 6. Unity Catalog (Databricks)
+
+# Delta Lake automatic lineage
+spark.sql("""
+    DESCRIBE HISTORY delta.`/path/to/table`
+""").show()  # Shows operation history</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showLineage();
+        });
+        function showLineage() {
+            viz.clear();
+            // Source tables
+            viz.createDataNode({ type: 'cylinder', size: 0.4, color: 0x4dabf7, position: { x: -2, y: 1, z: 0 } });
+            viz.createDataNode({ type: 'cylinder', size: 0.4, color: 0x4dabf7, position: { x: -2, y: 0, z: 0 } });
+            viz.createLabel('Sources', { x: -2, y: 1.8, z: 0 });
+            // Transform
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0xe25a1c, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('Transform', { x: 0, y: 1.3, z: 0 });
+            // Target
+            viz.createDataNode({ type: 'cylinder', size: 0.5, color: 0x198754, position: { x: 2, y: 0.5, z: 0 } });
+            viz.createLabel('Target', { x: 2, y: 1.3, z: 0 });
+            // Edges
+            viz.createArrow({ x: -1.4, y: 1, z: 0 }, { x: -0.5, y: 0.6, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: -1.4, y: 0, z: 0 }, { x: -0.5, y: 0.4, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.5, y: 0.5, z: 0 }, { x: 1.4, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createLabel('Data Lineage Graph', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showImpact() {
+            viz.clear();
+            viz.createDataNode({ type: 'cylinder', size: 0.5, color: 0xe25a1c, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('Changed', { x: 0, y: 1.3, z: 0 });
+            for (let i = 0; i < 3; i++) {
+                viz.createDataNode({ type: 'cylinder', size: 0.35, color: 0xffc107, position: { x: 1.5, y: 1 - i * 0.6, z: 0 } });
+                viz.createArrow({ x: 0.5, y: 0.5, z: 0 }, { x: 1.1, y: 1 - i * 0.6, z: 0 }, { color: 0x888888 });
+            }
+            viz.createLabel('Impacted', { x: 1.5, y: 1.8, z: 0 });
+            viz.createLabel('Impact Analysis - What breaks?', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

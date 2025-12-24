@@ -1,0 +1,16 @@
+product_id,product_name,category,subcategory,brand,unit_cost,unit_price,weight_kg,is_active
+P001,Laptop Pro 15,Electronics,Computers,TechBrand,800.00,1299.99,2.1,true
+P002,Wireless Mouse,Electronics,Accessories,TechBrand,15.00,29.99,0.1,true
+P003,USB-C Hub,Electronics,Accessories,TechBrand,25.00,49.99,0.2,true
+P004,Mechanical Keyboard,Electronics,Accessories,TechBrand,60.00,129.99,0.8,true
+P005,27-inch Monitor,Electronics,Displays,TechBrand,250.00,449.99,5.5,true
+P006,Cotton T-Shirt,Clothing,Tops,FashionCo,8.00,24.99,0.2,true
+P007,Denim Jeans,Clothing,Bottoms,FashionCo,20.00,59.99,0.5,true
+P008,Running Shoes,Clothing,Footwear,SportStyle,35.00,89.99,0.4,true
+P009,Winter Jacket,Clothing,Outerwear,FashionCo,45.00,149.99,1.2,true
+P010,Desk Lamp,Home,Lighting,HomeStyle,12.00,34.99,1.0,true
+P011,Office Chair,Home,Furniture,HomeStyle,80.00,199.99,15.0,true
+P012,Coffee Maker,Home,Appliances,HomeStyle,40.00,79.99,2.5,true
+P013,Bluetooth Speaker,Electronics,Audio,TechBrand,30.00,69.99,0.5,true
+P014,Yoga Mat,Sports,Fitness,SportStyle,10.00,29.99,1.5,true
+P015,Water Bottle,Sports,Accessories,SportStyle,5.00,14.99,0.3,true

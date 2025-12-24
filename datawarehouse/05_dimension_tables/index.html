@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dimension Tables - DW Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#datawarehouse" class="nav-link active">Data Warehouse</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Dimension Tables</h1>
+            <p>Dimension tables contain descriptive attributes that provide context to fact table measures. They answer the who, what, where, when, and how questions.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showDimTypes()">Dimension Types</button>
+                <button class="viz-btn" onclick="showHierarchy()">Hierarchies</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="types">Dimension Types</button>
+                <button class="tab" data-tab="design">Design Patterns</button>
+                <button class="tab" data-tab="special">Special Dimensions</button>
+            </div>
+            <div class="tab-contents">
+                <div id="types" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- COMMON DIMENSION TYPES
+
+-- 1. DATE DIMENSION (most important)
+CREATE TABLE dim_date (
+    date_key INT PRIMARY KEY,           -- YYYYMMDD format
+    full_date DATE NOT NULL,
+    day_of_week TINYINT,
+    day_name VARCHAR(10),
+    day_of_month TINYINT,
+    day_of_year SMALLINT,
+    week_of_year TINYINT,
+    month TINYINT,
+    month_name VARCHAR(10),
+    quarter TINYINT,
+    year SMALLINT,
+    is_weekend BOOLEAN,
+    is_holiday BOOLEAN,
+    holiday_name VARCHAR(50),
+    fiscal_year SMALLINT,
+    fiscal_quarter TINYINT
+);
+
+-- 2. CUSTOMER DIMENSION
+CREATE TABLE dim_customer (
+    customer_key INT PRIMARY KEY,       -- Surrogate key
+    customer_id VARCHAR(20),            -- Natural/business key
+    first_name VARCHAR(50),
+    last_name VARCHAR(50),
+    full_name VARCHAR(100),
+    email VARCHAR(100),
+    phone VARCHAR(20),
+    address VARCHAR(200),
+    city VARCHAR(50),
+    state VARCHAR(50),
+    country VARCHAR(50),
+    postal_code VARCHAR(20),
+    customer_segment VARCHAR(20),
+    registration_date DATE,
+    effective_date DATE,
+    expiration_date DATE,
+    is_current BOOLEAN
+);
+
+-- 3. PRODUCT DIMENSION
+CREATE TABLE dim_product (
+    product_key INT PRIMARY KEY,
+    product_id VARCHAR(20),
+    product_name VARCHAR(100),
+    description TEXT,
+    category VARCHAR(50),
+    subcategory VARCHAR(50),
+    brand VARCHAR(50),
+    supplier VARCHAR(100),
+    unit_cost DECIMAL(10,2),
+    unit_price DECIMAL(10,2),
+    weight DECIMAL(8,2),
+    size VARCHAR(20),
+    color VARCHAR(20),
+    is_active BOOLEAN
+);</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="design" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- DIMENSION DESIGN PATTERNS
+
+-- 1. SURROGATE KEYS
+-- Use integer surrogate keys, not natural keys
+-- Benefits: Performance, handle changes, protect from source changes
+CREATE TABLE dim_product (
+    product_key INT PRIMARY KEY,        -- Surrogate (system-generated)
+    product_id VARCHAR(20) NOT NULL,    -- Natural (from source)
+    -- ... other attributes
+);
+
+-- 2. HIERARCHIES
+-- Store hierarchy levels as separate columns
+CREATE TABLE dim_geography (
+    geography_key INT PRIMARY KEY,
+    city VARCHAR(50),
+    state VARCHAR(50),
+    region VARCHAR(50),
+    country VARCHAR(50),
+    continent VARCHAR(50)
+);
+-- Enables drill-down: Continent -> Country -> Region -> State -> City
+
+-- 3. ROLE-PLAYING DIMENSIONS
+-- Same dimension used multiple times with different meanings
+SELECT 
+    f.order_amount,
+    order_date.full_date as order_date,
+    ship_date.full_date as ship_date,
+    delivery_date.full_date as delivery_date
+FROM fact_orders f
+JOIN dim_date order_date ON f.order_date_key = order_date.date_key
+JOIN dim_date ship_date ON f.ship_date_key = ship_date.date_key
+JOIN dim_date delivery_date ON f.delivery_date_key = delivery_date.date_key;
+
+-- 4. CONFORMED DIMENSIONS
+-- Same dimension shared across multiple fact tables
+-- Ensures consistent reporting across subject areas
+-- dim_customer used by: fact_sales, fact_support, fact_marketing</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="special" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- SPECIAL DIMENSION TYPES
+
+-- 1. JUNK DIMENSION
+-- Combines low-cardinality flags/indicators
+CREATE TABLE dim_transaction_flags (
+    flag_key INT PRIMARY KEY,
+    is_promotion CHAR(1),       -- Y/N
+    is_gift CHAR(1),            -- Y/N
+    is_online CHAR(1),          -- Y/N
+    payment_type VARCHAR(20),   -- Cash/Credit/Debit
+    shipping_type VARCHAR(20)   -- Standard/Express/Overnight
+);
+-- Instead of 5 columns in fact, use 1 foreign key
+
+-- 2. DEGENERATE DIMENSION
+-- Dimension attribute stored in fact table (no separate dim)
+-- Examples: Order Number, Invoice Number, Receipt Number
+CREATE TABLE fact_sales (
+    sale_key INT PRIMARY KEY,
+    order_number VARCHAR(20),   -- Degenerate dimension
+    -- ... other columns
+);
+
+-- 3. OUTRIGGER DIMENSION
+-- Dimension that references another dimension
+CREATE TABLE dim_product (
+    product_key INT PRIMARY KEY,
+    product_name VARCHAR(100),
+    brand_key INT REFERENCES dim_brand(brand_key)  -- Outrigger
+);
+
+-- 4. MINI-DIMENSION
+-- Frequently changing attributes split into separate dimension
+CREATE TABLE dim_customer_demographics (
+    demo_key INT PRIMARY KEY,
+    age_band VARCHAR(20),       -- '18-25', '26-35', etc.
+    income_band VARCHAR(20),    -- 'Low', 'Medium', 'High'
+    education_level VARCHAR(30)
+);
+-- Reduces SCD overhead for frequently changing attributes
+
+-- 5. BRIDGE TABLE
+-- Handles many-to-many relationships
+CREATE TABLE bridge_customer_account (
+    customer_key INT,
+    account_key INT,
+    allocation_factor DECIMAL(5,4),  -- For weighted allocation
+    PRIMARY KEY (customer_key, account_key)
+);</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showDimTypes();
+        });
+        function showDimTypes() {
+            viz.clear();
+            const dims = [
+                { name: 'Date', color: 0x4dabf7 },
+                { name: 'Customer', color: 0xe25a1c },
+                { name: 'Product', color: 0x198754 },
+                { name: 'Location', color: 0x8b5cf6 },
+                { name: 'Employee', color: 0xffc107 }
+            ];
+            dims.forEach((d, i) => {
+                viz.createDataNode({ type: 'cylinder', size: 0.4, color: d.color, position: { x: -2 + i, y: 0.5, z: 0 } });
+                viz.createLabel(d.name, { x: -2 + i, y: 1.2, z: 0 });
+            });
+            viz.createLabel('Common Dimension Types', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showHierarchy() {
+            viz.clear();
+            const levels = ['Country', 'Region', 'State', 'City'];
+            levels.forEach((l, i) => {
+                viz.createDataNode({ type: 'cylinder', size: 0.35 - i * 0.05, color: 0x4dabf7, position: { x: 0, y: 1.5 - i * 0.6, z: 0 } });
+                viz.createLabel(l, { x: 1, y: 1.5 - i * 0.6, z: 0 });
+                if (i < 3) viz.createArrow({ x: 0, y: 1.2 - i * 0.6, z: 0 }, { x: 0, y: 1 - i * 0.6, z: 0 }, { color: 0x888888 });
+            });
+            viz.createLabel('Dimension Hierarchy - Drill Down', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

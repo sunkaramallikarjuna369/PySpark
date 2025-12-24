@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Surrogate Keys - DW Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#datawarehouse" class="nav-link active">Data Warehouse</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Surrogate Keys</h1>
+            <p>Surrogate keys are system-generated identifiers that replace natural/business keys in dimension tables, providing stability and performance benefits.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showSurrogateVsNatural()">Surrogate vs Natural</button>
+                <button class="viz-btn" onclick="showGeneration()">Key Generation</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="concepts">Concepts</button>
+                <button class="tab" data-tab="generation">Key Generation</button>
+                <button class="tab" data-tab="lookup">Key Lookup</button>
+            </div>
+            <div class="tab-contents">
+                <div id="concepts" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Text</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>Surrogate Keys vs Natural Keys:
+
+NATURAL KEY (Business Key):
+- Comes from source system
+- Has business meaning
+- Examples: SSN, Product SKU, Email
+- Can change over time
+- May be composite (multiple columns)
+
+SURROGATE KEY:
+- System-generated
+- No business meaning
+- Usually integer sequence
+- Never changes
+- Single column
+
+WHY USE SURROGATE KEYS:
+
+1. PERFORMANCE
+   - Integer joins faster than string joins
+   - Smaller storage footprint
+   - Better index performance
+
+2. STABILITY
+   - Insulated from source system changes
+   - Natural keys can change (company mergers, rebranding)
+   - Surrogate keys never change
+
+3. HISTORY TRACKING (SCD)
+   - Multiple surrogate keys for same natural key
+   - Enables Type 2 slowly changing dimensions
+   - Each version gets new surrogate key
+
+4. INTEGRATION
+   - Handle multiple source systems
+   - Different systems may use different natural keys
+   - Surrogate key provides unified identifier
+
+5. UNKNOWN/NULL HANDLING
+   - Special surrogate key for unknown (-1 or 0)
+   - Avoids NULL foreign keys in fact tables
+
+BEST PRACTICE:
+- Use surrogate keys as primary keys in dimensions
+- Keep natural key as attribute for reference
+- Use surrogate keys in fact table foreign keys</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="generation" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, monotonically_increasing_id, row_number, coalesce, lit
+from pyspark.sql.window import Window
+
+spark = SparkSession.builder.appName("SurrogateKeys").getOrCreate()
+
+# Method 1: monotonically_increasing_id()
+# Simple but not sequential, not deterministic across runs
+df_with_id = source_df.withColumn("surrogate_key", monotonically_increasing_id())
+
+# Method 2: row_number() with Window
+# Sequential but requires sorting
+window = Window.orderBy("natural_key")
+df_with_id = source_df.withColumn("surrogate_key", row_number().over(window))
+
+# Method 3: Get max existing key and increment
+def generate_surrogate_keys(new_df, existing_df, key_column):
+    """Generate sequential surrogate keys starting after max existing"""
+    
+    # Get max existing key
+    max_key = existing_df.agg({"surrogate_key": "max"}).collect()[0][0] or 0
+    
+    # Add row numbers starting from max + 1
+    window = Window.orderBy(key_column)
+    new_with_keys = new_df.withColumn(
+        "surrogate_key",
+        row_number().over(window) + lit(max_key)
+    )
+    
+    return new_with_keys
+
+# Method 4: Hash-based (for distributed systems)
+from pyspark.sql.functions import hash, abs as spark_abs
+df_with_hash = source_df.withColumn(
+    "surrogate_key",
+    spark_abs(hash(col("natural_key")))
+)
+
+# Special surrogate keys
+UNKNOWN_KEY = -1  # For unknown/missing dimension members
+NOT_APPLICABLE_KEY = -2  # For not applicable cases
+
+# Create unknown member row
+unknown_member = spark.createDataFrame([
+    (UNKNOWN_KEY, "UNKNOWN", "Unknown", "Unknown")
+], ["customer_key", "customer_id", "name", "segment"])</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="lookup" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, coalesce, lit, broadcast
+
+spark = SparkSession.builder.appName("KeyLookup").getOrCreate()
+
+def lookup_surrogate_keys(fact_df, dim_df, natural_key, surrogate_key, unknown_key=-1):
+    """
+    Look up surrogate keys for fact table loading.
+    Replace natural keys with surrogate keys.
+    Use unknown key for missing dimension members.
+    """
+    
+    # Join fact with dimension to get surrogate key
+    result = fact_df.join(
+        broadcast(dim_df.select(natural_key, surrogate_key)),
+        on=natural_key,
+        how="left"
+    ).withColumn(
+        surrogate_key,
+        coalesce(col(surrogate_key), lit(unknown_key))
+    ).drop(natural_key)
+    
+    return result
+
+# Example usage
+# Fact table with natural keys
+fact_staging = spark.createDataFrame([
+    ("2024-01-15", "C001", "P001", 100.00),
+    ("2024-01-15", "C002", "P002", 150.00),
+    ("2024-01-15", "C999", "P001", 75.00)  # C999 doesn't exist
+], ["date", "customer_id", "product_id", "amount"])
+
+# Dimension with surrogate keys
+dim_customer = spark.createDataFrame([
+    (1, "C001", "Alice"),
+    (2, "C002", "Bob")
+], ["customer_key", "customer_id", "name"])
+
+# Lookup surrogate keys
+fact_with_keys = lookup_surrogate_keys(
+    fact_staging,
+    dim_customer,
+    "customer_id",
+    "customer_key",
+    unknown_key=-1
+)
+
+# Result: C999 gets customer_key = -1 (unknown)</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showSurrogateVsNatural();
+        });
+        function showSurrogateVsNatural() {
+            viz.clear();
+            // Natural key
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x4dabf7, position: { x: -1.5, y: 0.5, z: 0 } });
+            viz.createLabel('Natural', { x: -1.5, y: 1.3, z: 0 });
+            viz.createLabel('C001', { x: -1.5, y: -0.2, z: 0 });
+            // Arrow
+            viz.createArrow({ x: -0.8, y: 0.5, z: 0 }, { x: 0.8, y: 0.5, z: 0 }, { color: 0x888888 });
+            // Surrogate key
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x198754, position: { x: 1.5, y: 0.5, z: 0 } });
+            viz.createLabel('Surrogate', { x: 1.5, y: 1.3, z: 0 });
+            viz.createLabel('1', { x: 1.5, y: -0.2, z: 0 });
+            viz.createLabel('Natural Key -> Surrogate Key', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showGeneration() {
+            viz.clear();
+            for (let i = 0; i < 5; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.35, color: 0x198754, position: { x: -2 + i, y: 0.5, z: 0 } });
+                viz.createLabel(String(i + 1), { x: -2 + i, y: 1.1, z: 0 });
+            }
+            viz.createLabel('Sequential Surrogate Key Generation', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

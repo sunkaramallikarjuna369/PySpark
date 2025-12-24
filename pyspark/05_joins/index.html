@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Joins - PySpark Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </a>
+            <nav class="nav">
+                <a href="../../index.html#pyspark" class="nav-link active">PySpark</a>
+                <a href="../../index.html#pandas" class="nav-link">Pandas</a>
+                <a href="../../index.html#sql" class="nav-link">SQL</a>
+                <a href="../../index.html#etl" class="nav-link">ETL</a>
+                <a href="../../index.html#datawarehouse" class="nav-link">Data Warehouse</a>
+                <button class="theme-toggle">🌙</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <nav class="breadcrumb">
+            <span class="breadcrumb-item"><a href="../../index.html">Home</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item"><a href="../../index.html#pyspark">PySpark</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item">Joins</span>
+        </nav>
+
+        <section class="section">
+            <h1>Spark Joins</h1>
+            <p>Joins combine rows from two or more DataFrames based on related columns. Spark supports various join types including inner, outer, left, right, cross, and semi joins.</p>
+
+            <div class="info-box info">
+                <strong>Key Concept:</strong> Joins are wide transformations that require shuffling data across partitions. Understanding join strategies (broadcast, sort-merge, shuffle-hash) is crucial for performance.
+            </div>
+
+            <h2>3D Visualization: Join Types</h2>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showInnerJoin()">Inner Join</button>
+                <button class="viz-btn" onclick="showLeftJoin()">Left Join</button>
+                <button class="viz-btn" onclick="showFullJoin()">Full Outer</button>
+                <button class="viz-btn" onclick="showCrossJoin()">Cross Join</button>
+            </div>
+
+            <h2>Join Types</h2>
+            <ul style="color: var(--text-secondary); margin-left: 1.5rem;">
+                <li><strong>Inner Join:</strong> Returns only matching rows from both DataFrames</li>
+                <li><strong>Left Outer Join:</strong> Returns all rows from left + matching from right</li>
+                <li><strong>Right Outer Join:</strong> Returns all rows from right + matching from left</li>
+                <li><strong>Full Outer Join:</strong> Returns all rows from both DataFrames</li>
+                <li><strong>Cross Join:</strong> Returns Cartesian product of both DataFrames</li>
+                <li><strong>Left Semi Join:</strong> Returns rows from left that have a match in right</li>
+                <li><strong>Left Anti Join:</strong> Returns rows from left that have no match in right</li>
+            </ul>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="basic">Basic Joins</button>
+                <button class="tab" data-tab="advanced">Advanced Joins</button>
+                <button class="tab" data-tab="optimize">Optimization</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="basic" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
+
+spark = SparkSession.builder.appName("Spark Joins").getOrCreate()
+
+# Create sample DataFrames
+employees = spark.createDataFrame([
+    (1, "Alice", 101),
+    (2, "Bob", 102),
+    (3, "Charlie", 101),
+    (4, "Diana", 103),
+    (5, "Eve", None)
+], ["emp_id", "name", "dept_id"])
+
+departments = spark.createDataFrame([
+    (101, "Engineering", "Building A"),
+    (102, "Marketing", "Building B"),
+    (104, "HR", "Building C")
+], ["dept_id", "dept_name", "location"])
+
+print("Employees:")
+employees.show()
+print("Departments:")
+departments.show()
+
+# Inner Join - Only matching rows
+print("INNER JOIN:")
+employees.join(departments, "dept_id", "inner").show()
+# Alternative syntax
+employees.join(departments, employees.dept_id == departments.dept_id, "inner").show()
+
+# Left Outer Join - All from left + matching from right
+print("LEFT OUTER JOIN:")
+employees.join(departments, "dept_id", "left").show()
+# Same as: "left_outer", "leftouter"
+
+# Right Outer Join - All from right + matching from left
+print("RIGHT OUTER JOIN:")
+employees.join(departments, "dept_id", "right").show()
+
+# Full Outer Join - All rows from both
+print("FULL OUTER JOIN:")
+employees.join(departments, "dept_id", "outer").show()
+# Same as: "full", "full_outer", "fullouter"
+
+# Cross Join - Cartesian product
+print("CROSS JOIN (limited):")
+employees.limit(2).crossJoin(departments.limit(2)).show()
+
+# Left Semi Join - Rows from left that have match in right
+print("LEFT SEMI JOIN:")
+employees.join(departments, "dept_id", "left_semi").show()
+
+# Left Anti Join - Rows from left that have NO match in right
+print("LEFT ANTI JOIN:")
+employees.join(departments, "dept_id", "left_anti").show()
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="advanced" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, coalesce, lit, when
+
+spark = SparkSession.builder.appName("Advanced Joins").getOrCreate()
+
+# Sample data
+orders = spark.createDataFrame([
+    (1, "2023-01-15", 100, 1001),
+    (2, "2023-01-16", 200, 1002),
+    (3, "2023-01-17", 150, 1001),
+    (4, "2023-01-18", 300, 1003)
+], ["order_id", "order_date", "amount", "customer_id"])
+
+customers = spark.createDataFrame([
+    (1001, "Alice", "NYC"),
+    (1002, "Bob", "LA"),
+    (1004, "Charlie", "Chicago")
+], ["customer_id", "name", "city"])
+
+products = spark.createDataFrame([
+    (1, 101, 2),
+    (1, 102, 1),
+    (2, 101, 3),
+    (3, 103, 1)
+], ["order_id", "product_id", "quantity"])
+
+# Join on multiple columns
+print("Join on multiple conditions:")
+orders.join(
+    customers,
+    (orders.customer_id == customers.customer_id) & (orders.amount > 100),
+    "inner"
+).show()
+
+# Self Join - Compare rows within same DataFrame
+print("Self Join (find orders from same customer):")
+orders.alias("o1").join(
+    orders.alias("o2"),
+    (col("o1.customer_id") == col("o2.customer_id")) & 
+    (col("o1.order_id") < col("o2.order_id")),
+    "inner"
+).select(
+    col("o1.order_id").alias("order1"),
+    col("o2.order_id").alias("order2"),
+    col("o1.customer_id")
+).show()
+
+# Multiple DataFrame Join
+print("Multiple DataFrame Join:")
+result = orders \
+    .join(customers, "customer_id", "left") \
+    .join(products, "order_id", "left")
+result.show()
+
+# Join with different column names
+employees = spark.createDataFrame([
+    (1, "Alice", 101),
+    (2, "Bob", 102)
+], ["id", "name", "department_id"])
+
+departments = spark.createDataFrame([
+    (101, "Engineering"),
+    (102, "Marketing")
+], ["dept_id", "dept_name"])
+
+print("Join with different column names:")
+employees.join(
+    departments,
+    employees.department_id == departments.dept_id,
+    "inner"
+).drop("dept_id").show()
+
+# Handle NULL values in joins
+print("Handling NULLs with coalesce:")
+orders.join(customers, "customer_id", "left") \
+    .select(
+        "order_id",
+        coalesce(col("name"), lit("Unknown")).alias("customer_name")
+    ).show()
+
+# Conditional Join
+print("Conditional Join:")
+orders.join(
+    customers,
+    (orders.customer_id == customers.customer_id) & 
+    (customers.city == "NYC"),
+    "left"
+).show()
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="optimize" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import broadcast, col
+
+spark = SparkSession.builder \
+    .appName("Join Optimization") \
+    .config("spark.sql.autoBroadcastJoinThreshold", "10485760") \
+    .getOrCreate()
+
+# Large DataFrame (fact table)
+large_df = spark.range(1000000).withColumn("dept_id", col("id") % 100)
+
+# Small DataFrame (dimension table)
+small_df = spark.createDataFrame([
+    (i, f"Dept_{i}") for i in range(100)
+], ["dept_id", "dept_name"])
+
+# Broadcast Join - Small table is broadcast to all executors
+print("Broadcast Join:")
+result = large_df.join(broadcast(small_df), "dept_id")
+result.explain()
+
+# Check join strategy in execution plan
+print("\nExecution Plan:")
+large_df.join(small_df, "dept_id").explain(mode="extended")
+
+# Repartition before join for better performance
+print("\nRepartitioned Join:")
+large_repartitioned = large_df.repartition(10, "dept_id")
+small_repartitioned = small_df.repartition(10, "dept_id")
+result = large_repartitioned.join(small_repartitioned, "dept_id")
+result.explain()
+
+# Bucketed Join (requires saving as bucketed table first)
+# large_df.write.bucketBy(10, "dept_id").saveAsTable("large_bucketed")
+# small_df.write.bucketBy(10, "dept_id").saveAsTable("small_bucketed")
+
+# Join hints
+print("\nJoin Hints:")
+# Broadcast hint
+large_df.join(small_df.hint("broadcast"), "dept_id").explain()
+
+# Merge hint (sort-merge join)
+large_df.join(small_df.hint("merge"), "dept_id").explain()
+
+# Shuffle hash hint
+large_df.join(small_df.hint("shuffle_hash"), "dept_id").explain()
+
+# Shuffle replicate NL hint (nested loop)
+# large_df.join(small_df.hint("shuffle_replicate_nl"), "dept_id").explain()
+
+# Best Practices:
+# 1. Use broadcast join for small tables (< 10MB by default)
+# 2. Repartition large tables on join key before joining
+# 3. Use bucketing for frequently joined tables
+# 4. Avoid cross joins unless necessary
+# 5. Filter data before joining to reduce shuffle size
+# 6. Use appropriate join type (semi/anti for existence checks)
+
+# Example: Optimized join pipeline
+print("\nOptimized Join Pipeline:")
+result = (
+    large_df
+    .filter(col("id") < 100000)  # Filter early
+    .repartition(10, "dept_id")   # Repartition on join key
+    .join(broadcast(small_df), "dept_id")  # Broadcast small table
+)
+result.explain()
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-box tip">
+                <strong>Best Practice:</strong> Use <code>broadcast()</code> for small DataFrames to avoid shuffle. Spark automatically broadcasts tables smaller than <code>spark.sql.autoBroadcastJoinThreshold</code> (default 10MB).
+            </div>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../04_actions/index.html" style="color: var(--text-muted);">← Previous: Actions</a>
+                <a href="../06_window_functions/index.html" style="color: var(--accent-primary);">Next: Window Functions →</a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+        </div>
+    </footer>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', {
+                backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 0x1a1a2e : 0xf8f9fa,
+                cameraPosition: { x: 6, y: 4, z: 6 }
+            });
+            showInnerJoin();
+        });
+
+        function showInnerJoin() {
+            viz.clear();
+            
+            // Left table
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.4, color: i < 3 ? 0xe25a1c : 0x666666,
+                    position: { x: -3, y: 1.5 - i * 0.8, z: 0 }
+                });
+            }
+            viz.createLabel('Left DF', { x: -3, y: 2.5, z: 0 });
+
+            // Right table
+            for (let i = 0; i < 3; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.4, color: i < 2 ? 0x4dabf7 : 0x666666,
+                    position: { x: 0, y: 1 - i * 0.8, z: 0 }
+                });
+            }
+            viz.createLabel('Right DF', { x: 0, y: 2.5, z: 0 });
+
+            // Result (only matching)
+            for (let i = 0; i < 2; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.5, color: 0x198754,
+                    position: { x: 3, y: 0.5 - i * 0.8, z: 0 }
+                });
+            }
+            viz.createLabel('Result', { x: 3, y: 2.5, z: 0 });
+
+            viz.createArrow({ x: -2.5, y: 0.5, z: 0 }, { x: 2.5, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createLabel('INNER JOIN - Only matching rows', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showLeftJoin() {
+            viz.clear();
+            
+            // Left table (all included)
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.4, color: 0xe25a1c,
+                    position: { x: -3, y: 1.5 - i * 0.8, z: 0 }
+                });
+            }
+            viz.createLabel('Left DF', { x: -3, y: 2.5, z: 0 });
+
+            // Right table
+            for (let i = 0; i < 3; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.4, color: 0x4dabf7,
+                    position: { x: 0, y: 1 - i * 0.8, z: 0 }
+                });
+            }
+            viz.createLabel('Right DF', { x: 0, y: 2.5, z: 0 });
+
+            // Result (all from left)
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.5, color: i < 2 ? 0x198754 : 0xffc107,
+                    position: { x: 3, y: 1.5 - i * 0.8, z: 0 }
+                });
+            }
+            viz.createLabel('Result', { x: 3, y: 2.5, z: 0 });
+
+            viz.createArrow({ x: -2.5, y: 0.5, z: 0 }, { x: 2.5, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createLabel('LEFT JOIN - All from left + matching', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showFullJoin() {
+            viz.clear();
+            
+            // Left table
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.4, color: 0xe25a1c,
+                    position: { x: -3, y: 1.5 - i * 0.8, z: 0 }
+                });
+            }
+            viz.createLabel('Left DF', { x: -3, y: 2.5, z: 0 });
+
+            // Right table
+            for (let i = 0; i < 3; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.4, color: 0x4dabf7,
+                    position: { x: 0, y: 1 - i * 0.8, z: 0 }
+                });
+            }
+            viz.createLabel('Right DF', { x: 0, y: 2.5, z: 0 });
+
+            // Result (all from both)
+            for (let i = 0; i < 5; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.5, color: i < 2 ? 0x198754 : 0xffc107,
+                    position: { x: 3, y: 2 - i * 0.8, z: 0 }
+                });
+            }
+            viz.createLabel('Result', { x: 3, y: 3, z: 0 });
+
+            viz.createArrow({ x: -2.5, y: 0.5, z: 0 }, { x: 2.5, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createLabel('FULL OUTER JOIN - All rows from both', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showCrossJoin() {
+            viz.clear();
+            
+            // Left table (2 rows)
+            for (let i = 0; i < 2; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.4, color: 0xe25a1c,
+                    position: { x: -3, y: 0.5 - i * 0.8, z: 0 }
+                });
+            }
+            viz.createLabel('Left (2)', { x: -3, y: 1.5, z: 0 });
+
+            // Right table (3 rows)
+            for (let i = 0; i < 3; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.4, color: 0x4dabf7,
+                    position: { x: 0, y: 1 - i * 0.8, z: 0 }
+                });
+            }
+            viz.createLabel('Right (3)', { x: 0, y: 2, z: 0 });
+
+            // Result (2 x 3 = 6 rows)
+            for (let i = 0; i < 6; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.35, color: 0x198754,
+                    position: { x: 3, y: 2 - i * 0.6, z: 0 }
+                });
+            }
+            viz.createLabel('Result (6)', { x: 3, y: 2.8, z: 0 });
+
+            viz.createArrow({ x: -2.5, y: 0.5, z: 0 }, { x: 2.5, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createLabel('CROSS JOIN - Cartesian product (2x3=6)', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

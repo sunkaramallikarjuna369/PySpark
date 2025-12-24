@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reading & Writing Data - Pandas Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pandas" class="nav-link active">Pandas</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Reading & Writing Data</h1>
+            <p>Pandas supports reading and writing data in various formats including CSV, Excel, JSON, Parquet, SQL databases, and more.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showFormats()">File Formats</button>
+                <button class="viz-btn" onclick="showIO()">I/O Flow</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="csv">CSV</button>
+                <button class="tab" data-tab="excel">Excel & JSON</button>
+                <button class="tab" data-tab="database">Database</button>
+            </div>
+            <div class="tab-contents">
+                <div id="csv" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+# Read CSV
+df = pd.read_csv('data.csv')
+
+# Read with options
+df = pd.read_csv('data.csv',
+    sep=',',              # Delimiter
+    header=0,             # Row number for header
+    names=['a', 'b'],     # Custom column names
+    index_col='id',       # Column to use as index
+    usecols=['a', 'b'],   # Columns to read
+    dtype={'a': 'int64'}, # Column dtypes
+    na_values=['NA', ''], # Values to treat as NaN
+    parse_dates=['date'], # Parse as datetime
+    nrows=1000,           # Number of rows to read
+    skiprows=1,           # Rows to skip
+    encoding='utf-8'      # File encoding
+)
+
+# Read large files in chunks
+for chunk in pd.read_csv('large.csv', chunksize=10000):
+    process(chunk)
+
+# Write CSV
+df.to_csv('output.csv', index=False)
+
+# Write with options
+df.to_csv('output.csv',
+    sep=',',
+    index=False,
+    header=True,
+    columns=['a', 'b'],
+    na_rep='NULL',
+    date_format='%Y-%m-%d',
+    encoding='utf-8',
+    compression='gzip'  # .csv.gz
+)</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="excel" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+# Read Excel
+df = pd.read_excel('data.xlsx')
+
+# Read specific sheet
+df = pd.read_excel('data.xlsx', sheet_name='Sheet1')
+
+# Read multiple sheets
+sheets = pd.read_excel('data.xlsx', sheet_name=['Sheet1', 'Sheet2'])
+# Returns dict: {'Sheet1': df1, 'Sheet2': df2}
+
+# Read all sheets
+all_sheets = pd.read_excel('data.xlsx', sheet_name=None)
+
+# Write Excel
+df.to_excel('output.xlsx', index=False)
+
+# Write multiple sheets
+with pd.ExcelWriter('output.xlsx') as writer:
+    df1.to_excel(writer, sheet_name='Data1')
+    df2.to_excel(writer, sheet_name='Data2')
+
+# JSON
+# Read JSON
+df = pd.read_json('data.json')
+df = pd.read_json('data.json', orient='records')
+
+# Write JSON
+df.to_json('output.json', orient='records', indent=2)
+
+# Parquet (efficient columnar format)
+df = pd.read_parquet('data.parquet')
+df.to_parquet('output.parquet', compression='snappy')
+
+# Feather (fast binary format)
+df = pd.read_feather('data.feather')
+df.to_feather('output.feather')</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="database" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+from sqlalchemy import create_engine
+
+# Create database connection
+engine = create_engine('sqlite:///database.db')
+# PostgreSQL: 'postgresql://user:pass@host:port/db'
+# MySQL: 'mysql+pymysql://user:pass@host:port/db'
+
+# Read from SQL
+df = pd.read_sql('SELECT * FROM table_name', engine)
+
+# Read with query
+df = pd.read_sql_query('''
+    SELECT id, name, value 
+    FROM table_name 
+    WHERE value > 100
+''', engine)
+
+# Read entire table
+df = pd.read_sql_table('table_name', engine)
+
+# Write to SQL
+df.to_sql('table_name', engine, 
+    if_exists='replace',  # 'fail', 'replace', 'append'
+    index=False,
+    chunksize=1000
+)
+
+# With dtypes
+from sqlalchemy import Integer, String
+df.to_sql('table_name', engine,
+    dtype={
+        'id': Integer(),
+        'name': String(100)
+    }
+)
+
+# Read from clipboard (useful for quick data entry)
+df = pd.read_clipboard()
+
+# Write to clipboard
+df.to_clipboard()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showFormats();
+        });
+        function showFormats() {
+            viz.clear();
+            const formats = [
+                { label: 'CSV', color: 0xe25a1c },
+                { label: 'Excel', color: 0x198754 },
+                { label: 'JSON', color: 0x4dabf7 },
+                { label: 'Parquet', color: 0x8b5cf6 },
+                { label: 'SQL', color: 0xffc107 }
+            ];
+            formats.forEach((f, i) => {
+                const angle = (i / formats.length) * Math.PI * 2;
+                const x = Math.cos(angle) * 1.5;
+                const z = Math.sin(angle) * 1.5;
+                viz.createDataNode({ type: 'cube', size: 0.4, color: f.color, position: { x, y: 0.5, z } });
+                viz.createLabel(f.label, { x: x * 1.4, y: 1.2, z: z * 1.4 });
+            });
+            viz.createLabel('Supported File Formats', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showIO() {
+            viz.clear();
+            viz.createDataNode({ type: 'cylinder', size: 0.5, color: 0x4dabf7, position: { x: -2, y: 0.5, z: 0 } });
+            viz.createLabel('File', { x: -2, y: 1.3, z: 0 });
+            viz.createArrow({ x: -1.3, y: 0.5, z: 0 }, { x: -0.3, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createDataNode({ type: 'cube', size: 0.7, color: 0xe25a1c, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('DataFrame', { x: 0, y: 1.4, z: 0 });
+            viz.createArrow({ x: 0.5, y: 0.5, z: 0 }, { x: 1.5, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createDataNode({ type: 'cylinder', size: 0.5, color: 0x198754, position: { x: 2, y: 0.5, z: 0 } });
+            viz.createLabel('Output', { x: 2, y: 1.3, z: 0 });
+            viz.createLabel('Read -> Process -> Write', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

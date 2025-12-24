@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OLAP vs OLTP - DW Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#datawarehouse" class="nav-link active">Data Warehouse</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>OLAP vs OLTP</h1>
+            <p>OLTP (Online Transaction Processing) handles day-to-day transactions, while OLAP (Online Analytical Processing) supports complex analytical queries.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showComparison()">Comparison</button>
+                <button class="viz-btn" onclick="showOLAPCube()">OLAP Cube</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="comparison">Comparison</button>
+                <button class="tab" data-tab="oltp">OLTP Patterns</button>
+                <button class="tab" data-tab="olap">OLAP Operations</button>
+            </div>
+            <div class="tab-contents">
+                <div id="comparison" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Text</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>OLTP vs OLAP Comparison:
+
+| Aspect           | OLTP                      | OLAP                        |
+|------------------|---------------------------|-----------------------------|
+| Purpose          | Day-to-day transactions   | Analysis and reporting      |
+| Users            | Clerks, customers         | Analysts, managers          |
+| Operations       | INSERT, UPDATE, DELETE    | SELECT (complex queries)    |
+| Data             | Current, detailed         | Historical, aggregated      |
+| Schema           | Normalized (3NF)          | Denormalized (Star/Snowflake)|
+| Query Complexity | Simple, predefined        | Complex, ad-hoc             |
+| Response Time    | Milliseconds              | Seconds to minutes          |
+| Data Size        | GB                        | TB to PB                    |
+| Concurrency      | Thousands of users        | Fewer users                 |
+| Backup           | Frequent                  | Less frequent               |
+| Examples         | Banking, E-commerce       | BI, Data Warehouse          |
+
+OLTP Examples:
+- Process a credit card payment
+- Update customer address
+- Place an order
+- Check inventory
+
+OLAP Examples:
+- Sales trends over 5 years
+- Customer segmentation analysis
+- Product profitability by region
+- Year-over-year comparison</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="oltp" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- OLTP: Normalized Schema (3NF)
+
+-- Customers table
+CREATE TABLE customers (
+    customer_id INT PRIMARY KEY,
+    first_name VARCHAR(50),
+    last_name VARCHAR(50),
+    email VARCHAR(100) UNIQUE
+);
+
+-- Addresses table (normalized)
+CREATE TABLE addresses (
+    address_id INT PRIMARY KEY,
+    customer_id INT REFERENCES customers(customer_id),
+    street VARCHAR(200),
+    city VARCHAR(50),
+    state VARCHAR(50),
+    postal_code VARCHAR(20)
+);
+
+-- Orders table
+CREATE TABLE orders (
+    order_id INT PRIMARY KEY,
+    customer_id INT REFERENCES customers(customer_id),
+    order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(20)
+);
+
+-- OLTP Queries: Simple, fast, row-level
+
+-- Insert new order
+INSERT INTO orders (customer_id, status)
+VALUES (123, 'pending');
+
+-- Update order status
+UPDATE orders SET status = 'shipped'
+WHERE order_id = 456;
+
+-- Get customer's recent orders
+SELECT order_id, order_date, status
+FROM orders
+WHERE customer_id = 123
+ORDER BY order_date DESC
+LIMIT 10;
+
+-- Check product inventory
+SELECT product_id, quantity_available
+FROM inventory
+WHERE product_id = 789;</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="olap" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- OLAP Operations on Data Warehouse
+
+-- ROLL-UP: Aggregate from detail to summary
+-- Day -> Month -> Quarter -> Year
+SELECT 
+    d.year,
+    d.quarter,
+    SUM(f.sales_amount) as total_sales
+FROM fact_sales f
+JOIN dim_date d ON f.date_key = d.date_key
+GROUP BY ROLLUP(d.year, d.quarter);
+
+-- DRILL-DOWN: Go from summary to detail
+-- Year -> Quarter -> Month -> Day
+SELECT 
+    d.year,
+    d.quarter,
+    d.month,
+    d.day_of_month,
+    SUM(f.sales_amount) as daily_sales
+FROM fact_sales f
+JOIN dim_date d ON f.date_key = d.date_key
+WHERE d.year = 2024 AND d.quarter = 1
+GROUP BY d.year, d.quarter, d.month, d.day_of_month;
+
+-- SLICE: Filter on one dimension
+SELECT p.category, SUM(f.sales_amount)
+FROM fact_sales f
+JOIN dim_product p ON f.product_key = p.product_key
+WHERE f.date_key = 20240115  -- Slice on specific date
+GROUP BY p.category;
+
+-- DICE: Filter on multiple dimensions
+SELECT d.month, p.category, c.region, SUM(f.sales_amount)
+FROM fact_sales f
+JOIN dim_date d ON f.date_key = d.date_key
+JOIN dim_product p ON f.product_key = p.product_key
+JOIN dim_customer c ON f.customer_key = c.customer_key
+WHERE d.year = 2024
+  AND p.category IN ('Electronics', 'Clothing')
+  AND c.region IN ('North', 'South')
+GROUP BY d.month, p.category, c.region;
+
+-- PIVOT: Rotate data for cross-tabulation
+SELECT * FROM (
+    SELECT d.month, p.category, f.sales_amount
+    FROM fact_sales f
+    JOIN dim_date d ON f.date_key = d.date_key
+    JOIN dim_product p ON f.product_key = p.product_key
+) PIVOT (
+    SUM(sales_amount) FOR category IN ('Electronics', 'Clothing', 'Home')
+);</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showComparison();
+        });
+        function showComparison() {
+            viz.clear();
+            // OLTP
+            viz.createDataNode({ type: 'cylinder', size: 0.6, color: 0x4dabf7, position: { x: -1.5, y: 0.5, z: 0 } });
+            viz.createLabel('OLTP', { x: -1.5, y: 1.4, z: 0 });
+            viz.createLabel('Transactions', { x: -1.5, y: -0.3, z: 0 });
+            // OLAP
+            viz.createDataNode({ type: 'cube', size: 0.7, color: 0xe25a1c, position: { x: 1.5, y: 0.5, z: 0 } });
+            viz.createLabel('OLAP', { x: 1.5, y: 1.4, z: 0 });
+            viz.createLabel('Analytics', { x: 1.5, y: -0.3, z: 0 });
+            // Arrow from OLTP to OLAP
+            viz.createArrow({ x: -0.7, y: 0.5, z: 0 }, { x: 0.7, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createLabel('ETL', { x: 0, y: 0.9, z: 0 });
+            viz.createLabel('OLTP feeds OLAP via ETL', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showOLAPCube() {
+            viz.clear();
+            // 3D OLAP Cube representation
+            viz.createDataNode({ type: 'cube', size: 1.2, color: 0xe25a1c, position: { x: 0, y: 0.6, z: 0 } });
+            viz.createLabel('Time', { x: 1.2, y: 0.6, z: 0 });
+            viz.createLabel('Product', { x: 0, y: 1.5, z: 0 });
+            viz.createLabel('Region', { x: 0, y: 0.6, z: 1.2 });
+            viz.createLabel('OLAP Cube - Multi-dimensional Analysis', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

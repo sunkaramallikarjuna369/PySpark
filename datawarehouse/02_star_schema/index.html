@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Star Schema - DW Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#datawarehouse" class="nav-link active">Data Warehouse</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Star Schema</h1>
+            <p>Star schema is the simplest dimensional model with a central fact table connected to dimension tables, resembling a star shape.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showStarSchema()">Star Schema</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="design">Schema Design</button>
+                <button class="tab" data-tab="create">Create Tables</button>
+                <button class="tab" data-tab="query">Query Patterns</button>
+                <button class="tab" data-tab="csv">CSV Data</button>
+            </div>
+            <div class="tab-contents">
+                <div id="design" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- Star Schema Components:
+
+-- FACT TABLE (Center of star)
+-- - Contains measurable business metrics
+-- - Foreign keys to dimension tables
+-- - Typically many rows, narrow columns
+-- - Examples: sales_fact, orders_fact
+
+-- DIMENSION TABLES (Points of star)
+-- - Descriptive attributes
+-- - Primary key referenced by fact
+-- - Fewer rows, wider columns
+-- - Examples: dim_customer, dim_product, dim_date
+
+-- Star Schema Example: Sales Analysis
+
+/*
+                    dim_date
+                       |
+                       |
+    dim_product --- fact_sales --- dim_customer
+                       |
+                       |
+                    dim_store
+*/
+
+-- Benefits of Star Schema:
+-- 1. Simple to understand and navigate
+-- 2. Optimized for query performance
+-- 3. Fewer joins needed
+-- 4. Works well with BI tools
+-- 5. Easy to maintain
+
+-- Drawbacks:
+-- 1. Data redundancy in dimensions
+-- 2. Not normalized (3NF)
+-- 3. Larger storage for dimensions</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="create" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- Dimension Tables
+
+CREATE TABLE dim_date (
+    date_key INT PRIMARY KEY,
+    full_date DATE,
+    day_of_week VARCHAR(10),
+    day_of_month INT,
+    month INT,
+    month_name VARCHAR(10),
+    quarter INT,
+    year INT,
+    is_weekend BOOLEAN,
+    is_holiday BOOLEAN
+);
+
+CREATE TABLE dim_product (
+    product_key INT PRIMARY KEY,
+    product_id VARCHAR(20),
+    product_name VARCHAR(100),
+    category VARCHAR(50),
+    subcategory VARCHAR(50),
+    brand VARCHAR(50),
+    unit_price DECIMAL(10,2)
+);
+
+CREATE TABLE dim_customer (
+    customer_key INT PRIMARY KEY,
+    customer_id VARCHAR(20),
+    customer_name VARCHAR(100),
+    email VARCHAR(100),
+    city VARCHAR(50),
+    state VARCHAR(50),
+    country VARCHAR(50),
+    segment VARCHAR(20)
+);
+
+-- Fact Table
+CREATE TABLE fact_sales (
+    sale_key INT PRIMARY KEY,
+    date_key INT REFERENCES dim_date(date_key),
+    product_key INT REFERENCES dim_product(product_key),
+    customer_key INT REFERENCES dim_customer(customer_key),
+    store_key INT REFERENCES dim_store(store_key),
+    quantity INT,
+    unit_price DECIMAL(10,2),
+    discount DECIMAL(5,2),
+    total_amount DECIMAL(12,2),
+    profit DECIMAL(12,2)
+);</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="query" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- Star Schema Query Patterns
+
+-- Sales by Product Category and Month
+SELECT 
+    d.year,
+    d.month_name,
+    p.category,
+    SUM(f.total_amount) as total_sales,
+    SUM(f.quantity) as units_sold
+FROM fact_sales f
+JOIN dim_date d ON f.date_key = d.date_key
+JOIN dim_product p ON f.product_key = p.product_key
+GROUP BY d.year, d.month_name, p.category
+ORDER BY d.year, d.month, total_sales DESC;
+
+-- Top Customers by Region
+SELECT 
+    c.country,
+    c.state,
+    c.customer_name,
+    SUM(f.total_amount) as lifetime_value
+FROM fact_sales f
+JOIN dim_customer c ON f.customer_key = c.customer_key
+GROUP BY c.country, c.state, c.customer_name
+ORDER BY lifetime_value DESC
+LIMIT 10;
+
+-- Year-over-Year Comparison
+SELECT 
+    d.year,
+    d.quarter,
+    SUM(f.total_amount) as quarterly_sales,
+    LAG(SUM(f.total_amount)) OVER (
+        PARTITION BY d.quarter ORDER BY d.year
+    ) as prev_year_sales
+FROM fact_sales f
+JOIN dim_date d ON f.date_key = d.date_key
+GROUP BY d.year, d.quarter;</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="csv" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre># Load Star Schema from CSV Files
+# CSV files are in the data/ directory
+
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("StarSchema").getOrCreate()
+
+# Load dimension tables from CSV
+dim_date = spark.read.csv("data/dates.csv", header=True, inferSchema=True)
+dim_product = spark.read.csv("data/products.csv", header=True, inferSchema=True)
+dim_customer = spark.read.csv("data/customers.csv", header=True, inferSchema=True)
+dim_store = spark.read.csv("data/stores.csv", header=True, inferSchema=True)
+
+# Load fact table from CSV
+fact_sales = spark.read.csv("data/sales.csv", header=True, inferSchema=True)
+
+# Register as SQL views
+dim_date.createOrReplaceTempView("dim_date")
+dim_product.createOrReplaceTempView("dim_product")
+dim_customer.createOrReplaceTempView("dim_customer")
+fact_sales.createOrReplaceTempView("fact_sales")
+
+# Query: Sales by Category
+spark.sql("""
+    SELECT p.category, 
+           COUNT(*) as transactions,
+           SUM(s.total_amount) as total_sales
+    FROM fact_sales s
+    JOIN dim_product p ON s.product_id = p.product_id
+    GROUP BY p.category
+    ORDER BY total_sales DESC
+""").show()
+
+# Query: Sales by Customer Segment
+spark.sql("""
+    SELECT c.segment, 
+           COUNT(*) as transactions,
+           SUM(s.total_amount) as total_sales
+    FROM fact_sales s
+    JOIN dim_customer c ON s.customer_id = c.customer_id
+    GROUP BY c.segment
+""").show()
+
+# CSV Files Available:
+# - data/customers.csv (15 customers)
+# - data/products.csv (15 products)
+# - data/sales.csv (25 transactions)
+# - data/dates.csv (31 days)
+# - data/stores.csv (5 stores)</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showStarSchema();
+        });
+        function showStarSchema() {
+            viz.clear();
+            // Fact table (center)
+            viz.createDataNode({ type: 'cube', size: 0.7, color: 0xe25a1c, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('Fact', { x: 0, y: 1.4, z: 0 });
+            // Dimension tables (points of star)
+            const dims = [
+                { name: 'Date', angle: 0 },
+                { name: 'Product', angle: Math.PI / 2 },
+                { name: 'Customer', angle: Math.PI },
+                { name: 'Store', angle: 3 * Math.PI / 2 }
+            ];
+            dims.forEach(d => {
+                const x = Math.cos(d.angle) * 1.8;
+                const z = Math.sin(d.angle) * 1.8;
+                viz.createDataNode({ type: 'cylinder', size: 0.4, color: 0x4dabf7, position: { x, y: 0.5, z } });
+                viz.createLabel(d.name, { x: x * 1.3, y: 1.1, z: z * 1.3 });
+                viz.createArrow({ x: x * 0.6, y: 0.5, z: z * 0.6 }, { x: x * 0.2, y: 0.5, z: z * 0.2 }, { color: 0x888888 });
+            });
+            viz.createLabel('Star Schema - Fact surrounded by Dimensions', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

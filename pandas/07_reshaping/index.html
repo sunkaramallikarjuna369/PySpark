@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reshaping Data - Pandas Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pandas" class="nav-link active">Pandas</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Reshaping Data</h1>
+            <p>Reshaping transforms data between wide and long formats using melt, stack, unstack, and explode operations.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showMelt()">Melt</button>
+                <button class="viz-btn" onclick="showStack()">Stack/Unstack</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="melt">melt()</button>
+                <button class="tab" data-tab="stack">stack/unstack</button>
+                <button class="tab" data-tab="explode">explode()</button>
+            </div>
+            <div class="tab-contents">
+                <div id="melt" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+# Wide format data
+df_wide = pd.DataFrame({
+    'name': ['Alice', 'Bob'],
+    'math': [90, 85],
+    'science': [88, 92],
+    'english': [95, 78]
+})
+
+print("Wide format:")
+print(df_wide)
+
+# Melt to long format
+df_long = pd.melt(df_wide, id_vars=['name'], 
+                  value_vars=['math', 'science', 'english'],
+                  var_name='subject', value_name='score')
+print("\nLong format (melted):")
+print(df_long)
+
+# Melt with custom names
+df_melted = df_wide.melt(id_vars='name', var_name='Subject', value_name='Grade')
+print("\nWith custom names:")
+print(df_melted)
+
+# Reverse: pivot back to wide
+df_back = df_long.pivot(index='name', columns='subject', values='score')
+print("\nBack to wide format:")
+print(df_back)</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="stack" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+df = pd.DataFrame({
+    'A': [1, 2, 3],
+    'B': [4, 5, 6]
+}, index=['x', 'y', 'z'])
+
+print("Original DataFrame:")
+print(df)
+
+# Stack - columns to rows (creates MultiIndex)
+stacked = df.stack()
+print("\nStacked (Series with MultiIndex):")
+print(stacked)
+
+# Unstack - rows to columns
+unstacked = stacked.unstack()
+print("\nUnstacked (back to DataFrame):")
+print(unstacked)
+
+# Unstack specific level
+df_multi = pd.DataFrame({
+    'value': [1, 2, 3, 4]
+}, index=pd.MultiIndex.from_tuples([
+    ('A', 'x'), ('A', 'y'), ('B', 'x'), ('B', 'y')
+], names=['letter', 'coord']))
+
+print("\nMultiIndex DataFrame:")
+print(df_multi)
+
+print("\nUnstack level 0:")
+print(df_multi.unstack(level=0))
+
+print("\nUnstack level 1:")
+print(df_multi.unstack(level=1))</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="explode" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+# DataFrame with list values
+df = pd.DataFrame({
+    'name': ['Alice', 'Bob'],
+    'skills': [['Python', 'SQL', 'Spark'], ['Java', 'Scala']]
+})
+
+print("Original DataFrame:")
+print(df)
+
+# Explode list column
+exploded = df.explode('skills')
+print("\nExploded:")
+print(exploded)
+
+# Reset index after explode
+exploded_reset = df.explode('skills').reset_index(drop=True)
+print("\nExploded with reset index:")
+print(exploded_reset)
+
+# Explode with ignore_index
+exploded_ignore = df.explode('skills', ignore_index=True)
+print("\nExploded with ignore_index:")
+print(exploded_ignore)
+
+# Reverse: group back
+grouped = exploded_reset.groupby('name')['skills'].apply(list).reset_index()
+print("\nGrouped back:")
+print(grouped)</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showMelt();
+        });
+        function showMelt() {
+            viz.clear();
+            // Wide format
+            for (let i = 0; i < 2; i++) {
+                for (let j = 0; j < 3; j++) {
+                    viz.createDataNode({ type: 'cube', size: 0.4, color: 0x4dabf7, position: { x: -2.5 + j * 0.8, y: 0.8 - i * 0.8, z: 0 } });
+                }
+            }
+            viz.createLabel('Wide', { x: -1.7, y: 1.8, z: 0 });
+            viz.createArrow({ x: -0.5, y: 0.5, z: 0 }, { x: 0.8, y: 0.5, z: 0 }, { color: 0x888888 });
+            // Long format
+            for (let i = 0; i < 6; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.35, color: 0xe25a1c, position: { x: 2, y: 1.5 - i * 0.5, z: 0 } });
+            }
+            viz.createLabel('Long', { x: 2, y: 2.2, z: 0 });
+            viz.createLabel('Melt - Wide to Long format', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showStack() {
+            viz.clear();
+            // DataFrame
+            for (let i = 0; i < 2; i++) {
+                for (let j = 0; j < 2; j++) {
+                    viz.createDataNode({ type: 'cube', size: 0.5, color: 0x4dabf7, position: { x: -1.5 + j * 0.8, y: 0.8 - i * 0.8, z: 0 } });
+                }
+            }
+            // Stacked
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.4, color: 0x198754, position: { x: 1.5, y: 1.2 - i * 0.6, z: 0 } });
+            }
+            viz.createArrow({ x: -0.3, y: 0.5, z: 0 }, { x: 1, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createLabel('Stack - Columns to MultiIndex', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

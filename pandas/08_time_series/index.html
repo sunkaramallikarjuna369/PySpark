@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time Series - Pandas Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pandas" class="nav-link active">Pandas</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Time Series</h1>
+            <p>Pandas provides powerful tools for working with time series data including date parsing, resampling, rolling windows, and time-based indexing.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showTimeSeries()">Time Series</button>
+                <button class="viz-btn" onclick="showResampling()">Resampling</button>
+                <button class="viz-btn" onclick="showRolling()">Rolling Window</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="datetime">DateTime</button>
+                <button class="tab" data-tab="resample">Resampling</button>
+                <button class="tab" data-tab="rolling">Rolling</button>
+            </div>
+            <div class="tab-contents">
+                <div id="datetime" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+# Create datetime index
+dates = pd.date_range('2023-01-01', periods=10, freq='D')
+df = pd.DataFrame({'value': range(10)}, index=dates)
+print("DataFrame with DatetimeIndex:")
+print(df)
+
+# Parse dates from strings
+df2 = pd.DataFrame({
+    'date': ['2023-01-01', '2023-01-02', '2023-01-03'],
+    'value': [100, 200, 150]
+})
+df2['date'] = pd.to_datetime(df2['date'])
+print("\nParsed dates:")
+print(df2.dtypes)
+
+# Date components
+df2['year'] = df2['date'].dt.year
+df2['month'] = df2['date'].dt.month
+df2['day'] = df2['date'].dt.day
+df2['dayofweek'] = df2['date'].dt.dayofweek
+print("\nDate components:")
+print(df2)
+
+# Time-based indexing
+df_ts = df.copy()
+print("\nSelect specific date:")
+print(df_ts.loc['2023-01-05'])
+
+print("\nSelect date range:")
+print(df_ts.loc['2023-01-03':'2023-01-07'])
+
+# Shift data
+df_ts['shifted'] = df_ts['value'].shift(1)
+df_ts['diff'] = df_ts['value'].diff()
+print("\nWith shift and diff:")
+print(df_ts)</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="resample" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+import numpy as np
+
+# Create hourly data
+dates = pd.date_range('2023-01-01', periods=48, freq='H')
+df = pd.DataFrame({'value': np.random.randint(1, 100, 48)}, index=dates)
+
+print("Hourly data (first 10 rows):")
+print(df.head(10))
+
+# Resample to daily
+daily = df.resample('D').sum()
+print("\nDaily sum:")
+print(daily)
+
+# Multiple aggregations
+daily_agg = df.resample('D').agg(['mean', 'min', 'max', 'sum'])
+print("\nDaily aggregations:")
+print(daily_agg)
+
+# Resample to 6-hour periods
+six_hour = df.resample('6H').mean()
+print("\n6-hour mean:")
+print(six_hour)
+
+# Upsample (increase frequency)
+daily_data = pd.DataFrame({'value': [100, 200]}, 
+                          index=pd.date_range('2023-01-01', periods=2, freq='D'))
+hourly = daily_data.resample('H').ffill()  # Forward fill
+print("\nUpsampled to hourly (forward fill):")
+print(hourly.head(10))</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="rolling" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+import numpy as np
+
+dates = pd.date_range('2023-01-01', periods=10, freq='D')
+df = pd.DataFrame({'value': [10, 20, 15, 30, 25, 35, 40, 30, 45, 50]}, index=dates)
+
+print("Original data:")
+print(df)
+
+# Rolling mean (moving average)
+df['rolling_mean_3'] = df['value'].rolling(window=3).mean()
+print("\n3-day rolling mean:")
+print(df)
+
+# Rolling with min_periods
+df['rolling_mean_min'] = df['value'].rolling(window=3, min_periods=1).mean()
+print("\nRolling mean with min_periods=1:")
+print(df)
+
+# Multiple rolling statistics
+df['rolling_std'] = df['value'].rolling(window=3).std()
+df['rolling_min'] = df['value'].rolling(window=3).min()
+df['rolling_max'] = df['value'].rolling(window=3).max()
+print("\nMultiple rolling stats:")
+print(df[['value', 'rolling_mean_3', 'rolling_std', 'rolling_min', 'rolling_max']])
+
+# Expanding window (cumulative)
+df['expanding_mean'] = df['value'].expanding().mean()
+print("\nExpanding mean:")
+print(df[['value', 'expanding_mean']])
+
+# Exponential weighted moving average
+df['ewm'] = df['value'].ewm(span=3).mean()
+print("\nEWM (span=3):")
+print(df[['value', 'ewm']])</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showTimeSeries();
+        });
+        function showTimeSeries() {
+            viz.clear();
+            const values = [0.5, 0.8, 0.6, 1.0, 0.9, 1.2, 1.1, 1.4];
+            for (let i = 0; i < values.length; i++) {
+                viz.createDataNode({ type: 'sphere', size: 0.2, color: 0x4dabf7, position: { x: -3 + i * 0.8, y: values[i], z: 0 } });
+                if (i > 0) viz.createArrow({ x: -3 + (i-1) * 0.8, y: values[i-1], z: 0 }, { x: -3 + i * 0.8, y: values[i], z: 0 }, { color: 0x888888 });
+            }
+            viz.createLabel('Time Series Data', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showResampling() {
+            viz.clear();
+            // High frequency
+            for (let i = 0; i < 8; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.2, color: 0x4dabf7, position: { x: -3 + i * 0.5, y: 1, z: 0 } });
+            }
+            viz.createLabel('High Freq', { x: -1, y: 1.8, z: 0 });
+            // Low frequency (resampled)
+            for (let i = 0; i < 2; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.5, color: 0xe25a1c, position: { x: -1.5 + i * 2, y: -0.5, z: 0 } });
+            }
+            viz.createLabel('Resampled', { x: -0.5, y: -1.3, z: 0 });
+            viz.createArrow({ x: 0, y: 0.5, z: 0 }, { x: 0, y: -0.1, z: 0 }, { color: 0x888888 });
+            viz.createLabel('Resampling - Change frequency', { x: 0, y: -2.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showRolling() {
+            viz.clear();
+            const values = [0.5, 0.8, 0.6, 1.0, 0.9];
+            for (let i = 0; i < values.length; i++) {
+                const inWindow = i >= 2;
+                viz.createDataNode({ type: 'sphere', size: 0.25, color: inWindow ? 0xe25a1c : 0x4dabf7, position: { x: -2 + i * 1, y: values[i], z: 0 } });
+            }
+            // Window indicator
+            viz.createDataNode({ type: 'cube', size: 0.1, color: 0x198754, position: { x: 0, y: 0, z: 0 } });
+            viz.createDataNode({ type: 'cube', size: 0.1, color: 0x198754, position: { x: 1, y: 0, z: 0 } });
+            viz.createDataNode({ type: 'cube', size: 0.1, color: 0x198754, position: { x: 2, y: 0, z: 0 } });
+            viz.createLabel('Rolling Window (size=3)', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

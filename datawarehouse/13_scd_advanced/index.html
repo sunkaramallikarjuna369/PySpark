@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SCD Advanced Techniques - DW Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#datawarehouse" class="nav-link active">Data Warehouse</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>SCD Advanced Techniques</h1>
+            <p>Advanced SCD implementations using Delta Lake MERGE operations for efficient, scalable slowly changing dimension processing.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showMergeFlow()">MERGE Flow</button>
+                <button class="viz-btn" onclick="showSCD2Process()">SCD2 Process</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="delta">Delta Lake SCD2</button>
+                <button class="tab" data-tab="hybrid">Hybrid SCD</button>
+                <button class="tab" data-tab="optimization">Optimization</button>
+            </div>
+            <div class="tab-contents">
+                <div id="delta" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from delta.tables import DeltaTable
+from pyspark.sql.functions import col, lit, current_timestamp, when
+
+def scd_type2_delta(spark, source_df, target_path, key_columns, tracked_columns):
+    """
+    Implement SCD Type 2 using Delta Lake MERGE.
+    Handles inserts, updates, and maintains history.
+    """
+    
+    # Check if target exists
+    if not DeltaTable.isDeltaTable(spark, target_path):
+        # First load - add SCD columns and write
+        initial_df = source_df \
+            .withColumn("effective_date", current_timestamp()) \
+            .withColumn("expiration_date", lit("9999-12-31").cast("timestamp")) \
+            .withColumn("is_current", lit(True)) \
+            .withColumn("version", lit(1))
+        initial_df.write.format("delta").save(target_path)
+        return
+    
+    target = DeltaTable.forPath(spark, target_path)
+    
+    # Build merge condition on natural keys
+    merge_condition = " AND ".join([
+        f"target.{c} = source.{c}" for c in key_columns
+    ])
+    merge_condition += " AND target.is_current = true"
+    
+    # Build change detection condition
+    change_condition = " OR ".join([
+        f"target.{c} != source.{c}" for c in tracked_columns
+    ])
+    
+    # Prepare source with SCD columns
+    staged_updates = source_df \
+        .withColumn("merge_key", col(key_columns[0])) \
+        .withColumn("effective_date", current_timestamp()) \
+        .withColumn("expiration_date", lit("9999-12-31").cast("timestamp")) \
+        .withColumn("is_current", lit(True))
+    
+    # MERGE operation
+    target.alias("target").merge(
+        staged_updates.alias("source"),
+        merge_condition
+    ).whenMatchedUpdate(
+        condition=change_condition,
+        set={
+            "is_current": lit(False),
+            "expiration_date": current_timestamp()
+        }
+    ).whenNotMatchedInsert(
+        values={
+            **{c: col(f"source.{c}") for c in source_df.columns},
+            "effective_date": col("source.effective_date"),
+            "expiration_date": col("source.expiration_date"),
+            "is_current": lit(True)
+        }
+    ).execute()
+    
+    # Insert new versions for changed records
+    # (Requires second pass or using temporary staging)</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="hybrid" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+SCD Type 6 (Hybrid): Combines Type 1, 2, and 3
+- Current value always available (Type 1)
+- Full history preserved (Type 2)
+- Previous value accessible (Type 3)
+"""
+
+from pyspark.sql.functions import col, lit, current_timestamp, lag
+from pyspark.sql.window import Window
+
+def scd_type6_implementation(spark, source_df, target_path, key_columns, tracked_columns):
+    """
+    SCD Type 6 implementation.
+    Schema includes: current_value, historical_value, previous_value
+    """
+    
+    target = DeltaTable.forPath(spark, target_path)
+    
+    # For each tracked column, maintain:
+    # - {column}_current: Always latest value (Type 1)
+    # - {column}: Historical value at that point (Type 2)
+    # - {column}_previous: Previous value (Type 3)
+    
+    merge_condition = " AND ".join([
+        f"target.{c} = source.{c}" for c in key_columns
+    ])
+    
+    # Update all current records with new current values
+    # This is the Type 1 aspect - current values always updated
+    for col_name in tracked_columns:
+        target.update(
+            condition=f"is_current = true",
+            set={f"{col_name}_current": col(f"source.{col_name}")}
+        )
+    
+    # Type 2 aspect handled by creating new version rows
+    # Type 3 aspect: previous value captured when creating new version
+
+# Mini-Dimension Pattern for Rapidly Changing Attributes
+def create_mini_dimension(spark, main_dim_df, volatile_columns, stable_columns):
+    """
+    Split dimension into stable main dimension and volatile mini-dimension.
+    Reduces SCD overhead for frequently changing attributes.
+    """
+    
+    # Main dimension (stable attributes, SCD Type 2)
+    main_dim = main_dim_df.select(
+        "surrogate_key",
+        "natural_key",
+        *stable_columns,
+        "effective_date",
+        "expiration_date",
+        "is_current"
+    )
+    
+    # Mini-dimension (volatile attributes, no history)
+    mini_dim = main_dim_df.select(
+        "natural_key",
+        *volatile_columns
+    ).distinct()
+    
+    # Add mini-dimension key
+    mini_dim = mini_dim.withColumn("mini_key", monotonically_increasing_id())
+    
+    return main_dim, mini_dim</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="optimization" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+SCD Performance Optimization Techniques
+"""
+
+from pyspark.sql.functions import col, hash, abs as spark_abs
+
+# 1. HASH-BASED CHANGE DETECTION
+def detect_changes_with_hash(source_df, target_df, key_columns, tracked_columns):
+    """
+    Use hash for efficient change detection instead of comparing all columns.
+    """
+    # Create hash of tracked columns
+    source_with_hash = source_df.withColumn(
+        "row_hash",
+        spark_abs(hash(*[col(c) for c in tracked_columns]))
+    )
+    
+    target_with_hash = target_df.filter("is_current = true").withColumn(
+        "row_hash",
+        spark_abs(hash(*[col(c) for c in tracked_columns]))
+    )
+    
+    # Join and compare hashes (much faster than comparing all columns)
+    changes = source_with_hash.alias("s").join(
+        target_with_hash.alias("t"),
+        on=key_columns,
+        how="left"
+    ).filter(
+        (col("t.row_hash").isNull()) |  # New records
+        (col("s.row_hash") != col("t.row_hash"))  # Changed records
+    )
+    
+    return changes
+
+# 2. PARTITION PRUNING
+# Partition dimension by effective_date for faster queries
+# df.write.partitionBy("effective_year").format("delta").save(path)
+
+# 3. Z-ORDERING for Delta Lake
+# Optimize for common query patterns
+# OPTIMIZE delta.`/path/to/dim` ZORDER BY (natural_key, is_current)
+
+# 4. INCREMENTAL PROCESSING
+def process_incremental_scd(spark, source_path, target_path, watermark_path):
+    """
+    Process only new/changed records since last run.
+    """
+    # Read watermark (last processed timestamp)
+    last_watermark = spark.read.text(watermark_path).first()[0]
+    
+    # Read only new source records
+    new_records = spark.read.parquet(source_path) \
+        .filter(col("modified_date") > last_watermark)
+    
+    # Process SCD for new records only
+    # ... SCD logic ...
+    
+    # Update watermark
+    new_watermark = new_records.agg({"modified_date": "max"}).collect()[0][0]
+    spark.createDataFrame([(new_watermark,)], ["watermark"]) \
+        .write.mode("overwrite").text(watermark_path)</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showMergeFlow();
+        });
+        function showMergeFlow() {
+            viz.clear();
+            // Source
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x4dabf7, position: { x: -2, y: 0.5, z: 0 } });
+            viz.createLabel('Source', { x: -2, y: 1.3, z: 0 });
+            // MERGE
+            viz.createDataNode({ type: 'sphere', size: 0.4, color: 0xe25a1c, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('MERGE', { x: 0, y: 1.2, z: 0 });
+            // Target
+            viz.createDataNode({ type: 'cylinder', size: 0.5, color: 0x198754, position: { x: 2, y: 0.5, z: 0 } });
+            viz.createLabel('Target', { x: 2, y: 1.3, z: 0 });
+            // Arrows
+            viz.createArrow({ x: -1.3, y: 0.5, z: 0 }, { x: -0.5, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.5, y: 0.5, z: 0 }, { x: 1.3, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createLabel('Delta Lake MERGE for SCD', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showSCD2Process() {
+            viz.clear();
+            const steps = ['Detect Changes', 'Expire Old', 'Insert New', 'Verify'];
+            steps.forEach((s, i) => {
+                viz.createDataNode({ type: 'cube', size: 0.4, color: [0x4dabf7, 0xe25a1c, 0x198754, 0x8b5cf6][i], position: { x: -1.5 + i, y: 0.5, z: 0 } });
+                viz.createLabel(s, { x: -1.5 + i, y: 1.2, z: 0 });
+                if (i < 3) viz.createArrow({ x: -1.1 + i, y: 0.5, z: 0 }, { x: -0.9 + i, y: 0.5, z: 0 }, { color: 0x888888 });
+            });
+            viz.createLabel('SCD Type 2 Processing Steps', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

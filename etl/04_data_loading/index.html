@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Loading - ETL Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#etl" class="nav-link active">ETL</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Data Loading</h1>
+            <p>Data loading is the final step in ETL, writing transformed data to target systems. Different write modes and strategies handle various loading scenarios.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showWriteModes()">Write Modes</button>
+                <button class="viz-btn" onclick="showPartitioning()">Partitioning</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="modes">Write Modes</button>
+                <button class="tab" data-tab="formats">Output Formats</button>
+                <button class="tab" data-tab="optimize">Optimization</button>
+            </div>
+            <div class="tab-contents">
+                <div id="modes" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("DataLoading").getOrCreate()
+
+# Write modes:
+# - overwrite: Replace existing data
+# - append: Add to existing data
+# - ignore: Skip if exists
+# - error/errorifexists: Fail if exists (default)
+
+# Overwrite mode
+df.write.mode("overwrite").parquet("output/data/")
+
+# Append mode
+df.write.mode("append").parquet("output/data/")
+
+# Ignore mode (no error if exists)
+df.write.mode("ignore").parquet("output/data/")
+
+# Error mode (default)
+df.write.mode("error").parquet("output/data/")
+
+# Write to database
+df.write \
+    .format("jdbc") \
+    .option("url", "jdbc:postgresql://host:5432/db") \
+    .option("dbtable", "schema.table") \
+    .option("user", "username") \
+    .option("password", "password") \
+    .mode("append") \
+    .save()
+
+# Truncate and load (for JDBC)
+df.write \
+    .format("jdbc") \
+    .option("truncate", "true") \
+    .mode("overwrite") \
+    .save()</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="formats" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre># Parquet (columnar, compressed)
+df.write.parquet("output/parquet/")
+
+# Delta Lake (ACID transactions)
+df.write.format("delta").save("output/delta/")
+
+# CSV
+df.write.csv("output/csv/", header=True)
+
+# JSON
+df.write.json("output/json/")
+
+# ORC (columnar, Hive optimized)
+df.write.orc("output/orc/")
+
+# Avro (row-based, schema evolution)
+df.write.format("avro").save("output/avro/")
+
+# Partitioned output
+df.write \
+    .partitionBy("year", "month") \
+    .parquet("output/partitioned/")
+
+# Bucketed output (for join optimization)
+df.write \
+    .bucketBy(10, "customer_id") \
+    .sortBy("order_date") \
+    .saveAsTable("bucketed_orders")
+
+# Compression options
+df.write \
+    .option("compression", "snappy") \
+    .parquet("output/compressed/")
+
+# Single file output
+df.coalesce(1).write.csv("output/single_file/")</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="optimize" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre># Control number of output files
+df.repartition(10).write.parquet("output/")  # 10 files
+df.coalesce(1).write.parquet("output/")      # 1 file (use carefully)
+
+# Repartition by column (for partitioned writes)
+df.repartition("date").write.partitionBy("date").parquet("output/")
+
+# Optimize file sizes (target ~128MB-1GB per file)
+spark.conf.set("spark.sql.files.maxRecordsPerFile", 1000000)
+
+# Delta Lake optimizations
+df.write.format("delta") \
+    .option("optimizeWrite", "true") \
+    .option("autoCompact", "true") \
+    .save("output/delta/")
+
+# Z-ordering for Delta Lake
+from delta.tables import DeltaTable
+deltaTable = DeltaTable.forPath(spark, "output/delta/")
+deltaTable.optimize().executeZOrderBy("customer_id")
+
+# Vacuum old files (Delta Lake)
+deltaTable.vacuum(168)  # Hours to retain
+
+# Batch writing for large datasets
+batch_size = 1000000
+total_rows = df.count()
+for i in range(0, total_rows, batch_size):
+    batch_df = df.limit(batch_size).offset(i)
+    batch_df.write.mode("append").parquet("output/")</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showWriteModes();
+        });
+        function showWriteModes() {
+            viz.clear();
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0x4dabf7, position: { x: -1.5, y: 0.5, z: 0 } });
+            viz.createLabel('Data', { x: -1.5, y: 1.3, z: 0 });
+            viz.createArrow({ x: -0.8, y: 0.5, z: 0 }, { x: 0.8, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createDataNode({ type: 'cylinder', size: 0.6, color: 0x198754, position: { x: 1.5, y: 0.5, z: 0 } });
+            viz.createLabel('Target', { x: 1.5, y: 1.3, z: 0 });
+            viz.createLabel('Write Modes: overwrite, append, ignore', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showPartitioning() {
+            viz.clear();
+            viz.createDataNode({ type: 'cube', size: 0.8, color: 0x4dabf7, position: { x: -1.5, y: 0.5, z: 0 } });
+            viz.createLabel('Data', { x: -1.5, y: 1.5, z: 0 });
+            for (let i = 0; i < 3; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.4, color: [0xe25a1c, 0x198754, 0x8b5cf6][i], position: { x: 1.5, y: 1 - i * 0.7, z: 0 } });
+            }
+            viz.createLabel('Partitions', { x: 1.5, y: 1.8, z: 0 });
+            viz.createArrow({ x: -0.8, y: 0.5, z: 0 }, { x: 0.8, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createLabel('Partitioned Write', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

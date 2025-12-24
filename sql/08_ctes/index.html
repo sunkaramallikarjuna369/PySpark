@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CTEs (Common Table Expressions) - SQL Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#sql" class="nav-link active">SQL</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>CTEs (Common Table Expressions)</h1>
+            <p>CTEs provide a way to write auxiliary statements for use in a larger query. They improve readability and can be referenced multiple times.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showCTE()">Basic CTE</button>
+                <button class="viz-btn" onclick="showRecursive()">Recursive</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="basic">Basic CTE</button>
+                <button class="tab" data-tab="multiple">Multiple CTEs</button>
+                <button class="tab" data-tab="recursive">Recursive CTE</button>
+            </div>
+            <div class="tab-contents">
+                <div id="basic" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- Basic CTE
+WITH dept_stats AS (
+    SELECT 
+        department_id,
+        COUNT(*) AS emp_count,
+        AVG(salary) AS avg_salary
+    FROM employees
+    GROUP BY department_id
+)
+SELECT * FROM dept_stats WHERE avg_salary > 50000;
+
+-- CTE with join
+WITH high_earners AS (
+    SELECT * FROM employees WHERE salary > 60000
+)
+SELECT h.first_name, d.department_name
+FROM high_earners h
+JOIN departments d ON h.department_id = d.department_id;
+
+-- CTE referenced multiple times
+WITH dept_avg AS (
+    SELECT department_id, AVG(salary) AS avg_sal
+    FROM employees GROUP BY department_id
+)
+SELECT 
+    e.first_name,
+    e.salary,
+    d.avg_sal,
+    e.salary - d.avg_sal AS diff_from_avg
+FROM employees e
+JOIN dept_avg d ON e.department_id = d.department_id;</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="multiple" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- Multiple CTEs
+WITH 
+dept_stats AS (
+    SELECT department_id, AVG(salary) AS avg_salary
+    FROM employees GROUP BY department_id
+),
+high_paying_depts AS (
+    SELECT department_id FROM dept_stats WHERE avg_salary > 60000
+),
+employees_in_high_paying AS (
+    SELECT e.* FROM employees e
+    WHERE e.department_id IN (SELECT department_id FROM high_paying_depts)
+)
+SELECT * FROM employees_in_high_paying;
+
+-- CTEs referencing each other
+WITH 
+base_data AS (
+    SELECT department_id, salary FROM employees
+),
+dept_totals AS (
+    SELECT department_id, SUM(salary) AS total
+    FROM base_data GROUP BY department_id
+),
+ranked_depts AS (
+    SELECT *, RANK() OVER (ORDER BY total DESC) AS rank
+    FROM dept_totals
+)
+SELECT * FROM ranked_depts WHERE rank <= 3;
+
+-- CTE with INSERT (some databases)
+WITH new_employees AS (
+    SELECT 'John' AS name, 50000 AS salary
+)
+INSERT INTO employees (name, salary)
+SELECT name, salary FROM new_employees;</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="recursive" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- Recursive CTE for hierarchical data
+WITH RECURSIVE org_hierarchy AS (
+    -- Base case: top-level managers
+    SELECT employee_id, first_name, manager_id, 1 AS level
+    FROM employees
+    WHERE manager_id IS NULL
+    
+    UNION ALL
+    
+    -- Recursive case: employees with managers
+    SELECT e.employee_id, e.first_name, e.manager_id, h.level + 1
+    FROM employees e
+    JOIN org_hierarchy h ON e.manager_id = h.employee_id
+)
+SELECT * FROM org_hierarchy ORDER BY level, employee_id;
+
+-- Recursive CTE for number series
+WITH RECURSIVE numbers AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + 1 FROM numbers WHERE n < 10
+)
+SELECT * FROM numbers;
+
+-- Recursive CTE for path finding
+WITH RECURSIVE paths AS (
+    SELECT source, destination, distance, 
+           ARRAY[source] AS path
+    FROM routes WHERE source = 'A'
+    
+    UNION ALL
+    
+    SELECT r.source, r.destination, p.distance + r.distance,
+           p.path || r.destination
+    FROM routes r
+    JOIN paths p ON r.source = p.destination
+    WHERE NOT r.destination = ANY(p.path)
+)
+SELECT * FROM paths WHERE destination = 'Z';</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showCTE();
+        });
+        function showCTE() {
+            viz.clear();
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0x4dabf7, position: { x: 0, y: 1.2, z: 0 } });
+            viz.createLabel('CTE', { x: 0, y: 1.9, z: 0 });
+            viz.createArrow({ x: 0, y: 0.7, z: 0 }, { x: 0, y: 0.1, z: 0 }, { color: 0x888888 });
+            viz.createDataNode({ type: 'cube', size: 0.8, color: 0xe25a1c, position: { x: 0, y: -0.5, z: 0 } });
+            viz.createLabel('Main Query', { x: 0, y: -1.3, z: 0 });
+            viz.createLabel('CTE - Named temporary result', { x: 0, y: -2.3, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showRecursive() {
+            viz.clear();
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({ type: 'sphere', size: 0.3, color: 0x4dabf7, position: { x: 0, y: 1.5 - i * 0.8, z: 0 } });
+                if (i > 0) viz.createArrow({ x: 0, y: 1.5 - (i-1) * 0.8 - 0.3, z: 0 }, { x: 0, y: 1.5 - i * 0.8 + 0.3, z: 0 }, { color: 0x888888 });
+            }
+            viz.createLabel('Recursive CTE - Self-referencing', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

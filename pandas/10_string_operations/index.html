@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>String Operations - Pandas Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pandas" class="nav-link active">Pandas</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>String Operations</h1>
+            <p>Pandas provides vectorized string operations through the .str accessor, enabling efficient text manipulation on entire columns.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showStringOps()">String Methods</button>
+                <button class="viz-btn" onclick="showRegex()">Regex</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="basic">Basic Operations</button>
+                <button class="tab" data-tab="extract">Extract & Split</button>
+                <button class="tab" data-tab="regex">Regex</button>
+            </div>
+            <div class="tab-contents">
+                <div id="basic" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+df = pd.DataFrame({
+    'name': ['Alice Smith', 'Bob Johnson', 'Charlie Brown'],
+    'email': ['alice@gmail.com', 'BOB@YAHOO.COM', 'charlie@outlook.com']
+})
+
+# Case operations
+print("Lowercase:")
+print(df['email'].str.lower())
+
+print("\nUppercase:")
+print(df['name'].str.upper())
+
+print("\nTitle case:")
+print(df['name'].str.title())
+
+# Length
+print("\nString length:")
+print(df['name'].str.len())
+
+# Strip whitespace
+df2 = pd.DataFrame({'text': ['  hello  ', 'world  ', '  python']})
+print("\nStripped:")
+print(df2['text'].str.strip())
+
+# Replace
+print("\nReplace:")
+print(df['email'].str.replace('.com', '.org'))
+
+# Contains
+print("\nContains 'gmail':")
+print(df['email'].str.contains('gmail'))
+
+# Starts/Ends with
+print("\nStarts with 'A':")
+print(df['name'].str.startswith('A'))</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="extract" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+df = pd.DataFrame({
+    'name': ['Alice Smith', 'Bob Johnson', 'Charlie Brown'],
+    'email': ['alice@gmail.com', 'bob@yahoo.com', 'charlie@outlook.com']
+})
+
+# Split
+print("Split name:")
+print(df['name'].str.split())
+
+# Split and expand to columns
+print("\nSplit to columns:")
+print(df['name'].str.split(expand=True))
+
+# Get specific part after split
+print("\nFirst name:")
+print(df['name'].str.split().str[0])
+
+print("\nLast name:")
+print(df['name'].str.split().str[-1])
+
+# Extract with regex
+print("\nExtract email domain:")
+print(df['email'].str.extract(r'@(\w+)\.'))
+
+# Extract all matches
+df3 = pd.DataFrame({'text': ['abc123def456', 'xyz789']})
+print("\nExtract all numbers:")
+print(df3['text'].str.extractall(r'(\d+)'))
+
+# Slice strings
+print("\nFirst 5 characters:")
+print(df['name'].str[:5])
+
+# Get character at position
+print("\nCharacter at position 0:")
+print(df['name'].str.get(0))</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="regex" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+df = pd.DataFrame({
+    'text': ['Phone: 123-456-7890', 'Call: 987-654-3210', 'No phone'],
+    'email': ['user@domain.com', 'invalid-email', 'test@test.org']
+})
+
+# Match pattern
+print("Contains phone pattern:")
+print(df['text'].str.contains(r'\d{3}-\d{3}-\d{4}'))
+
+# Extract with groups
+print("\nExtract phone parts:")
+print(df['text'].str.extract(r'(\d{3})-(\d{3})-(\d{4})'))
+
+# Replace with regex
+print("\nMask phone numbers:")
+print(df['text'].str.replace(r'\d{3}-\d{3}-\d{4}', 'XXX-XXX-XXXX', regex=True))
+
+# Validate email format
+email_pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
+print("\nValid email format:")
+print(df['email'].str.match(email_pattern))
+
+# Count pattern occurrences
+df2 = pd.DataFrame({'text': ['aaa bbb aaa', 'ccc aaa', 'bbb']})
+print("\nCount 'aaa' occurrences:")
+print(df2['text'].str.count('aaa'))
+
+# Find pattern position
+print("\nFind '@' position:")
+print(df['email'].str.find('@'))</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showStringOps();
+        });
+        function showStringOps() {
+            viz.clear();
+            viz.createLabel('str.lower()', { x: -2, y: 1.5, z: 0 });
+            viz.createLabel('str.upper()', { x: -2, y: 0.8, z: 0 });
+            viz.createLabel('str.split()', { x: -2, y: 0.1, z: 0 });
+            viz.createLabel('str.replace()', { x: -2, y: -0.6, z: 0 });
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.3, color: 0x4dabf7, position: { x: 0, y: 1.5 - i * 0.7, z: 0 } });
+                viz.createArrow({ x: -1.2, y: 1.5 - i * 0.7, z: 0 }, { x: -0.3, y: 1.5 - i * 0.7, z: 0 }, { color: 0x888888 });
+            }
+            viz.createLabel('Vectorized String Operations', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showRegex() {
+            viz.clear();
+            viz.createDataNode({ type: 'sphere', size: 0.5, color: 0xe25a1c, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('Pattern', { x: 0, y: 1.3, z: 0 });
+            for (let i = 0; i < 3; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.3, color: i === 1 ? 0x198754 : 0x4dabf7, position: { x: -1.5 + i * 1.5, y: -0.8, z: 0 } });
+            }
+            viz.createLabel('Regex Pattern Matching', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

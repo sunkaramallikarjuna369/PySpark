@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spark SQL - PySpark Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </a>
+            <nav class="nav">
+                <a href="../../index.html#pyspark" class="nav-link active">PySpark</a>
+                <a href="../../index.html#pandas" class="nav-link">Pandas</a>
+                <a href="../../index.html#sql" class="nav-link">SQL</a>
+                <a href="../../index.html#etl" class="nav-link">ETL</a>
+                <a href="../../index.html#datawarehouse" class="nav-link">Data Warehouse</a>
+                <button class="theme-toggle">🌙</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <nav class="breadcrumb">
+            <span class="breadcrumb-item"><a href="../../index.html">Home</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item"><a href="../../index.html#pyspark">PySpark</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item">Spark SQL</span>
+        </nav>
+
+        <section class="section">
+            <h1>Spark SQL</h1>
+            <p>Spark SQL provides a programming interface for working with structured data using SQL queries. It seamlessly integrates with the DataFrame API and supports reading from various data sources.</p>
+
+            <div class="info-box info">
+                <strong>Key Concept:</strong> Spark SQL uses the Catalyst optimizer to optimize query execution plans, providing the same performance whether you use SQL or DataFrame API.
+            </div>
+
+            <h2>3D Visualization: Query Execution</h2>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showQueryFlow()">Query Flow</button>
+                <button class="viz-btn" onclick="showCatalyst()">Catalyst Optimizer</button>
+                <button class="viz-btn" onclick="showTempViews()">Temp Views</button>
+            </div>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="basic">Basic SQL</button>
+                <button class="tab" data-tab="advanced">Advanced Queries</button>
+                <button class="tab" data-tab="catalog">Catalog & Tables</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="basic" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("Spark SQL").getOrCreate()
+
+# Create sample data
+data = [
+    (1, "Alice", "Engineering", 75000, "2020-01-15"),
+    (2, "Bob", "Marketing", 60000, "2019-03-20"),
+    (3, "Charlie", "Engineering", 80000, "2018-07-10"),
+    (4, "Diana", "Sales", 55000, "2021-02-28"),
+    (5, "Eve", "Engineering", 90000, "2017-11-05")
+]
+df = spark.createDataFrame(data, ["id", "name", "department", "salary", "hire_date"])
+
+# Register as temporary view
+df.createOrReplaceTempView("employees")
+
+# Basic SELECT
+print("Basic SELECT:")
+spark.sql("SELECT * FROM employees").show()
+
+# SELECT with WHERE
+print("SELECT with WHERE:")
+spark.sql("""
+    SELECT name, department, salary 
+    FROM employees 
+    WHERE salary > 60000
+""").show()
+
+# SELECT with ORDER BY
+print("SELECT with ORDER BY:")
+spark.sql("""
+    SELECT name, salary 
+    FROM employees 
+    ORDER BY salary DESC
+""").show()
+
+# Aggregations
+print("GROUP BY with aggregations:")
+spark.sql("""
+    SELECT department, 
+           COUNT(*) as emp_count,
+           AVG(salary) as avg_salary,
+           MAX(salary) as max_salary
+    FROM employees 
+    GROUP BY department
+""").show()
+
+# HAVING clause
+print("GROUP BY with HAVING:")
+spark.sql("""
+    SELECT department, AVG(salary) as avg_salary
+    FROM employees 
+    GROUP BY department
+    HAVING AVG(salary) > 65000
+""").show()
+
+# CASE statement
+print("CASE statement:")
+spark.sql("""
+    SELECT name, salary,
+           CASE 
+               WHEN salary >= 80000 THEN 'Senior'
+               WHEN salary >= 60000 THEN 'Mid'
+               ELSE 'Junior'
+           END as level
+    FROM employees
+""").show()
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="advanced" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("Advanced SQL").getOrCreate()
+
+# Create sample tables
+employees = spark.createDataFrame([
+    (1, "Alice", 101, 75000),
+    (2, "Bob", 102, 60000),
+    (3, "Charlie", 101, 80000),
+    (4, "Diana", 103, 55000)
+], ["id", "name", "dept_id", "salary"])
+
+departments = spark.createDataFrame([
+    (101, "Engineering", "Building A"),
+    (102, "Marketing", "Building B"),
+    (103, "Sales", "Building C")
+], ["dept_id", "dept_name", "location"])
+
+employees.createOrReplaceTempView("employees")
+departments.createOrReplaceTempView("departments")
+
+# JOIN operations
+print("INNER JOIN:")
+spark.sql("""
+    SELECT e.name, d.dept_name, e.salary
+    FROM employees e
+    INNER JOIN departments d ON e.dept_id = d.dept_id
+""").show()
+
+# Subquery
+print("Subquery:")
+spark.sql("""
+    SELECT name, salary
+    FROM employees
+    WHERE salary > (SELECT AVG(salary) FROM employees)
+""").show()
+
+# CTE (Common Table Expression)
+print("CTE:")
+spark.sql("""
+    WITH dept_stats AS (
+        SELECT dept_id, AVG(salary) as avg_salary
+        FROM employees
+        GROUP BY dept_id
+    )
+    SELECT e.name, e.salary, ds.avg_salary
+    FROM employees e
+    JOIN dept_stats ds ON e.dept_id = ds.dept_id
+""").show()
+
+# Window functions in SQL
+print("Window Functions:")
+spark.sql("""
+    SELECT name, department, salary,
+           ROW_NUMBER() OVER (PARTITION BY dept_id ORDER BY salary DESC) as rank,
+           SUM(salary) OVER (PARTITION BY dept_id) as dept_total
+    FROM employees
+""").show()
+
+# UNION
+print("UNION:")
+spark.sql("""
+    SELECT name, 'High' as category FROM employees WHERE salary >= 70000
+    UNION ALL
+    SELECT name, 'Low' as category FROM employees WHERE salary < 70000
+""").show()
+
+# EXISTS
+print("EXISTS:")
+spark.sql("""
+    SELECT d.dept_name
+    FROM departments d
+    WHERE EXISTS (
+        SELECT 1 FROM employees e 
+        WHERE e.dept_id = d.dept_id AND e.salary > 70000
+    )
+""").show()
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="catalog" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("Catalog Operations") \
+    .config("spark.sql.warehouse.dir", "/tmp/spark-warehouse") \
+    .enableHiveSupport() \
+    .getOrCreate()
+
+# Create sample data
+df = spark.createDataFrame([
+    (1, "Alice", 75000),
+    (2, "Bob", 60000)
+], ["id", "name", "salary"])
+
+# Create temporary view
+df.createOrReplaceTempView("temp_employees")
+
+# Create global temporary view (accessible across sessions)
+df.createOrReplaceGlobalTempView("global_employees")
+
+# Access global temp view
+spark.sql("SELECT * FROM global_temp.global_employees").show()
+
+# List databases
+print("Databases:")
+spark.sql("SHOW DATABASES").show()
+
+# List tables
+print("Tables:")
+spark.sql("SHOW TABLES").show()
+
+# Describe table
+print("Describe table:")
+spark.sql("DESCRIBE temp_employees").show()
+
+# Create managed table
+spark.sql("""
+    CREATE TABLE IF NOT EXISTS managed_employees (
+        id INT,
+        name STRING,
+        salary DOUBLE
+    ) USING PARQUET
+""")
+
+# Insert data
+df.write.mode("overwrite").saveAsTable("managed_employees")
+
+# Create external table
+spark.sql("""
+    CREATE EXTERNAL TABLE IF NOT EXISTS external_employees (
+        id INT,
+        name STRING,
+        salary DOUBLE
+    ) USING PARQUET
+    LOCATION '/tmp/external_employees'
+""")
+
+# Catalog API
+print("Using Catalog API:")
+print(f"Current database: {spark.catalog.currentDatabase()}")
+print(f"Tables: {spark.catalog.listTables()}")
+
+# Cache table
+spark.sql("CACHE TABLE temp_employees")
+print("Table cached")
+
+# Uncache
+spark.sql("UNCACHE TABLE temp_employees")
+
+# Drop table
+spark.sql("DROP TABLE IF EXISTS managed_employees")
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../08_udfs/index.html" style="color: var(--text-muted);">← Previous: UDFs</a>
+                <a href="../10_partitioning_bucketing/index.html" style="color: var(--accent-primary);">Next: Partitioning & Bucketing →</a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+        </div>
+    </footer>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', {
+                backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 0x1a1a2e : 0xf8f9fa,
+                cameraPosition: { x: 5, y: 3, z: 5 }
+            });
+            showQueryFlow();
+        });
+
+        function showQueryFlow() {
+            viz.clear();
+            
+            // SQL Query
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0x4dabf7, position: { x: -3, y: 1, z: 0 } });
+            viz.createLabel('SQL Query', { x: -3, y: 2, z: 0 });
+
+            // Parser
+            viz.createDataNode({ type: 'sphere', size: 0.5, color: 0xe25a1c, position: { x: -1, y: 1, z: 0 } });
+            viz.createLabel('Parser', { x: -1, y: 2, z: 0 });
+
+            // Optimizer
+            viz.createDataNode({ type: 'sphere', size: 0.5, color: 0x198754, position: { x: 1, y: 1, z: 0 } });
+            viz.createLabel('Optimizer', { x: 1, y: 2, z: 0 });
+
+            // Execution
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0x8b5cf6, position: { x: 3, y: 1, z: 0 } });
+            viz.createLabel('Execution', { x: 3, y: 2, z: 0 });
+
+            viz.createArrow({ x: -2.5, y: 1, z: 0 }, { x: -1.5, y: 1, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: -0.5, y: 1, z: 0 }, { x: 0.5, y: 1, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 1.5, y: 1, z: 0 }, { x: 2.5, y: 1, z: 0 }, { color: 0x888888 });
+
+            viz.createLabel('SQL Query Execution Flow', { x: 0, y: -1, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showCatalyst() {
+            viz.clear();
+            
+            // Unresolved Plan
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0xe25a1c, position: { x: -2, y: 2, z: 0 } });
+            viz.createLabel('Unresolved', { x: -2, y: 2.8, z: 0 });
+
+            // Analyzed Plan
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x4dabf7, position: { x: 0, y: 2, z: 0 } });
+            viz.createLabel('Analyzed', { x: 0, y: 2.8, z: 0 });
+
+            // Optimized Plan
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x198754, position: { x: 2, y: 2, z: 0 } });
+            viz.createLabel('Optimized', { x: 2, y: 2.8, z: 0 });
+
+            // Physical Plan
+            viz.createDataNode({ type: 'sphere', size: 0.6, color: 0x8b5cf6, position: { x: 0, y: 0, z: 0 } });
+            viz.createLabel('Physical Plan', { x: 0, y: -0.8, z: 0 });
+
+            viz.createArrow({ x: -1.5, y: 2, z: 0 }, { x: -0.5, y: 2, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.5, y: 2, z: 0 }, { x: 1.5, y: 2, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0, y: 1.5, z: 0 }, { x: 0, y: 0.5, z: 0 }, { color: 0x888888 });
+
+            viz.createLabel('Catalyst Optimizer Pipeline', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showTempViews() {
+            viz.clear();
+            
+            // DataFrame
+            viz.createDataNode({ type: 'cube', size: 0.7, color: 0xe25a1c, position: { x: -2.5, y: 1, z: 0 } });
+            viz.createLabel('DataFrame', { x: -2.5, y: 2, z: 0 });
+
+            // Temp View
+            viz.createDataNode({ type: 'cylinder', size: 0.5, color: 0x4dabf7, position: { x: 0, y: 1.5, z: 0 } });
+            viz.createLabel('Temp View', { x: 0, y: 2.3, z: 0 });
+
+            // Global Temp View
+            viz.createDataNode({ type: 'cylinder', size: 0.5, color: 0x198754, position: { x: 0, y: 0, z: 0 } });
+            viz.createLabel('Global Temp', { x: 0, y: -0.8, z: 0 });
+
+            // SQL Query
+            viz.createDataNode({ type: 'sphere', size: 0.5, color: 0x8b5cf6, position: { x: 2.5, y: 0.75, z: 0 } });
+            viz.createLabel('SQL Query', { x: 2.5, y: 1.5, z: 0 });
+
+            viz.createArrow({ x: -1.8, y: 1.2, z: 0 }, { x: -0.5, y: 1.5, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: -1.8, y: 0.8, z: 0 }, { x: -0.5, y: 0, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.5, y: 1, z: 0 }, { x: 2, y: 0.75, z: 0 }, { color: 0x888888 });
+
+            viz.createLabel('Temporary Views for SQL Access', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

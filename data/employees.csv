@@ -1,0 +1,16 @@
+employee_id,first_name,last_name,email,department,job_title,hire_date,salary,manager_id
+E001,John,CEO,john.ceo@company.com,Executive,Chief Executive Officer,2015-01-01,250000.00,
+E002,Sarah,CFO,sarah.cfo@company.com,Finance,Chief Financial Officer,2016-03-15,200000.00,E001
+E003,Mike,CTO,mike.cto@company.com,Technology,Chief Technology Officer,2016-06-01,200000.00,E001
+E004,Emily,VP Sales,emily.vpsales@company.com,Sales,VP of Sales,2017-02-20,150000.00,E001
+E005,David,Manager,david.manager@company.com,Technology,Engineering Manager,2018-04-10,120000.00,E003
+E006,Lisa,Manager,lisa.manager@company.com,Sales,Sales Manager,2018-07-15,100000.00,E004
+E007,James,Engineer,james.engineer@company.com,Technology,Senior Software Engineer,2019-01-05,95000.00,E005
+E008,Anna,Engineer,anna.engineer@company.com,Technology,Software Engineer,2020-03-20,80000.00,E005
+E009,Robert,Analyst,robert.analyst@company.com,Finance,Financial Analyst,2020-06-10,70000.00,E002
+E010,Jennifer,Sales,jennifer.sales@company.com,Sales,Sales Representative,2021-01-15,60000.00,E006
+E011,William,Engineer,william.engineer@company.com,Technology,Junior Software Engineer,2021-09-01,65000.00,E005
+E012,Maria,Sales,maria.sales@company.com,Sales,Sales Representative,2022-02-14,55000.00,E006
+E013,Thomas,Analyst,thomas.analyst@company.com,Finance,Junior Analyst,2022-08-20,50000.00,E002
+E014,Patricia,Support,patricia.support@company.com,Support,Customer Support Lead,2019-11-01,65000.00,E001
+E015,Christopher,Support,chris.support@company.com,Support,Support Specialist,2023-01-10,45000.00,E014

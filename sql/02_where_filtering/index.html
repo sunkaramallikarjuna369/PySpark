@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WHERE & Filtering - SQL Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#sql" class="nav-link active">SQL</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>WHERE & Filtering</h1>
+            <p>The WHERE clause filters rows based on specified conditions. It supports comparison operators, logical operators, and pattern matching.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showFilter()">Filter</button>
+                <button class="viz-btn" onclick="showAnd()">AND</button>
+                <button class="viz-btn" onclick="showOr()">OR</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="comparison">Comparison</button>
+                <button class="tab" data-tab="logical">Logical</button>
+                <button class="tab" data-tab="pattern">Pattern Matching</button>
+            </div>
+            <div class="tab-contents">
+                <div id="comparison" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- Equality
+SELECT * FROM employees WHERE department_id = 10;
+
+-- Not equal
+SELECT * FROM employees WHERE department_id != 10;
+SELECT * FROM employees WHERE department_id <> 10;
+
+-- Greater/Less than
+SELECT * FROM employees WHERE salary > 50000;
+SELECT * FROM employees WHERE salary >= 50000;
+SELECT * FROM employees WHERE salary < 50000;
+SELECT * FROM employees WHERE salary <= 50000;
+
+-- BETWEEN (inclusive)
+SELECT * FROM employees 
+WHERE salary BETWEEN 40000 AND 60000;
+
+-- IN (multiple values)
+SELECT * FROM employees 
+WHERE department_id IN (10, 20, 30);
+
+-- NOT IN
+SELECT * FROM employees 
+WHERE department_id NOT IN (10, 20);
+
+-- NULL checks
+SELECT * FROM employees WHERE manager_id IS NULL;
+SELECT * FROM employees WHERE manager_id IS NOT NULL;</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="logical" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- AND (both conditions must be true)
+SELECT * FROM employees 
+WHERE department_id = 10 AND salary > 50000;
+
+-- OR (either condition can be true)
+SELECT * FROM employees 
+WHERE department_id = 10 OR department_id = 20;
+
+-- NOT
+SELECT * FROM employees 
+WHERE NOT department_id = 10;
+
+-- Complex conditions with parentheses
+SELECT * FROM employees 
+WHERE (department_id = 10 OR department_id = 20)
+  AND salary > 50000;
+
+-- Multiple AND conditions
+SELECT * FROM employees 
+WHERE department_id = 10 
+  AND salary > 50000 
+  AND hire_date > '2020-01-01';
+
+-- Combining AND, OR, NOT
+SELECT * FROM employees 
+WHERE (department_id = 10 AND salary > 50000)
+   OR (department_id = 20 AND salary > 60000);</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="pattern" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- LIKE with wildcards
+-- % matches any sequence of characters
+SELECT * FROM employees WHERE last_name LIKE 'S%';     -- Starts with S
+SELECT * FROM employees WHERE last_name LIKE '%son';   -- Ends with son
+SELECT * FROM employees WHERE last_name LIKE '%mi%';   -- Contains mi
+
+-- _ matches exactly one character
+SELECT * FROM employees WHERE last_name LIKE '_mith';  -- ?mith
+SELECT * FROM employees WHERE last_name LIKE 'Sm___';  -- Sm + 3 chars
+
+-- Case insensitive (varies by database)
+-- PostgreSQL:
+SELECT * FROM employees WHERE last_name ILIKE 's%';
+-- MySQL (default is case insensitive)
+-- SQL Server:
+SELECT * FROM employees WHERE last_name LIKE 's%' COLLATE SQL_Latin1_General_CP1_CI_AS;
+
+-- NOT LIKE
+SELECT * FROM employees WHERE last_name NOT LIKE 'S%';
+
+-- ESCAPE character for literal % or _
+SELECT * FROM products WHERE name LIKE '%\%%' ESCAPE '\';
+
+-- Regular expressions (PostgreSQL)
+SELECT * FROM employees WHERE last_name ~ '^[A-M]';
+
+-- REGEXP (MySQL)
+SELECT * FROM employees WHERE last_name REGEXP '^[A-M]';</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showFilter();
+        });
+        function showFilter() {
+            viz.clear();
+            for (let i = 0; i < 5; i++) {
+                const passes = i % 2 === 0;
+                viz.createDataNode({ type: 'cube', size: 0.5, color: passes ? 0x198754 : 0x333333, position: { x: 0, y: 2 - i * 0.8, z: 0 } });
+            }
+            viz.createLabel('WHERE - Filter rows', { x: 0, y: -2.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showAnd() {
+            viz.clear();
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0x4dabf7, position: { x: -1, y: 0.5, z: 0 } });
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0xe25a1c, position: { x: 1, y: 0.5, z: 0 } });
+            viz.createLabel('Condition 1', { x: -1, y: 1.3, z: 0 });
+            viz.createLabel('Condition 2', { x: 1, y: 1.3, z: 0 });
+            viz.createLabel('AND - Both must be true', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showOr() {
+            viz.clear();
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0x4dabf7, position: { x: -1, y: 0.5, z: 0 } });
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0xe25a1c, position: { x: 1, y: 0.5, z: 0 } });
+            viz.createLabel('Condition 1', { x: -1, y: 1.3, z: 0 });
+            viz.createLabel('Condition 2', { x: 1, y: 1.3, z: 0 });
+            viz.createLabel('OR - Either can be true', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

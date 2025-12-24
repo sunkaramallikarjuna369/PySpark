@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accumulators - PySpark Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </a>
+            <nav class="nav">
+                <a href="../../index.html#pyspark" class="nav-link active">PySpark</a>
+                <a href="../../index.html#pandas" class="nav-link">Pandas</a>
+                <a href="../../index.html#sql" class="nav-link">SQL</a>
+                <a href="../../index.html#etl" class="nav-link">ETL</a>
+                <a href="../../index.html#datawarehouse" class="nav-link">Data Warehouse</a>
+                <button class="theme-toggle">🌙</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <nav class="breadcrumb">
+            <span class="breadcrumb-item"><a href="../../index.html">Home</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item"><a href="../../index.html#pyspark">PySpark</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item">Accumulators</span>
+        </nav>
+
+        <section class="section">
+            <h1>Accumulators</h1>
+            <p>Accumulators are shared variables that allow aggregating values from executors back to the driver. They are useful for implementing counters, sums, and collecting debugging information during distributed processing.</p>
+
+            <div class="info-box warning">
+                <strong>Important:</strong> Accumulator updates in transformations may be applied more than once if tasks are re-executed. Only use accumulators in actions for guaranteed accuracy.
+            </div>
+
+            <h2>3D Visualization: Accumulator Flow</h2>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showAccumulatorFlow()">Accumulator Flow</button>
+                <button class="viz-btn" onclick="showCounterExample()">Counter Example</button>
+            </div>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="basic">Basic Accumulators</button>
+                <button class="tab" data-tab="custom">Custom Accumulators</button>
+                <button class="tab" data-tab="debug">Debugging Use</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="basic" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("Accumulators").getOrCreate()
+sc = spark.sparkContext
+
+# Long accumulator (for counting/summing)
+counter = sc.accumulator(0)
+sum_acc = sc.accumulator(0)
+
+# Sample data
+data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+rdd = sc.parallelize(data)
+
+# Use accumulator in action (guaranteed accuracy)
+def process_and_count(x):
+    counter.add(1)
+    sum_acc.add(x)
+    return x * 2
+
+result = rdd.map(process_and_count).collect()
+
+print(f"Processed items: {counter.value}")
+print(f"Sum of values: {sum_acc.value}")
+print(f"Result: {result}")
+
+# Named accumulator (visible in Spark UI)
+named_counter = sc.accumulator(0, "Error Counter")
+
+# Float accumulator
+float_acc = sc.accumulator(0.0)
+
+data_float = [1.5, 2.5, 3.5, 4.5]
+rdd_float = sc.parallelize(data_float)
+
+def sum_floats(x):
+    float_acc.add(x)
+    return x
+
+rdd_float.foreach(sum_floats)
+print(f"Float sum: {float_acc.value}")
+
+# Reset accumulator (create new one)
+counter = sc.accumulator(0)
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="custom" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark import AccumulatorParam
+
+spark = SparkSession.builder.appName("Custom Accumulators").getOrCreate()
+sc = spark.sparkContext
+
+# Custom accumulator for lists
+class ListAccumulatorParam(AccumulatorParam):
+    def zero(self, initialValue):
+        return []
+    
+    def addInPlace(self, v1, v2):
+        return v1 + v2
+
+list_acc = sc.accumulator([], ListAccumulatorParam())
+
+# Custom accumulator for sets
+class SetAccumulatorParam(AccumulatorParam):
+    def zero(self, initialValue):
+        return set()
+    
+    def addInPlace(self, v1, v2):
+        return v1.union(v2)
+
+set_acc = sc.accumulator(set(), SetAccumulatorParam())
+
+# Custom accumulator for dictionaries (counting)
+class DictAccumulatorParam(AccumulatorParam):
+    def zero(self, initialValue):
+        return {}
+    
+    def addInPlace(self, v1, v2):
+        for key, value in v2.items():
+            v1[key] = v1.get(key, 0) + value
+        return v1
+
+dict_acc = sc.accumulator({}, DictAccumulatorParam())
+
+# Use custom accumulators
+data = [("apple", 1), ("banana", 2), ("apple", 3), ("cherry", 1)]
+rdd = sc.parallelize(data)
+
+def process_item(item):
+    fruit, count = item
+    list_acc.add([fruit])
+    set_acc.add({fruit})
+    dict_acc.add({fruit: count})
+    return item
+
+rdd.foreach(process_item)
+
+print(f"List accumulator: {list_acc.value}")
+print(f"Set accumulator: {set_acc.value}")
+print(f"Dict accumulator: {dict_acc.value}")
+
+# Vector accumulator for ML
+class VectorAccumulatorParam(AccumulatorParam):
+    def zero(self, initialValue):
+        return [0.0] * len(initialValue)
+    
+    def addInPlace(self, v1, v2):
+        return [a + b for a, b in zip(v1, v2)]
+
+vector_acc = sc.accumulator([0.0, 0.0, 0.0], VectorAccumulatorParam())
+
+vectors = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]
+rdd_vectors = sc.parallelize(vectors)
+
+rdd_vectors.foreach(lambda v: vector_acc.add(v))
+print(f"Vector sum: {vector_acc.value}")
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="debug" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import udf, col
+from pyspark.sql.types import IntegerType
+
+spark = SparkSession.builder.appName("Debugging with Accumulators").getOrCreate()
+sc = spark.sparkContext
+
+# Accumulators for debugging
+null_counter = sc.accumulator(0, "Null Values")
+invalid_counter = sc.accumulator(0, "Invalid Records")
+processed_counter = sc.accumulator(0, "Processed Records")
+
+# Sample data with issues
+data = [
+    (1, "Alice", 25),
+    (2, None, 30),
+    (3, "Charlie", -5),
+    (4, "Diana", 28),
+    (5, "Eve", None)
+]
+df = spark.createDataFrame(data, ["id", "name", "age"])
+
+# UDF with accumulator for debugging
+@udf(returnType=IntegerType())
+def validate_age(age):
+    processed_counter.add(1)
+    if age is None:
+        null_counter.add(1)
+        return -1
+    if age < 0:
+        invalid_counter.add(1)
+        return -1
+    return age
+
+# Apply validation
+result = df.withColumn("validated_age", validate_age(col("age")))
+result.show()
+
+# Check debugging counters
+print(f"\nDebugging Statistics:")
+print(f"  Total processed: {processed_counter.value}")
+print(f"  Null values: {null_counter.value}")
+print(f"  Invalid records: {invalid_counter.value}")
+
+# Error tracking accumulator
+from pyspark import AccumulatorParam
+
+class ErrorAccumulatorParam(AccumulatorParam):
+    def zero(self, initialValue):
+        return []
+    
+    def addInPlace(self, v1, v2):
+        return v1 + v2
+
+error_acc = sc.accumulator([], ErrorAccumulatorParam())
+
+def process_with_error_tracking(row):
+    try:
+        if row[1] is None:
+            error_acc.add([f"Null name for id {row[0]}"])
+        if row[2] is not None and row[2] < 0:
+            error_acc.add([f"Invalid age {row[2]} for id {row[0]}"])
+        return row
+    except Exception as e:
+        error_acc.add([f"Error processing id {row[0]}: {str(e)}"])
+        return row
+
+rdd = df.rdd.map(process_with_error_tracking)
+rdd.collect()
+
+print(f"\nErrors found:")
+for error in error_acc.value:
+    print(f"  - {error}")
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../12_broadcast_variables/index.html" style="color: var(--text-muted);">← Previous: Broadcast Variables</a>
+                <a href="../14_spark_streaming/index.html" style="color: var(--accent-primary);">Next: Spark Streaming →</a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+        </div>
+    </footer>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', {
+                backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 0x1a1a2e : 0xf8f9fa,
+                cameraPosition: { x: 6, y: 4, z: 6 }
+            });
+            showAccumulatorFlow();
+        });
+
+        function showAccumulatorFlow() {
+            viz.clear();
+            
+            // Driver with accumulator
+            viz.createDataNode({ type: 'sphere', size: 0.8, color: 0x4dabf7, position: { x: 0, y: 2, z: 0 } });
+            viz.createLabel('Driver', { x: 0, y: 3, z: 0 });
+            
+            // Accumulator
+            viz.createDataNode({
+                type: 'cube', size: 0.5, color: 0x198754,
+                position: { x: 0, y: 1, z: 0 },
+                animate: (obj) => { obj.scale.y = 1 + Math.sin(Date.now() * 0.003) * 0.2; }
+            });
+            viz.createLabel('Accumulator', { x: 1, y: 1, z: 0 });
+
+            // Executors sending updates
+            const executors = [
+                { x: -2, y: -1 },
+                { x: 0, y: -1 },
+                { x: 2, y: -1 }
+            ];
+
+            executors.forEach((e, i) => {
+                viz.createDataNode({ type: 'cube', size: 0.5, color: 0xe25a1c, position: { x: e.x, y: e.y, z: 0 } });
+                viz.createLabel(`+${i + 1}`, { x: e.x, y: e.y - 0.8, z: 0 });
+                
+                // Arrow showing update flow
+                viz.createArrow({ x: e.x, y: e.y + 0.3, z: 0 }, { x: 0, y: 0.7, z: 0 }, { color: 0x198754 });
+            });
+
+            viz.createLabel('Accumulator - Values aggregated to driver', { x: 0, y: -2.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showCounterExample() {
+            viz.clear();
+            
+            // Counter visualization
+            viz.createDataNode({ type: 'cylinder', size: 0.8, color: 0x4dabf7, position: { x: 0, y: 1.5, z: 0 } });
+            viz.createLabel('Counter: 6', { x: 0, y: 2.5, z: 0 });
+
+            // Data items being counted
+            for (let i = 0; i < 6; i++) {
+                const angle = (i / 6) * Math.PI * 2;
+                const x = Math.cos(angle) * 2;
+                const z = Math.sin(angle) * 2;
+                
+                viz.createDataNode({
+                    type: 'cube', size: 0.3, color: 0xe25a1c,
+                    position: { x, y: 0, z }
+                });
+                
+                viz.createArrow({ x: x * 0.7, y: 0.3, z: z * 0.7 }, { x: 0, y: 1, z: 0 }, { color: 0x888888 });
+            }
+
+            viz.createLabel('Counter Accumulator - Counting items', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

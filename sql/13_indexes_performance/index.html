@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Indexes & Performance - SQL Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#sql" class="nav-link active">SQL</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Indexes & Performance</h1>
+            <p>Indexes speed up data retrieval by creating efficient lookup structures. Understanding when and how to use indexes is crucial for query optimization.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showIndex()">B-Tree Index</button>
+                <button class="viz-btn" onclick="showScan()">Table Scan</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="create">Creating Indexes</button>
+                <button class="tab" data-tab="types">Index Types</button>
+                <button class="tab" data-tab="optimize">Optimization</button>
+            </div>
+            <div class="tab-contents">
+                <div id="create" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- Create basic index
+CREATE INDEX idx_employee_name ON employees(last_name);
+
+-- Create unique index
+CREATE UNIQUE INDEX idx_employee_email ON employees(email);
+
+-- Create composite index
+CREATE INDEX idx_emp_dept_salary ON employees(department_id, salary);
+
+-- Create index with specific order
+CREATE INDEX idx_salary_desc ON employees(salary DESC);
+
+-- Drop index
+DROP INDEX idx_employee_name;
+DROP INDEX idx_employee_name ON employees;  -- MySQL
+
+-- View indexes
+-- PostgreSQL:
+SELECT * FROM pg_indexes WHERE tablename = 'employees';
+-- MySQL:
+SHOW INDEX FROM employees;
+-- SQL Server:
+SELECT * FROM sys.indexes WHERE object_id = OBJECT_ID('employees');</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="types" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- B-Tree Index (default, most common)
+CREATE INDEX idx_btree ON employees(last_name);
+
+-- Hash Index (equality only, PostgreSQL)
+CREATE INDEX idx_hash ON employees USING HASH (employee_id);
+
+-- GiST Index (geometric, full-text, PostgreSQL)
+CREATE INDEX idx_gist ON locations USING GIST (coordinates);
+
+-- GIN Index (arrays, full-text, PostgreSQL)
+CREATE INDEX idx_gin ON documents USING GIN (tags);
+
+-- Full-text Index (MySQL)
+CREATE FULLTEXT INDEX idx_fulltext ON articles(title, content);
+
+-- Partial/Filtered Index
+CREATE INDEX idx_active ON employees(last_name) WHERE status = 'Active';
+
+-- Covering Index (includes all needed columns)
+CREATE INDEX idx_covering ON employees(department_id) INCLUDE (first_name, salary);
+
+-- Clustered Index (physical order, one per table)
+CREATE CLUSTERED INDEX idx_clustered ON employees(employee_id);  -- SQL Server</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="optimize" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- EXPLAIN query plan
+EXPLAIN SELECT * FROM employees WHERE last_name = 'Smith';
+EXPLAIN ANALYZE SELECT * FROM employees WHERE department_id = 10;
+
+-- Index usage tips:
+-- 1. Index columns used in WHERE, JOIN, ORDER BY
+-- 2. Put most selective column first in composite index
+-- 3. Avoid indexing small tables
+-- 4. Avoid indexing frequently updated columns
+
+-- Queries that DON'T use indexes:
+SELECT * FROM employees WHERE UPPER(last_name) = 'SMITH';  -- Function on column
+SELECT * FROM employees WHERE last_name LIKE '%mith';      -- Leading wildcard
+SELECT * FROM employees WHERE salary + 1000 > 50000;       -- Expression
+
+-- Fix: Function-based index
+CREATE INDEX idx_upper_name ON employees(UPPER(last_name));
+
+-- Statistics for optimizer
+ANALYZE employees;                    -- PostgreSQL
+ANALYZE TABLE employees;              -- MySQL
+UPDATE STATISTICS employees;          -- SQL Server
+
+-- Query hints (use sparingly)
+SELECT /*+ INDEX(employees idx_name) */ * FROM employees;  -- Oracle
+SELECT * FROM employees WITH (INDEX(idx_name));            -- SQL Server</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showIndex();
+        });
+        function showIndex() {
+            viz.clear();
+            // B-Tree structure
+            viz.createDataNode({ type: 'sphere', size: 0.4, color: 0xe25a1c, position: { x: 0, y: 1.5, z: 0 } });
+            viz.createDataNode({ type: 'sphere', size: 0.3, color: 0x4dabf7, position: { x: -1, y: 0.5, z: 0 } });
+            viz.createDataNode({ type: 'sphere', size: 0.3, color: 0x4dabf7, position: { x: 1, y: 0.5, z: 0 } });
+            viz.createDataNode({ type: 'sphere', size: 0.25, color: 0x198754, position: { x: -1.5, y: -0.3, z: 0 } });
+            viz.createDataNode({ type: 'sphere', size: 0.25, color: 0x198754, position: { x: -0.5, y: -0.3, z: 0 } });
+            viz.createDataNode({ type: 'sphere', size: 0.25, color: 0x198754, position: { x: 0.5, y: -0.3, z: 0 } });
+            viz.createDataNode({ type: 'sphere', size: 0.25, color: 0x198754, position: { x: 1.5, y: -0.3, z: 0 } });
+            viz.createLabel('B-Tree Index - O(log n) lookup', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showScan() {
+            viz.clear();
+            for (let i = 0; i < 8; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.3, color: i === 5 ? 0xe25a1c : 0x4dabf7, position: { x: -2.5 + i * 0.7, y: 0.5, z: 0 } });
+            }
+            viz.createLabel('Table Scan - O(n) lookup', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

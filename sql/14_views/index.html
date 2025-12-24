@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Views - SQL Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#sql" class="nav-link active">SQL</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Views</h1>
+            <p>Views are virtual tables based on SELECT queries. They simplify complex queries, provide security by limiting data access, and create logical data abstractions.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showView()">View</button>
+                <button class="viz-btn" onclick="showMaterialized()">Materialized</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="basic">Basic Views</button>
+                <button class="tab" data-tab="advanced">Advanced Views</button>
+                <button class="tab" data-tab="materialized">Materialized Views</button>
+            </div>
+            <div class="tab-contents">
+                <div id="basic" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- Create simple view
+CREATE VIEW active_employees AS
+SELECT employee_id, first_name, last_name, department_id
+FROM employees
+WHERE status = 'Active';
+
+-- Use view like a table
+SELECT * FROM active_employees;
+SELECT * FROM active_employees WHERE department_id = 10;
+
+-- Create view with column aliases
+CREATE VIEW emp_summary (id, name, dept) AS
+SELECT employee_id, first_name || ' ' || last_name, department_id
+FROM employees;
+
+-- Create or replace view
+CREATE OR REPLACE VIEW active_employees AS
+SELECT employee_id, first_name, last_name, department_id, hire_date
+FROM employees
+WHERE status = 'Active';
+
+-- Drop view
+DROP VIEW active_employees;
+DROP VIEW IF EXISTS active_employees;
+
+-- View with joins
+CREATE VIEW employee_details AS
+SELECT e.first_name, e.last_name, d.department_name, l.city
+FROM employees e
+JOIN departments d ON e.department_id = d.department_id
+JOIN locations l ON d.location_id = l.location_id;</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="advanced" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- View with aggregation
+CREATE VIEW dept_stats AS
+SELECT 
+    department_id,
+    COUNT(*) AS employee_count,
+    AVG(salary) AS avg_salary,
+    SUM(salary) AS total_salary
+FROM employees
+GROUP BY department_id;
+
+-- Updatable view (simple views)
+CREATE VIEW it_employees AS
+SELECT * FROM employees WHERE department_id = 10;
+
+-- Insert through view
+INSERT INTO it_employees (first_name, last_name, department_id)
+VALUES ('John', 'Doe', 10);
+
+-- WITH CHECK OPTION (enforce view condition)
+CREATE VIEW it_employees AS
+SELECT * FROM employees WHERE department_id = 10
+WITH CHECK OPTION;
+-- Now INSERT with department_id != 10 will fail
+
+-- View with security (hide sensitive columns)
+CREATE VIEW public_employees AS
+SELECT employee_id, first_name, last_name, department_id
+FROM employees;  -- Excludes salary, SSN, etc.
+
+-- Nested views
+CREATE VIEW high_earners AS
+SELECT * FROM active_employees WHERE salary > 100000;</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="materialized" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- Materialized View (stores data physically)
+-- PostgreSQL:
+CREATE MATERIALIZED VIEW sales_summary AS
+SELECT 
+    product_id,
+    SUM(quantity) AS total_quantity,
+    SUM(amount) AS total_amount
+FROM sales
+GROUP BY product_id;
+
+-- Refresh materialized view
+REFRESH MATERIALIZED VIEW sales_summary;
+
+-- Refresh concurrently (no lock)
+REFRESH MATERIALIZED VIEW CONCURRENTLY sales_summary;
+
+-- Create with no data initially
+CREATE MATERIALIZED VIEW sales_summary AS
+SELECT * FROM sales_data
+WITH NO DATA;
+
+-- Oracle Materialized View
+CREATE MATERIALIZED VIEW sales_mv
+BUILD IMMEDIATE
+REFRESH FAST ON COMMIT
+AS SELECT * FROM sales;
+
+-- SQL Server Indexed View
+CREATE VIEW sales_summary WITH SCHEMABINDING AS
+SELECT product_id, SUM(amount) AS total
+FROM dbo.sales GROUP BY product_id;
+
+CREATE UNIQUE CLUSTERED INDEX idx_sales_summary 
+ON sales_summary(product_id);
+
+-- Drop materialized view
+DROP MATERIALIZED VIEW sales_summary;</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showView();
+        });
+        function showView() {
+            viz.clear();
+            // Base table
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 3; j++) {
+                    viz.createDataNode({ type: 'cube', size: 0.3, color: 0x4dabf7, position: { x: -2 + j * 0.5, y: 1 - i * 0.5, z: 0 } });
+                }
+            }
+            viz.createLabel('Table', { x: -1.5, y: 1.8, z: 0 });
+            // View (subset)
+            for (let i = 0; i < 2; i++) {
+                for (let j = 0; j < 2; j++) {
+                    viz.createDataNode({ type: 'cube', size: 0.3, color: 0xe25a1c, position: { x: 1.5 + j * 0.5, y: 0.5 - i * 0.5, z: 0 } });
+                }
+            }
+            viz.createLabel('View', { x: 1.75, y: 1.3, z: 0 });
+            viz.createArrow({ x: -0.5, y: 0.3, z: 0 }, { x: 1, y: 0.3, z: 0 }, { color: 0x888888 });
+            viz.createLabel('View - Virtual table from query', { x: 0, y: -1.8, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showMaterialized() {
+            viz.clear();
+            viz.createDataNode({ type: 'cube', size: 0.8, color: 0x4dabf7, position: { x: -1.5, y: 0.5, z: 0 } });
+            viz.createLabel('Query', { x: -1.5, y: 1.4, z: 0 });
+            viz.createArrow({ x: -0.8, y: 0.5, z: 0 }, { x: 0.8, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createDataNode({ type: 'cylinder', size: 0.6, color: 0xe25a1c, position: { x: 1.5, y: 0.5, z: 0 } });
+            viz.createLabel('Stored Data', { x: 1.5, y: 1.4, z: 0 });
+            viz.createLabel('Materialized View - Cached results', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

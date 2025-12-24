@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kimball vs Inmon - DW Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#datawarehouse" class="nav-link active">Data Warehouse</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Kimball vs Inmon</h1>
+            <p>Two foundational approaches to data warehouse design: Kimball's dimensional modeling (bottom-up) and Inmon's enterprise data warehouse (top-down).</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showKimball()">Kimball</button>
+                <button class="viz-btn" onclick="showInmon()">Inmon</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="comparison">Comparison</button>
+                <button class="tab" data-tab="kimball">Kimball Approach</button>
+                <button class="tab" data-tab="inmon">Inmon Approach</button>
+            </div>
+            <div class="tab-contents">
+                <div id="comparison" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Text</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>Kimball vs Inmon Comparison:
+
+| Aspect           | Kimball (Bottom-Up)      | Inmon (Top-Down)          |
+|------------------|--------------------------|---------------------------|
+| Approach         | Dimensional modeling     | Enterprise data warehouse |
+| Structure        | Star/Snowflake schemas   | Normalized (3NF)          |
+| Starting Point   | Business processes       | Enterprise data model     |
+| Build Order      | Data marts first         | Central DW first          |
+| Time to Value    | Faster (weeks)           | Slower (months)           |
+| Complexity       | Simpler                  | More complex              |
+| Redundancy       | Some redundancy          | Minimal redundancy        |
+| Flexibility      | Less flexible            | More flexible             |
+| Cost             | Lower initial cost       | Higher initial cost       |
+| Maintenance      | Easier                   | More complex              |
+| Best For         | Quick wins, BI           | Enterprise integration    |
+
+KIMBALL (Ralph Kimball):
+- "The Data Warehouse Toolkit"
+- Focus on business processes
+- Dimensional modeling (facts + dimensions)
+- Conformed dimensions for integration
+- Bottom-up: Build data marts, integrate later
+
+INMON (Bill Inmon):
+- "Father of Data Warehousing"
+- Enterprise-wide, subject-oriented
+- Normalized design (3NF)
+- Single source of truth
+- Top-down: Build central DW, then data marts</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="kimball" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- KIMBALL APPROACH: Dimensional Modeling
+
+-- Step 1: Identify business process (Sales)
+-- Step 2: Declare grain (one row per transaction)
+-- Step 3: Identify dimensions (who, what, when, where)
+-- Step 4: Identify facts (measures)
+
+-- Star Schema for Sales Process
+CREATE TABLE dim_date (
+    date_key INT PRIMARY KEY,
+    full_date DATE,
+    year INT,
+    quarter INT,
+    month INT,
+    day INT
+);
+
+CREATE TABLE dim_product (
+    product_key INT PRIMARY KEY,
+    product_id VARCHAR(20),
+    product_name VARCHAR(100),
+    category VARCHAR(50),
+    brand VARCHAR(50)
+);
+
+CREATE TABLE dim_customer (
+    customer_key INT PRIMARY KEY,
+    customer_id VARCHAR(20),
+    customer_name VARCHAR(100),
+    segment VARCHAR(20),
+    region VARCHAR(50)
+);
+
+CREATE TABLE fact_sales (
+    date_key INT REFERENCES dim_date,
+    product_key INT REFERENCES dim_product,
+    customer_key INT REFERENCES dim_customer,
+    quantity INT,
+    unit_price DECIMAL(10,2),
+    total_amount DECIMAL(12,2),
+    profit DECIMAL(12,2)
+);
+
+-- Conformed Dimensions: Same dimensions used across data marts
+-- dim_date, dim_customer used by Sales, Marketing, Support marts
+
+-- Bus Matrix: Documents which dimensions apply to which facts
+/*
+                | Date | Product | Customer | Employee | Store |
+Sales Fact      |  X   |    X    |    X     |          |   X   |
+Inventory Fact  |  X   |    X    |          |          |   X   |
+HR Fact         |  X   |         |          |    X     |       |
+*/</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="inmon" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- INMON APPROACH: Normalized Enterprise DW
+
+-- Central Data Warehouse in 3NF
+-- Normalized to reduce redundancy
+
+-- Customer entity (normalized)
+CREATE TABLE customer (
+    customer_id INT PRIMARY KEY,
+    first_name VARCHAR(50),
+    last_name VARCHAR(50),
+    email VARCHAR(100)
+);
+
+CREATE TABLE customer_address (
+    address_id INT PRIMARY KEY,
+    customer_id INT REFERENCES customer,
+    address_type VARCHAR(20),
+    street VARCHAR(200),
+    city_id INT REFERENCES city
+);
+
+CREATE TABLE city (
+    city_id INT PRIMARY KEY,
+    city_name VARCHAR(50),
+    state_id INT REFERENCES state
+);
+
+CREATE TABLE state (
+    state_id INT PRIMARY KEY,
+    state_name VARCHAR(50),
+    country_id INT REFERENCES country
+);
+
+CREATE TABLE country (
+    country_id INT PRIMARY KEY,
+    country_name VARCHAR(50)
+);
+
+-- Product entity (normalized)
+CREATE TABLE product (
+    product_id INT PRIMARY KEY,
+    product_name VARCHAR(100),
+    category_id INT REFERENCES category,
+    brand_id INT REFERENCES brand
+);
+
+CREATE TABLE category (
+    category_id INT PRIMARY KEY,
+    category_name VARCHAR(50),
+    department_id INT REFERENCES department
+);
+
+-- Data Marts created FROM central DW
+-- Denormalized for specific department needs
+CREATE VIEW sales_mart AS
+SELECT 
+    s.sale_date,
+    p.product_name,
+    c.category_name,
+    cu.first_name || ' ' || cu.last_name as customer_name,
+    ci.city_name,
+    s.quantity,
+    s.amount
+FROM sales s
+JOIN product p ON s.product_id = p.product_id
+JOIN category c ON p.category_id = c.category_id
+JOIN customer cu ON s.customer_id = cu.customer_id
+JOIN customer_address ca ON cu.customer_id = ca.customer_id
+JOIN city ci ON ca.city_id = ci.city_id;</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showKimball();
+        });
+        function showKimball() {
+            viz.clear();
+            // Bottom-up: Data marts first
+            viz.createLabel('Kimball (Bottom-Up)', { x: 0, y: 2, z: 0 });
+            // Data marts at bottom
+            for (let i = 0; i < 3; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.4, color: 0x4dabf7, position: { x: -1 + i, y: 0, z: 0 } });
+            }
+            viz.createLabel('Data Marts', { x: 0, y: -0.6, z: 0 });
+            // Conformed dimensions connect them
+            viz.createDataNode({ type: 'cylinder', size: 0.5, color: 0xe25a1c, position: { x: 0, y: 1, z: 0 } });
+            viz.createLabel('Conformed Dims', { x: 0, y: 1.7, z: 0 });
+            viz.createArrow({ x: -1, y: 0.3, z: 0 }, { x: -0.3, y: 0.7, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0, y: 0.3, z: 0 }, { x: 0, y: 0.7, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 1, y: 0.3, z: 0 }, { x: 0.3, y: 0.7, z: 0 }, { color: 0x888888 });
+            viz.createGrid(10, 10);
+        }
+        function showInmon() {
+            viz.clear();
+            // Top-down: Central DW first
+            viz.createLabel('Inmon (Top-Down)', { x: 0, y: 2, z: 0 });
+            // Central DW at top
+            viz.createDataNode({ type: 'cylinder', size: 0.6, color: 0xe25a1c, position: { x: 0, y: 1, z: 0 } });
+            viz.createLabel('Enterprise DW', { x: 0, y: 1.8, z: 0 });
+            // Data marts derived from DW
+            for (let i = 0; i < 3; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.35, color: 0x4dabf7, position: { x: -1 + i, y: 0, z: 0 } });
+                viz.createArrow({ x: (i - 1) * 0.3, y: 0.7, z: 0 }, { x: -1 + i, y: 0.3, z: 0 }, { color: 0x888888 });
+            }
+            viz.createLabel('Data Marts', { x: 0, y: -0.6, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

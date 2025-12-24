@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GroupBy Operations - Pandas Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pandas" class="nav-link active">Pandas</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>GroupBy Operations</h1>
+            <p>GroupBy allows you to split data into groups, apply functions, and combine results. It follows the split-apply-combine pattern.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showSplit()">Split</button>
+                <button class="viz-btn" onclick="showApply()">Apply</button>
+                <button class="viz-btn" onclick="showCombine()">Combine</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="basic">Basic GroupBy</button>
+                <button class="tab" data-tab="agg">Aggregations</button>
+                <button class="tab" data-tab="transform">Transform</button>
+            </div>
+            <div class="tab-contents">
+                <div id="basic" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+df = pd.DataFrame({
+    'dept': ['IT', 'HR', 'IT', 'HR', 'IT'],
+    'name': ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve'],
+    'salary': [50000, 60000, 75000, 55000, 45000],
+    'bonus': [5000, 6000, 7500, 5500, 4500]
+})
+
+# Basic groupby
+grouped = df.groupby('dept')
+print("Groups:", list(grouped.groups.keys()))
+
+# Single aggregation
+print("\nMean salary by dept:")
+print(df.groupby('dept')['salary'].mean())
+
+# Multiple columns
+print("\nSum of salary and bonus by dept:")
+print(df.groupby('dept')[['salary', 'bonus']].sum())
+
+# Size and count
+print("\nCount per group:")
+print(df.groupby('dept').size())
+
+# First and last
+print("\nFirst entry per group:")
+print(df.groupby('dept').first())</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="agg" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+import numpy as np
+
+df = pd.DataFrame({
+    'dept': ['IT', 'HR', 'IT', 'HR', 'IT'],
+    'salary': [50000, 60000, 75000, 55000, 45000]
+})
+
+# Multiple aggregations
+print("Multiple aggregations:")
+print(df.groupby('dept')['salary'].agg(['mean', 'min', 'max', 'std']))
+
+# Named aggregations
+print("\nNamed aggregations:")
+result = df.groupby('dept').agg(
+    avg_salary=('salary', 'mean'),
+    max_salary=('salary', 'max'),
+    count=('salary', 'count')
+)
+print(result)
+
+# Custom aggregation function
+def salary_range(x):
+    return x.max() - x.min()
+
+print("\nCustom aggregation (range):")
+print(df.groupby('dept')['salary'].agg(salary_range))
+
+# Multiple functions per column
+print("\nMultiple functions:")
+print(df.groupby('dept').agg({
+    'salary': ['mean', 'sum', salary_range]
+}))</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="transform" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+df = pd.DataFrame({
+    'dept': ['IT', 'HR', 'IT', 'HR', 'IT'],
+    'name': ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve'],
+    'salary': [50000, 60000, 75000, 55000, 45000]
+})
+
+# Transform - returns same shape as input
+df['dept_mean'] = df.groupby('dept')['salary'].transform('mean')
+print("With department mean:")
+print(df)
+
+# Normalize within groups
+df['salary_normalized'] = df.groupby('dept')['salary'].transform(
+    lambda x: (x - x.mean()) / x.std()
+)
+print("\nWith normalized salary:")
+print(df[['name', 'dept', 'salary', 'salary_normalized']])
+
+# Rank within groups
+df['rank_in_dept'] = df.groupby('dept')['salary'].rank(ascending=False)
+print("\nWith rank in department:")
+print(df[['name', 'dept', 'salary', 'rank_in_dept']])
+
+# Filter groups
+print("\nDepartments with avg salary > 55000:")
+print(df.groupby('dept').filter(lambda x: x['salary'].mean() > 55000))</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showSplit();
+        });
+        function showSplit() {
+            viz.clear();
+            const colors = [0xe25a1c, 0x4dabf7];
+            for (let g = 0; g < 2; g++) {
+                for (let i = 0; i < 3; i++) {
+                    viz.createDataNode({ type: 'cube', size: 0.4, color: colors[g], position: { x: -1.5 + g * 3, y: 1 - i * 0.8, z: 0 } });
+                }
+                viz.createLabel(['Group A', 'Group B'][g], { x: -1.5 + g * 3, y: 2, z: 0 });
+            }
+            viz.createLabel('Split - Divide data into groups', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showApply() {
+            viz.clear();
+            const colors = [0xe25a1c, 0x4dabf7];
+            for (let g = 0; g < 2; g++) {
+                viz.createDataNode({ type: 'sphere', size: 0.6, color: colors[g], position: { x: -1.5 + g * 3, y: 0.5, z: 0 } });
+                viz.createLabel('SUM', { x: -1.5 + g * 3, y: 1.5, z: 0 });
+            }
+            viz.createLabel('Apply - Apply function to each group', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showCombine() {
+            viz.clear();
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0xe25a1c, position: { x: 0, y: 0.8, z: 0 } });
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x4dabf7, position: { x: 0, y: 0, z: 0 } });
+            viz.createLabel('Combine - Merge results', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

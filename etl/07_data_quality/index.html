@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Quality - ETL Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#etl" class="nav-link active">ETL</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Data Quality</h1>
+            <p>Data quality ensures data is accurate, complete, consistent, and reliable. Quality checks validate data at various stages of the ETL pipeline.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showDimensions()">Dimensions</button>
+                <button class="viz-btn" onclick="showChecks()">Quality Checks</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="dimensions">Quality Dimensions</button>
+                <button class="tab" data-tab="validation">Validation Rules</button>
+                <button class="tab" data-tab="framework">Quality Framework</button>
+            </div>
+            <div class="tab-contents">
+                <div id="dimensions" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Data Quality Dimensions:
+
+1. Completeness - No missing values
+2. Accuracy - Data reflects reality
+3. Consistency - Same data across systems
+4. Timeliness - Data is up-to-date
+5. Validity - Data conforms to rules
+6. Uniqueness - No duplicates
+"""
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, count, when, isnan, isnull
+
+spark = SparkSession.builder.appName("DataQuality").getOrCreate()
+
+# Completeness check
+def check_completeness(df, columns):
+    """Check for null/missing values"""
+    results = {}
+    total_rows = df.count()
+    
+    for column in columns:
+        null_count = df.filter(
+            col(column).isNull() | isnan(col(column))
+        ).count()
+        completeness = (total_rows - null_count) / total_rows * 100
+        results[column] = {
+            "null_count": null_count,
+            "completeness_pct": round(completeness, 2)
+        }
+    return results
+
+# Uniqueness check
+def check_uniqueness(df, key_columns):
+    """Check for duplicate records"""
+    total = df.count()
+    distinct = df.dropDuplicates(key_columns).count()
+    duplicates = total - distinct
+    return {
+        "total_rows": total,
+        "unique_rows": distinct,
+        "duplicate_rows": duplicates,
+        "uniqueness_pct": round(distinct / total * 100, 2)
+    }</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="validation" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql.functions import col, regexp_extract, length
+
+# Validity checks
+def validate_email(df, email_column):
+    """Validate email format"""
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return df.withColumn(
+        "email_valid",
+        regexp_extract(col(email_column), email_pattern, 0) != ""
+    )
+
+def validate_phone(df, phone_column):
+    """Validate phone number format"""
+    return df.withColumn(
+        "phone_valid",
+        length(regexp_replace(col(phone_column), r"[^0-9]", "")) == 10
+    )
+
+# Range validation
+def validate_range(df, column, min_val, max_val):
+    """Check if values are within expected range"""
+    return df.withColumn(
+        f"{column}_valid",
+        (col(column) >= min_val) & (col(column) <= max_val)
+    )
+
+# Referential integrity
+def check_referential_integrity(df, ref_df, join_column):
+    """Check foreign key references exist"""
+    orphans = df.join(ref_df, join_column, "left_anti")
+    return {
+        "orphan_count": orphans.count(),
+        "orphan_records": orphans
+    }
+
+# Custom business rules
+def apply_business_rules(df):
+    """Apply custom validation rules"""
+    return df.withColumn(
+        "is_valid",
+        (col("age") >= 18) &
+        (col("salary") > 0) &
+        (col("status").isin(["active", "inactive", "pending"]))
+    )</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="framework" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre># Great Expectations style framework
+class DataQualityFramework:
+    def __init__(self, df):
+        self.df = df
+        self.results = []
+    
+    def expect_column_to_exist(self, column):
+        exists = column in self.df.columns
+        self.results.append({
+            "check": f"column_exists_{column}",
+            "passed": exists
+        })
+        return self
+    
+    def expect_column_values_to_not_be_null(self, column):
+        null_count = self.df.filter(col(column).isNull()).count()
+        self.results.append({
+            "check": f"not_null_{column}",
+            "passed": null_count == 0,
+            "null_count": null_count
+        })
+        return self
+    
+    def expect_column_values_to_be_unique(self, column):
+        total = self.df.count()
+        unique = self.df.select(column).distinct().count()
+        self.results.append({
+            "check": f"unique_{column}",
+            "passed": total == unique
+        })
+        return self
+    
+    def expect_column_values_to_be_in_set(self, column, value_set):
+        invalid = self.df.filter(~col(column).isin(value_set)).count()
+        self.results.append({
+            "check": f"in_set_{column}",
+            "passed": invalid == 0,
+            "invalid_count": invalid
+        })
+        return self
+    
+    def get_results(self):
+        passed = sum(1 for r in self.results if r["passed"])
+        return {
+            "total_checks": len(self.results),
+            "passed": passed,
+            "failed": len(self.results) - passed,
+            "details": self.results
+        }</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showDimensions();
+        });
+        function showDimensions() {
+            viz.clear();
+            const dims = ['Complete', 'Accurate', 'Consistent', 'Timely', 'Valid', 'Unique'];
+            dims.forEach((d, i) => {
+                const angle = (i / dims.length) * Math.PI * 2;
+                const x = Math.cos(angle) * 1.5;
+                const z = Math.sin(angle) * 1.5;
+                viz.createDataNode({ type: 'sphere', size: 0.35, color: 0x4dabf7, position: { x, y: 0.5, z } });
+                viz.createLabel(d, { x: x * 1.4, y: 1, z: z * 1.4 });
+            });
+            viz.createLabel('Data Quality Dimensions', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showChecks() {
+            viz.clear();
+            for (let i = 0; i < 5; i++) {
+                const passed = i !== 2;
+                viz.createDataNode({ type: 'cube', size: 0.4, color: passed ? 0x198754 : 0xe25a1c, position: { x: -2 + i, y: 0.5, z: 0 } });
+            }
+            viz.createLabel('Quality Checks: Pass/Fail', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

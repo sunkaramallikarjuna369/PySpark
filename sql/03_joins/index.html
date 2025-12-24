@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JOINs - SQL Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#sql" class="nav-link active">SQL</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>SQL JOINs</h1>
+            <p>JOINs combine rows from two or more tables based on related columns. Understanding different join types is essential for relational database queries.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showInner()">INNER</button>
+                <button class="viz-btn" onclick="showLeft()">LEFT</button>
+                <button class="viz-btn" onclick="showRight()">RIGHT</button>
+                <button class="viz-btn" onclick="showFull()">FULL</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="inner">INNER JOIN</button>
+                <button class="tab" data-tab="outer">OUTER JOINs</button>
+                <button class="tab" data-tab="special">Special JOINs</button>
+            </div>
+            <div class="tab-contents">
+                <div id="inner" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- INNER JOIN - Only matching rows from both tables
+SELECT 
+    e.employee_id,
+    e.first_name,
+    d.department_name
+FROM employees e
+INNER JOIN departments d ON e.department_id = d.department_id;
+
+-- Equivalent syntax (implicit join)
+SELECT e.employee_id, e.first_name, d.department_name
+FROM employees e, departments d
+WHERE e.department_id = d.department_id;
+
+-- Multiple join conditions
+SELECT e.*, d.department_name
+FROM employees e
+INNER JOIN departments d 
+    ON e.department_id = d.department_id
+    AND e.location_id = d.location_id;
+
+-- Join multiple tables
+SELECT 
+    e.first_name,
+    d.department_name,
+    l.city
+FROM employees e
+INNER JOIN departments d ON e.department_id = d.department_id
+INNER JOIN locations l ON d.location_id = l.location_id;
+
+-- Self join (join table to itself)
+SELECT 
+    e.first_name AS employee,
+    m.first_name AS manager
+FROM employees e
+INNER JOIN employees m ON e.manager_id = m.employee_id;</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="outer" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- LEFT JOIN - All rows from left table, matching from right
+SELECT 
+    e.employee_id,
+    e.first_name,
+    d.department_name
+FROM employees e
+LEFT JOIN departments d ON e.department_id = d.department_id;
+
+-- LEFT JOIN with NULL check (find unmatched)
+SELECT e.first_name
+FROM employees e
+LEFT JOIN departments d ON e.department_id = d.department_id
+WHERE d.department_id IS NULL;
+
+-- RIGHT JOIN - All rows from right table, matching from left
+SELECT 
+    e.first_name,
+    d.department_name
+FROM employees e
+RIGHT JOIN departments d ON e.department_id = d.department_id;
+
+-- FULL OUTER JOIN - All rows from both tables
+SELECT 
+    e.first_name,
+    d.department_name
+FROM employees e
+FULL OUTER JOIN departments d ON e.department_id = d.department_id;
+
+-- Find rows only in left or right (exclusive)
+SELECT e.first_name, d.department_name
+FROM employees e
+FULL OUTER JOIN departments d ON e.department_id = d.department_id
+WHERE e.employee_id IS NULL OR d.department_id IS NULL;</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="special" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- CROSS JOIN - Cartesian product (all combinations)
+SELECT e.first_name, d.department_name
+FROM employees e
+CROSS JOIN departments d;
+
+-- NATURAL JOIN - Auto-join on same column names
+SELECT e.first_name, department_name
+FROM employees e
+NATURAL JOIN departments;
+
+-- USING clause (when column names match)
+SELECT e.first_name, d.department_name
+FROM employees e
+JOIN departments d USING (department_id);
+
+-- Anti-join (rows in A not in B)
+SELECT e.first_name
+FROM employees e
+WHERE NOT EXISTS (
+    SELECT 1 FROM departments d 
+    WHERE d.department_id = e.department_id
+);
+
+-- Semi-join (rows in A that have match in B)
+SELECT e.first_name
+FROM employees e
+WHERE EXISTS (
+    SELECT 1 FROM departments d 
+    WHERE d.department_id = e.department_id
+);
+
+-- Lateral join (PostgreSQL) / CROSS APPLY (SQL Server)
+SELECT e.first_name, recent.order_date
+FROM employees e
+CROSS JOIN LATERAL (
+    SELECT order_date FROM orders o 
+    WHERE o.employee_id = e.employee_id 
+    ORDER BY order_date DESC LIMIT 1
+) recent;</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showInner();
+        });
+        function showInner() {
+            viz.clear();
+            viz.createDataNode({ type: 'sphere', size: 0.8, color: 0x4dabf7, position: { x: -0.8, y: 0.5, z: 0 } });
+            viz.createDataNode({ type: 'sphere', size: 0.8, color: 0xe25a1c, position: { x: 0.8, y: 0.5, z: 0 } });
+            viz.createDataNode({ type: 'sphere', size: 0.4, color: 0x198754, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('Table A', { x: -1.5, y: 1.5, z: 0 });
+            viz.createLabel('Table B', { x: 1.5, y: 1.5, z: 0 });
+            viz.createLabel('INNER JOIN - Only matching rows', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showLeft() {
+            viz.clear();
+            viz.createDataNode({ type: 'sphere', size: 1, color: 0x4dabf7, position: { x: -0.5, y: 0.5, z: 0 } });
+            viz.createDataNode({ type: 'sphere', size: 0.6, color: 0xe25a1c, position: { x: 1, y: 0.5, z: 0 } });
+            viz.createLabel('LEFT JOIN - All from left + matches', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showRight() {
+            viz.clear();
+            viz.createDataNode({ type: 'sphere', size: 0.6, color: 0x4dabf7, position: { x: -1, y: 0.5, z: 0 } });
+            viz.createDataNode({ type: 'sphere', size: 1, color: 0xe25a1c, position: { x: 0.5, y: 0.5, z: 0 } });
+            viz.createLabel('RIGHT JOIN - All from right + matches', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showFull() {
+            viz.clear();
+            viz.createDataNode({ type: 'sphere', size: 1, color: 0x4dabf7, position: { x: -0.5, y: 0.5, z: 0 } });
+            viz.createDataNode({ type: 'sphere', size: 1, color: 0xe25a1c, position: { x: 0.5, y: 0.5, z: 0 } });
+            viz.createLabel('FULL OUTER JOIN - All rows from both', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Extraction - ETL Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#etl" class="nav-link active">ETL</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Data Extraction</h1>
+            <p>Data extraction is the first step in ETL, involving reading data from various source systems including databases, files, APIs, and streaming sources.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showSources()">Data Sources</button>
+                <button class="viz-btn" onclick="showExtraction()">Extraction</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="files">File Sources</button>
+                <button class="tab" data-tab="databases">Databases</button>
+                <button class="tab" data-tab="apis">APIs & Streaming</button>
+            </div>
+            <div class="tab-contents">
+                <div id="files" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("DataExtraction").getOrCreate()
+
+# CSV extraction
+csv_df = spark.read.csv(
+    "data/customers.csv",
+    header=True,
+    inferSchema=True,
+    sep=",",
+    nullValue="NULL"
+)
+
+# JSON extraction
+json_df = spark.read.json("data/events.json", multiLine=True)
+
+# Parquet extraction (columnar format)
+parquet_df = spark.read.parquet("data/transactions/")
+
+# Delta Lake extraction
+delta_df = spark.read.format("delta").load("data/delta_table/")
+
+# Excel extraction (requires additional library)
+excel_df = spark.read.format("com.crealytics.spark.excel") \
+    .option("header", "true") \
+    .load("data/report.xlsx")
+
+# XML extraction
+xml_df = spark.read.format("xml") \
+    .option("rowTag", "record") \
+    .load("data/data.xml")
+
+# Multiple files with pattern
+all_csvs = spark.read.csv("data/sales_*.csv", header=True)
+
+# Partitioned data
+partitioned_df = spark.read.parquet("data/sales/year=2024/month=01/")</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="databases" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("DatabaseExtraction") \
+    .config("spark.jars", "postgresql-42.2.18.jar,mysql-connector-java-8.0.23.jar") \
+    .getOrCreate()
+
+# PostgreSQL extraction
+postgres_df = spark.read \
+    .format("jdbc") \
+    .option("url", "jdbc:postgresql://host:5432/database") \
+    .option("dbtable", "schema.table_name") \
+    .option("user", "username") \
+    .option("password", "password") \
+    .option("driver", "org.postgresql.Driver") \
+    .load()
+
+# MySQL extraction
+mysql_df = spark.read \
+    .format("jdbc") \
+    .option("url", "jdbc:mysql://host:3306/database") \
+    .option("query", "SELECT * FROM customers WHERE created_at > '2024-01-01'") \
+    .option("user", "username") \
+    .option("password", "password") \
+    .load()
+
+# Parallel extraction with partitioning
+large_table_df = spark.read \
+    .format("jdbc") \
+    .option("url", "jdbc:postgresql://host:5432/db") \
+    .option("dbtable", "large_table") \
+    .option("partitionColumn", "id") \
+    .option("lowerBound", "1") \
+    .option("upperBound", "1000000") \
+    .option("numPartitions", "10") \
+    .load()
+
+# MongoDB extraction
+mongo_df = spark.read \
+    .format("mongo") \
+    .option("uri", "mongodb://host:27017/database.collection") \
+    .load()</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="apis" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import requests
+from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+
+spark = SparkSession.builder.appName("APIExtraction").getOrCreate()
+
+# REST API extraction
+def extract_from_api(url, params=None):
+    response = requests.get(url, params=params)
+    response.raise_for_status()
+    return response.json()
+
+# Extract and convert to DataFrame
+api_data = extract_from_api("https://api.example.com/data")
+api_df = spark.createDataFrame(api_data)
+
+# Paginated API extraction
+def extract_paginated_api(base_url, page_size=100):
+    all_data = []
+    page = 1
+    while True:
+        data = extract_from_api(base_url, {"page": page, "size": page_size})
+        if not data:
+            break
+        all_data.extend(data)
+        page += 1
+    return all_data
+
+# Kafka streaming extraction
+kafka_df = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("subscribe", "topic_name") \
+    .option("startingOffsets", "earliest") \
+    .load()
+
+# Parse Kafka value
+from pyspark.sql.functions import from_json, col
+schema = StructType([
+    StructField("id", IntegerType()),
+    StructField("name", StringType()),
+    StructField("value", IntegerType())
+])
+parsed_df = kafka_df.select(
+    from_json(col("value").cast("string"), schema).alias("data")
+).select("data.*")</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showSources();
+        });
+        function showSources() {
+            viz.clear();
+            const sources = [
+                { label: 'CSV', color: 0x4dabf7, pos: { x: -2, y: 1, z: 0 } },
+                { label: 'JSON', color: 0xe25a1c, pos: { x: -1, y: 1, z: 0 } },
+                { label: 'DB', color: 0x198754, pos: { x: 0, y: 1, z: 0 } },
+                { label: 'API', color: 0x8b5cf6, pos: { x: 1, y: 1, z: 0 } },
+                { label: 'Kafka', color: 0xffc107, pos: { x: 2, y: 1, z: 0 } }
+            ];
+            sources.forEach(s => {
+                viz.createDataNode({ type: 'cylinder', size: 0.35, color: s.color, position: s.pos });
+                viz.createLabel(s.label, { x: s.pos.x, y: s.pos.y + 0.7, z: 0 });
+            });
+            viz.createLabel('Multiple Data Sources', { x: 0, y: -1, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showExtraction() {
+            viz.clear();
+            for (let i = 0; i < 3; i++) {
+                viz.createDataNode({ type: 'cylinder', size: 0.4, color: 0x4dabf7, position: { x: -2, y: 1 - i * 0.8, z: 0 } });
+                viz.createArrow({ x: -1.4, y: 1 - i * 0.8, z: 0 }, { x: 0.8, y: 0.5, z: 0 }, { color: 0x888888 });
+            }
+            viz.createDataNode({ type: 'cube', size: 0.8, color: 0xe25a1c, position: { x: 1.5, y: 0.5, z: 0 } });
+            viz.createLabel('Extract', { x: 1.5, y: 1.5, z: 0 });
+            viz.createLabel('Extraction - Pull from sources', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

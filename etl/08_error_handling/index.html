@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error Handling - ETL Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#etl" class="nav-link active">ETL</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Error Handling</h1>
+            <p>Robust error handling ensures ETL pipelines can recover from failures, log issues, and maintain data integrity even when problems occur.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showErrorFlow()">Error Flow</button>
+                <button class="viz-btn" onclick="showRetry()">Retry Logic</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="basic">Basic Handling</button>
+                <button class="tab" data-tab="strategies">Strategies</button>
+                <button class="tab" data-tab="recovery">Recovery</button>
+            </div>
+            <div class="tab-contents">
+                <div id="basic" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, when, lit
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("ETL")
+
+def safe_etl_job(spark, source_path, target_path):
+    """ETL job with comprehensive error handling"""
+    try:
+        logger.info(f"Starting ETL job: {source_path} -> {target_path}")
+        
+        # Extract
+        try:
+            df = spark.read.parquet(source_path)
+            logger.info(f"Extracted {df.count()} records")
+        except Exception as e:
+            logger.error(f"Extraction failed: {e}")
+            raise
+        
+        # Transform
+        try:
+            transformed_df = df.transform(apply_transformations)
+            logger.info("Transformation completed")
+        except Exception as e:
+            logger.error(f"Transformation failed: {e}")
+            raise
+        
+        # Load
+        try:
+            transformed_df.write.mode("overwrite").parquet(target_path)
+            logger.info(f"Loaded data to {target_path}")
+        except Exception as e:
+            logger.error(f"Load failed: {e}")
+            raise
+        
+        return {"status": "success", "records": transformed_df.count()}
+        
+    except Exception as e:
+        logger.error(f"ETL job failed: {e}")
+        return {"status": "failed", "error": str(e)}</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="strategies" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import time
+from functools import wraps
+
+# Retry decorator
+def retry(max_attempts=3, delay=1, backoff=2):
+    """Retry decorator with exponential backoff"""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            attempts = 0
+            current_delay = delay
+            
+            while attempts < max_attempts:
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    attempts += 1
+                    if attempts == max_attempts:
+                        raise
+                    logger.warning(f"Attempt {attempts} failed: {e}")
+                    logger.info(f"Retrying in {current_delay} seconds...")
+                    time.sleep(current_delay)
+                    current_delay *= backoff
+        return wrapper
+    return decorator
+
+@retry(max_attempts=3, delay=5)
+def extract_with_retry(spark, path):
+    return spark.read.parquet(path)
+
+# Dead letter queue pattern
+def process_with_dlq(df, process_func, dlq_path):
+    """Process records, send failures to dead letter queue"""
+    try:
+        # Try processing all records
+        result_df = process_func(df)
+        return result_df, None
+    except Exception as e:
+        # On failure, identify bad records
+        good_df = df.filter(col("is_valid") == True)
+        bad_df = df.filter(col("is_valid") == False)
+        
+        # Send bad records to DLQ
+        bad_df.write.mode("append").parquet(dlq_path)
+        
+        return good_df, bad_df.count()</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="recovery" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre># Checkpoint-based recovery
+class CheckpointedETL:
+    def __init__(self, spark, checkpoint_path):
+        self.spark = spark
+        self.checkpoint_path = checkpoint_path
+    
+    def save_checkpoint(self, stage, data):
+        """Save checkpoint after each stage"""
+        checkpoint_file = f"{self.checkpoint_path}/{stage}"
+        data.write.mode("overwrite").parquet(checkpoint_file)
+        logger.info(f"Checkpoint saved: {stage}")
+    
+    def load_checkpoint(self, stage):
+        """Load from checkpoint if exists"""
+        checkpoint_file = f"{self.checkpoint_path}/{stage}"
+        try:
+            return self.spark.read.parquet(checkpoint_file)
+        except:
+            return None
+    
+    def run_with_checkpoints(self, source_path, target_path):
+        """Run ETL with checkpoint recovery"""
+        # Try to resume from last checkpoint
+        transformed = self.load_checkpoint("transformed")
+        
+        if transformed is None:
+            extracted = self.load_checkpoint("extracted")
+            if extracted is None:
+                extracted = self.spark.read.parquet(source_path)
+                self.save_checkpoint("extracted", extracted)
+            
+            transformed = extracted.transform(apply_transformations)
+            self.save_checkpoint("transformed", transformed)
+        
+        transformed.write.mode("overwrite").parquet(target_path)
+        logger.info("ETL completed successfully")
+
+# Transaction-like behavior with Delta Lake
+def atomic_write(df, target_path):
+    """Atomic write with rollback capability"""
+    temp_path = f"{target_path}_temp"
+    backup_path = f"{target_path}_backup"
+    
+    try:
+        df.write.format("delta").save(temp_path)
+        # Swap atomically
+        # ... implementation
+    except Exception as e:
+        # Rollback
+        logger.error(f"Write failed, rolling back: {e}")
+        raise</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showErrorFlow();
+        });
+        function showErrorFlow() {
+            viz.clear();
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x4dabf7, position: { x: -1.5, y: 0.5, z: 0 } });
+            viz.createLabel('Process', { x: -1.5, y: 1.3, z: 0 });
+            viz.createArrow({ x: -0.8, y: 0.5, z: 0 }, { x: 0.8, y: 0.8, z: 0 }, { color: 0x198754 });
+            viz.createArrow({ x: -0.8, y: 0.3, z: 0 }, { x: 0.8, y: 0, z: 0 }, { color: 0xe25a1c });
+            viz.createDataNode({ type: 'cube', size: 0.4, color: 0x198754, position: { x: 1.5, y: 0.8, z: 0 } });
+            viz.createLabel('Success', { x: 1.5, y: 1.4, z: 0 });
+            viz.createDataNode({ type: 'cube', size: 0.4, color: 0xe25a1c, position: { x: 1.5, y: 0, z: 0 } });
+            viz.createLabel('Error', { x: 1.5, y: -0.6, z: 0 });
+            viz.createLabel('Error Flow - Handle failures gracefully', { x: 0, y: -1.8, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showRetry() {
+            viz.clear();
+            for (let i = 0; i < 3; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.4, color: i < 2 ? 0xe25a1c : 0x198754, position: { x: -1 + i, y: 0.5, z: 0 } });
+                viz.createLabel(`Try ${i + 1}`, { x: -1 + i, y: 1.2, z: 0 });
+                if (i < 2) viz.createArrow({ x: -0.5 + i, y: 0.5, z: 0 }, { x: 0.3 + i, y: 0.5, z: 0 }, { color: 0x888888 });
+            }
+            viz.createLabel('Retry Logic - Exponential backoff', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

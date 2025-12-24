@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RDD Basics - PySpark Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </a>
+            <nav class="nav">
+                <a href="../../index.html#pyspark" class="nav-link active">PySpark</a>
+                <a href="../../index.html#pandas" class="nav-link">Pandas</a>
+                <a href="../../index.html#sql" class="nav-link">SQL</a>
+                <a href="../../index.html#etl" class="nav-link">ETL</a>
+                <a href="../../index.html#datawarehouse" class="nav-link">Data Warehouse</a>
+                <button class="theme-toggle">🌙</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <nav class="breadcrumb">
+            <span class="breadcrumb-item"><a href="../../index.html">Home</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item"><a href="../../index.html#pyspark">PySpark</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item">RDD Basics</span>
+        </nav>
+
+        <section class="section">
+            <h1>RDD Basics</h1>
+            <p>Resilient Distributed Datasets (RDDs) are the fundamental data structure in Apache Spark. They represent an immutable, distributed collection of objects that can be processed in parallel across a cluster.</p>
+
+            <div class="info-box info">
+                <strong>Key Concept:</strong> RDDs are fault-tolerant, meaning they can recover from node failures by recomputing lost partitions using lineage information.
+            </div>
+
+            <h2>3D Visualization: RDD Partitions</h2>
+            <p>This visualization shows how data is distributed across partitions in an RDD. Each cube represents a partition containing data elements.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showPartitions()">Show Partitions</button>
+                <button class="viz-btn" onclick="showTransformation()">Show Transformation</button>
+                <button class="viz-btn" onclick="resetView()">Reset View</button>
+            </div>
+
+            <h2>Understanding RDDs</h2>
+            
+            <h3>What is an RDD?</h3>
+            <p>An RDD (Resilient Distributed Dataset) is a fundamental data structure in Spark that represents an immutable, partitioned collection of elements that can be operated on in parallel. RDDs support two types of operations: transformations (which create a new RDD) and actions (which return a value to the driver program).</p>
+
+            <h3>Key Properties of RDDs</h3>
+            <ul style="color: var(--text-secondary); margin-left: 1.5rem;">
+                <li><strong>Immutable:</strong> Once created, RDDs cannot be modified</li>
+                <li><strong>Distributed:</strong> Data is partitioned across multiple nodes</li>
+                <li><strong>Resilient:</strong> Can recover from failures using lineage</li>
+                <li><strong>Lazy Evaluation:</strong> Transformations are not executed until an action is called</li>
+            </ul>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="create">Creating RDDs</button>
+                <button class="tab" data-tab="transform">Transformations</button>
+                <button class="tab" data-tab="actions">Actions</button>
+                <button class="tab" data-tab="persist">Persistence</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="create" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark import SparkContext, SparkConf
+
+# Initialize Spark Context
+conf = SparkConf().setAppName("RDD Basics").setMaster("local[*]")
+sc = SparkContext(conf=conf)
+
+# Method 1: Create RDD from a Python collection
+data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+rdd_from_list = sc.parallelize(data)
+print(f"RDD from list: {rdd_from_list.collect()}")
+
+# Method 2: Create RDD with specific number of partitions
+rdd_with_partitions = sc.parallelize(data, numSlices=4)
+print(f"Number of partitions: {rdd_with_partitions.getNumPartitions()}")
+
+# Method 3: Create RDD from a text file
+rdd_from_file = sc.textFile("data/sample.txt")
+print(f"First 5 lines: {rdd_from_file.take(5)}")
+
+# Method 4: Create RDD from multiple files using wildcards
+rdd_from_files = sc.textFile("data/*.txt")
+
+# Method 5: Create an empty RDD
+empty_rdd = sc.emptyRDD()
+print(f"Empty RDD count: {empty_rdd.count()}")
+
+# Method 6: Create RDD from a range
+range_rdd = sc.range(0, 100, 2)  # 0, 2, 4, ..., 98
+print(f"Range RDD: {range_rdd.take(10)}")
+
+# Clean up
+sc.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="transform" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark import SparkContext
+
+sc = SparkContext("local[*]", "RDD Transformations")
+
+# Sample data
+numbers = sc.parallelize([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+words = sc.parallelize(["hello world", "spark is awesome", "rdd basics"])
+
+# map() - Apply a function to each element
+squared = numbers.map(lambda x: x ** 2)
+print(f"Squared: {squared.collect()}")
+# Output: [1, 4, 9, 16, 25, 36, 49, 64, 81, 100]
+
+# filter() - Keep elements that satisfy a condition
+evens = numbers.filter(lambda x: x % 2 == 0)
+print(f"Even numbers: {evens.collect()}")
+# Output: [2, 4, 6, 8, 10]
+
+# flatMap() - Map and flatten the results
+word_list = words.flatMap(lambda line: line.split(" "))
+print(f"Words: {word_list.collect()}")
+# Output: ['hello', 'world', 'spark', 'is', 'awesome', 'rdd', 'basics']
+
+# distinct() - Remove duplicates
+data_with_dups = sc.parallelize([1, 2, 2, 3, 3, 3, 4])
+unique = data_with_dups.distinct()
+print(f"Unique: {unique.collect()}")
+# Output: [1, 2, 3, 4]
+
+# union() - Combine two RDDs
+rdd1 = sc.parallelize([1, 2, 3])
+rdd2 = sc.parallelize([4, 5, 6])
+combined = rdd1.union(rdd2)
+print(f"Union: {combined.collect()}")
+# Output: [1, 2, 3, 4, 5, 6]
+
+# intersection() - Common elements
+rdd3 = sc.parallelize([1, 2, 3, 4])
+rdd4 = sc.parallelize([3, 4, 5, 6])
+common = rdd3.intersection(rdd4)
+print(f"Intersection: {common.collect()}")
+# Output: [3, 4]
+
+# sortBy() - Sort elements
+unsorted = sc.parallelize([5, 2, 8, 1, 9])
+sorted_rdd = unsorted.sortBy(lambda x: x)
+print(f"Sorted: {sorted_rdd.collect()}")
+# Output: [1, 2, 5, 8, 9]
+
+# groupBy() - Group elements by a key
+grouped = numbers.groupBy(lambda x: "even" if x % 2 == 0 else "odd")
+result = {k: list(v) for k, v in grouped.collect()}
+print(f"Grouped: {result}")
+# Output: {'odd': [1, 3, 5, 7, 9], 'even': [2, 4, 6, 8, 10]}
+
+sc.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="actions" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark import SparkContext
+
+sc = SparkContext("local[*]", "RDD Actions")
+
+numbers = sc.parallelize([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+
+# collect() - Return all elements as a list
+all_data = numbers.collect()
+print(f"All data: {all_data}")
+# Output: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+# count() - Count number of elements
+total = numbers.count()
+print(f"Count: {total}")
+# Output: 10
+
+# first() - Return the first element
+first_elem = numbers.first()
+print(f"First: {first_elem}")
+# Output: 1
+
+# take(n) - Return first n elements
+first_five = numbers.take(5)
+print(f"First 5: {first_five}")
+# Output: [1, 2, 3, 4, 5]
+
+# takeSample() - Return random sample
+sample = numbers.takeSample(withReplacement=False, num=3, seed=42)
+print(f"Sample: {sample}")
+# Output: [3, 7, 2] (varies with seed)
+
+# reduce() - Aggregate elements using a function
+total_sum = numbers.reduce(lambda a, b: a + b)
+print(f"Sum: {total_sum}")
+# Output: 55
+
+# fold() - Aggregate with initial value
+sum_with_init = numbers.fold(0, lambda a, b: a + b)
+print(f"Fold sum: {sum_with_init}")
+# Output: 55
+
+# aggregate() - More flexible aggregation
+# (initial_value, seq_op, comb_op)
+sum_count = numbers.aggregate(
+    (0, 0),  # Initial value: (sum, count)
+    lambda acc, val: (acc[0] + val, acc[1] + 1),  # Sequence op
+    lambda acc1, acc2: (acc1[0] + acc2[0], acc1[1] + acc2[1])  # Combine op
+)
+print(f"Sum and Count: {sum_count}")
+# Output: (55, 10)
+
+# max() and min()
+maximum = numbers.max()
+minimum = numbers.min()
+print(f"Max: {maximum}, Min: {minimum}")
+# Output: Max: 10, Min: 1
+
+# mean() and stdev() (requires numeric RDD)
+mean_val = numbers.mean()
+std_val = numbers.stdev()
+print(f"Mean: {mean_val}, StdDev: {std_val:.2f}")
+# Output: Mean: 5.5, StdDev: 2.87
+
+# countByValue() - Count occurrences of each value
+data = sc.parallelize([1, 2, 2, 3, 3, 3])
+counts = data.countByValue()
+print(f"Value counts: {dict(counts)}")
+# Output: {1: 1, 2: 2, 3: 3}
+
+# foreach() - Apply function to each element (no return)
+def print_element(x):
+    print(f"Element: {x}")
+
+numbers.foreach(print_element)
+
+# saveAsTextFile() - Save to file
+numbers.saveAsTextFile("output/numbers")
+
+sc.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="persist" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark import SparkContext, StorageLevel
+
+sc = SparkContext("local[*]", "RDD Persistence")
+
+# Create an RDD with expensive computation
+data = sc.parallelize(range(1000000))
+expensive_rdd = data.map(lambda x: x ** 2).filter(lambda x: x % 2 == 0)
+
+# cache() - Store in memory (equivalent to persist(MEMORY_ONLY))
+expensive_rdd.cache()
+
+# First action triggers computation and caching
+count1 = expensive_rdd.count()
+print(f"First count (computed): {count1}")
+
+# Second action uses cached data (much faster)
+count2 = expensive_rdd.count()
+print(f"Second count (from cache): {count2}")
+
+# persist() with different storage levels
+rdd1 = sc.parallelize(range(100000))
+
+# MEMORY_ONLY - Store as deserialized objects in memory
+rdd1.persist(StorageLevel.MEMORY_ONLY)
+
+# MEMORY_AND_DISK - Spill to disk if memory is full
+rdd2 = sc.parallelize(range(100000))
+rdd2.persist(StorageLevel.MEMORY_AND_DISK)
+
+# DISK_ONLY - Store only on disk
+rdd3 = sc.parallelize(range(100000))
+rdd3.persist(StorageLevel.DISK_ONLY)
+
+# MEMORY_ONLY_SER - Store as serialized objects (more space efficient)
+rdd4 = sc.parallelize(range(100000))
+rdd4.persist(StorageLevel.MEMORY_ONLY_SER)
+
+# MEMORY_AND_DISK_SER - Serialized with disk spillover
+rdd5 = sc.parallelize(range(100000))
+rdd5.persist(StorageLevel.MEMORY_AND_DISK_SER)
+
+# Check if RDD is cached
+print(f"Is cached: {expensive_rdd.is_cached}")
+
+# unpersist() - Remove from cache
+expensive_rdd.unpersist()
+print(f"After unpersist, is cached: {expensive_rdd.is_cached}")
+
+# Best practices for caching:
+# 1. Cache RDDs that are used multiple times
+# 2. Don't cache RDDs that are only used once
+# 3. Use appropriate storage level based on memory constraints
+# 4. Unpersist when no longer needed to free memory
+
+# Example: When to cache
+def process_data():
+    raw_data = sc.textFile("large_file.txt")
+    
+    # This RDD is used multiple times - cache it!
+    processed = raw_data.map(lambda x: x.split(",")) \
+                        .filter(lambda x: len(x) > 3) \
+                        .cache()
+    
+    # Multiple actions on the same RDD
+    total_count = processed.count()
+    sample = processed.take(10)
+    
+    # Clean up
+    processed.unpersist()
+    
+    return total_count, sample
+
+sc.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h2>RDD Lineage and DAG</h2>
+            <p>Every RDD maintains a lineage graph that tracks all the transformations used to build it. This lineage enables fault tolerance - if a partition is lost, Spark can recompute it from the original data.</p>
+
+            <div class="code-container">
+                <div class="code-header">
+                    <span class="code-language">Python</span>
+                    <button class="copy-btn">Copy</button>
+                </div>
+                <div class="code-block">
+<pre>from pyspark import SparkContext
+
+sc = SparkContext("local[*]", "RDD Lineage")
+
+# Create a chain of transformations
+rdd1 = sc.parallelize([1, 2, 3, 4, 5])
+rdd2 = rdd1.map(lambda x: x * 2)
+rdd3 = rdd2.filter(lambda x: x > 4)
+rdd4 = rdd3.map(lambda x: (x, x ** 2))
+
+# View the lineage (debug string)
+print("RDD Lineage:")
+print(rdd4.toDebugString().decode('utf-8'))
+
+# Output shows the DAG:
+# (2) PythonRDD[4] at RDD at PythonRDD.scala:53 []
+#  |  PythonRDD[3] at RDD at PythonRDD.scala:53 []
+#  |  PythonRDD[2] at RDD at PythonRDD.scala:53 []
+#  |  ParallelCollectionRDD[0] at readRDDFromFile at PythonRDD.scala:274 []
+
+# Get number of partitions
+print(f"Number of partitions: {rdd4.getNumPartitions()}")
+
+# Repartition to change number of partitions
+rdd_repartitioned = rdd4.repartition(4)
+print(f"After repartition: {rdd_repartitioned.getNumPartitions()}")
+
+# Coalesce to reduce partitions (more efficient than repartition)
+rdd_coalesced = rdd_repartitioned.coalesce(2)
+print(f"After coalesce: {rdd_coalesced.getNumPartitions()}")
+
+sc.stop()</pre>
+                </div>
+            </div>
+
+            <div class="info-box tip">
+                <strong>Best Practice:</strong> Use <code>coalesce()</code> instead of <code>repartition()</code> when reducing the number of partitions, as it avoids a full shuffle.
+            </div>
+
+            <h2>Key Takeaways</h2>
+            <ul style="color: var(--text-secondary); margin-left: 1.5rem;">
+                <li>RDDs are immutable, distributed collections that form the foundation of Spark</li>
+                <li>Transformations are lazy - they build up a computation plan (DAG)</li>
+                <li>Actions trigger the actual computation</li>
+                <li>Lineage enables fault tolerance through recomputation</li>
+                <li>Caching can significantly improve performance for reused RDDs</li>
+            </ul>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../../index.html#pyspark" style="color: var(--text-muted);">← Back to PySpark</a>
+                <a href="../02_dataframes/index.html" style="color: var(--accent-primary);">Next: DataFrames →</a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+            <div class="footer-links">
+                <a href="https://github.com/sunkaramallikarjuna369/PySpark" class="footer-link">GitHub</a>
+            </div>
+        </div>
+    </footer>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', {
+                backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 0x1a1a2e : 0xf8f9fa,
+                cameraPosition: { x: 5, y: 3, z: 5 }
+            });
+            showPartitions();
+        });
+
+        function showPartitions() {
+            viz.clear();
+            
+            // Create partitions
+            const colors = [0xe25a1c, 0x4dabf7, 0x198754, 0x8b5cf6];
+            const partitionData = [
+                { x: -3, label: 'Partition 0' },
+                { x: -1, label: 'Partition 1' },
+                { x: 1, label: 'Partition 2' },
+                { x: 3, label: 'Partition 3' }
+            ];
+
+            partitionData.forEach((p, i) => {
+                // Create partition container
+                for (let j = 0; j < 4; j++) {
+                    viz.createDataNode({
+                        type: 'cube',
+                        size: 0.4,
+                        color: colors[i],
+                        position: { x: p.x, y: -1.5 + j * 0.6, z: 0 },
+                        animate: (obj) => {
+                            obj.rotation.y += 0.01;
+                        }
+                    });
+                }
+                viz.createLabel(p.label, { x: p.x, y: 1.2, z: 0 });
+            });
+
+            viz.createLabel('RDD with 4 Partitions', { x: 0, y: 2.2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showTransformation() {
+            viz.clear();
+            
+            // Source RDD
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({
+                    type: 'cube',
+                    size: 0.4,
+                    color: 0xe25a1c,
+                    position: { x: -3, y: 1 - i * 0.8, z: 0 }
+                });
+            }
+            viz.createLabel('Source RDD', { x: -3, y: 2, z: 0 });
+
+            // Transformation
+            const transform = viz.createDataNode({
+                type: 'cylinder',
+                size: 0.8,
+                color: 0x4dabf7,
+                position: { x: 0, y: 0, z: 0 },
+                animate: (obj) => {
+                    obj.rotation.y += 0.02;
+                }
+            });
+            viz.createLabel('map(x => x*2)', { x: 0, y: 1.5, z: 0 });
+
+            // Result RDD
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({
+                    type: 'cube',
+                    size: 0.4,
+                    color: 0x198754,
+                    position: { x: 3, y: 1 - i * 0.8, z: 0 }
+                });
+            }
+            viz.createLabel('Result RDD', { x: 3, y: 2, z: 0 });
+
+            // Arrows
+            viz.createArrow({ x: -2.5, y: 0, z: 0 }, { x: -0.6, y: 0, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.6, y: 0, z: 0 }, { x: 2.5, y: 0, z: 0 }, { color: 0x888888 });
+
+            // Data flow
+            viz.createDataFlow([
+                { x: -3, y: 0, z: 0 },
+                { x: 0, y: 0, z: 0 },
+                { x: 3, y: 0, z: 0 }
+            ], { color: 0x00ff00, particleCount: 5 });
+
+            viz.createGrid(10, 10);
+        }
+
+        function resetView() {
+            viz.camera.position.set(5, 3, 5);
+            viz.camera.lookAt(0, 0, 0);
+        }
+    </script>
+</body>
+</html>

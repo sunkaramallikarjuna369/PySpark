@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PySpark & Data Engineering Learning Hub</title>
+    <link rel="stylesheet" href="assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container header-content">
+            <div class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </div>
+            <nav class="nav">
+                <a href="#pyspark" class="nav-link">PySpark</a>
+                <a href="#pandas" class="nav-link">Pandas</a>
+                <a href="#sql" class="nav-link">SQL</a>
+                <a href="#etl" class="nav-link">ETL</a>
+                <a href="#datawarehouse" class="nav-link">Data Warehouse</a>
+                <button class="theme-toggle" aria-label="Toggle theme">🌙</button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <h1>Master Data Engineering</h1>
+            <p>Comprehensive learning platform with interactive 3D visualizations covering PySpark, Pandas, SQL, ETL, and Data Warehouse concepts. Perfect for students and enterprise professionals.</p>
+            
+            <!-- Search -->
+            <div class="search-container">
+                <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/>
+                    <path d="M21 21l-4.35-4.35"/>
+                </svg>
+                <input type="text" class="search-input" placeholder="Search concepts...">
+            </div>
+
+            <!-- Stats -->
+            <div style="display: flex; justify-content: center; gap: 3rem; margin-top: 2rem;">
+                <div style="text-align: center;">
+                    <div style="font-size: 2.5rem; font-weight: 700; color: var(--accent-primary);">69</div>
+                    <div style="color: var(--text-muted);">Concepts</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 2.5rem; font-weight: 700; color: var(--accent-primary);">5</div>
+                    <div style="color: var(--text-muted);">Categories</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 2.5rem; font-weight: 700; color: var(--accent-primary);">3D</div>
+                    <div style="color: var(--text-muted);">Visualizations</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- PySpark Section -->
+        <section id="pyspark" class="category-section section">
+            <div class="category-header">
+                <div class="category-icon pyspark">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                    </svg>
+                </div>
+                <div>
+                    <h2>PySpark</h2>
+                    <p style="margin: 0; color: var(--text-muted);">Apache Spark with Python - Distributed Data Processing</p>
+                </div>
+            </div>
+            <div class="card-grid">
+                <a href="pyspark/01_rdd_basics/index.html" class="card pyspark">
+                    <div class="card-icon" style="background: rgba(226, 90, 28, 0.1); color: var(--pyspark-color);">📦</div>
+                    <h3 class="card-title">RDD Basics</h3>
+                    <p class="card-description">Learn about Resilient Distributed Datasets - the fundamental data structure in Spark</p>
+                    <div class="card-meta"><span>15 min</span><span>Beginner</span></div>
+                </a>
+                <a href="pyspark/02_dataframes/index.html" class="card pyspark">
+                    <div class="card-icon" style="background: rgba(226, 90, 28, 0.1); color: var(--pyspark-color);">📊</div>
+                    <h3 class="card-title">DataFrames</h3>
+                    <p class="card-description">Structured data processing with Spark DataFrames and schemas</p>
+                    <div class="card-meta"><span>20 min</span><span>Beginner</span></div>
+                </a>
+                <a href="pyspark/03_transformations/index.html" class="card pyspark">
+                    <div class="card-icon" style="background: rgba(226, 90, 28, 0.1); color: var(--pyspark-color);">🔄</div>
+                    <h3 class="card-title">Transformations</h3>
+                    <p class="card-description">Map, filter, flatMap, and other lazy transformations</p>
+                    <div class="card-meta"><span>25 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="pyspark/04_actions/index.html" class="card pyspark">
+                    <div class="card-icon" style="background: rgba(226, 90, 28, 0.1); color: var(--pyspark-color);">⚡</div>
+                    <h3 class="card-title">Actions</h3>
+                    <p class="card-description">Collect, count, reduce, and other actions that trigger computation</p>
+                    <div class="card-meta"><span>20 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="pyspark/05_joins/index.html" class="card pyspark">
+                    <div class="card-icon" style="background: rgba(226, 90, 28, 0.1); color: var(--pyspark-color);">🔗</div>
+                    <h3 class="card-title">Joins</h3>
+                    <p class="card-description">Inner, outer, left, right, and cross joins in Spark</p>
+                    <div class="card-meta"><span>30 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="pyspark/06_window_functions/index.html" class="card pyspark">
+                    <div class="card-icon" style="background: rgba(226, 90, 28, 0.1); color: var(--pyspark-color);">🪟</div>
+                    <h3 class="card-title">Window Functions</h3>
+                    <p class="card-description">Row number, rank, lead, lag, and running aggregations</p>
+                    <div class="card-meta"><span>35 min</span><span>Advanced</span></div>
+                </a>
+                <a href="pyspark/07_aggregations/index.html" class="card pyspark">
+                    <div class="card-icon" style="background: rgba(226, 90, 28, 0.1); color: var(--pyspark-color);">📈</div>
+                    <h3 class="card-title">Aggregations</h3>
+                    <p class="card-description">GroupBy, agg, pivot, and cube operations</p>
+                    <div class="card-meta"><span>25 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="pyspark/08_udfs/index.html" class="card pyspark">
+                    <div class="card-icon" style="background: rgba(226, 90, 28, 0.1); color: var(--pyspark-color);">🛠️</div>
+                    <h3 class="card-title">User Defined Functions</h3>
+                    <p class="card-description">Create custom functions for Spark transformations</p>
+                    <div class="card-meta"><span>30 min</span><span>Advanced</span></div>
+                </a>
+                <a href="pyspark/09_spark_sql/index.html" class="card pyspark">
+                    <div class="card-icon" style="background: rgba(226, 90, 28, 0.1); color: var(--pyspark-color);">💾</div>
+                    <h3 class="card-title">Spark SQL</h3>
+                    <p class="card-description">Run SQL queries on Spark DataFrames</p>
+                    <div class="card-meta"><span>25 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="pyspark/10_partitioning_bucketing/index.html" class="card pyspark">
+                    <div class="card-icon" style="background: rgba(226, 90, 28, 0.1); color: var(--pyspark-color);">📁</div>
+                    <h3 class="card-title">Partitioning & Bucketing</h3>
+                    <p class="card-description">Optimize data layout for better performance</p>
+                    <div class="card-meta"><span>30 min</span><span>Advanced</span></div>
+                </a>
+                <a href="pyspark/11_caching_persistence/index.html" class="card pyspark">
+                    <div class="card-icon" style="background: rgba(226, 90, 28, 0.1); color: var(--pyspark-color);">💿</div>
+                    <h3 class="card-title">Caching & Persistence</h3>
+                    <p class="card-description">Cache and persist data for repeated access</p>
+                    <div class="card-meta"><span>20 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="pyspark/12_broadcast_variables/index.html" class="card pyspark">
+                    <div class="card-icon" style="background: rgba(226, 90, 28, 0.1); color: var(--pyspark-color);">📡</div>
+                    <h3 class="card-title">Broadcast Variables</h3>
+                    <p class="card-description">Efficiently share read-only data across nodes</p>
+                    <div class="card-meta"><span>20 min</span><span>Advanced</span></div>
+                </a>
+                <a href="pyspark/13_accumulators/index.html" class="card pyspark">
+                    <div class="card-icon" style="background: rgba(226, 90, 28, 0.1); color: var(--pyspark-color);">🔢</div>
+                    <h3 class="card-title">Accumulators</h3>
+                    <p class="card-description">Aggregate values across distributed tasks</p>
+                    <div class="card-meta"><span>20 min</span><span>Advanced</span></div>
+                </a>
+                <a href="pyspark/14_spark_streaming/index.html" class="card pyspark">
+                    <div class="card-icon" style="background: rgba(226, 90, 28, 0.1); color: var(--pyspark-color);">🌊</div>
+                    <h3 class="card-title">Spark Streaming</h3>
+                    <p class="card-description">Process real-time data streams with Spark</p>
+                    <div class="card-meta"><span>40 min</span><span>Advanced</span></div>
+                </a>
+                <a href="pyspark/15_performance_optimization/index.html" class="card pyspark">
+                    <div class="card-icon" style="background: rgba(226, 90, 28, 0.1); color: var(--pyspark-color);">🚀</div>
+                    <h3 class="card-title">Performance Optimization</h3>
+                    <p class="card-description">Best practices for optimizing Spark applications</p>
+                    <div class="card-meta"><span>45 min</span><span>Expert</span></div>
+                </a>
+            </div>
+        </section>
+
+        <!-- Pandas Section -->
+        <section id="pandas" class="category-section section">
+            <div class="category-header">
+                <div class="category-icon pandas">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="4" y="4" width="6" height="16" rx="1"/>
+                        <rect x="14" y="4" width="6" height="16" rx="1"/>
+                    </svg>
+                </div>
+                <div>
+                    <h2>Pandas</h2>
+                    <p style="margin: 0; color: var(--text-muted);">Python Data Analysis Library - Single-Node Data Processing</p>
+                </div>
+            </div>
+            <div class="card-grid">
+                <a href="pandas/01_series_dataframes/index.html" class="card pandas">
+                    <div class="card-icon" style="background: rgba(21, 4, 88, 0.1); color: var(--pandas-color);">📋</div>
+                    <h3 class="card-title">Series & DataFrames</h3>
+                    <p class="card-description">Core data structures in Pandas - Series and DataFrames</p>
+                    <div class="card-meta"><span>20 min</span><span>Beginner</span></div>
+                </a>
+                <a href="pandas/02_data_selection/index.html" class="card pandas">
+                    <div class="card-icon" style="background: rgba(21, 4, 88, 0.1); color: var(--pandas-color);">🎯</div>
+                    <h3 class="card-title">Data Selection</h3>
+                    <p class="card-description">Select data using loc, iloc, and indexing</p>
+                    <div class="card-meta"><span>25 min</span><span>Beginner</span></div>
+                </a>
+                <a href="pandas/03_filtering_indexing/index.html" class="card pandas">
+                    <div class="card-icon" style="background: rgba(21, 4, 88, 0.1); color: var(--pandas-color);">🔍</div>
+                    <h3 class="card-title">Filtering & Boolean Indexing</h3>
+                    <p class="card-description">Filter data using conditions and boolean masks</p>
+                    <div class="card-meta"><span>20 min</span><span>Beginner</span></div>
+                </a>
+                <a href="pandas/04_groupby_operations/index.html" class="card pandas">
+                    <div class="card-icon" style="background: rgba(21, 4, 88, 0.1); color: var(--pandas-color);">📊</div>
+                    <h3 class="card-title">GroupBy Operations</h3>
+                    <p class="card-description">Split-apply-combine pattern with groupby</p>
+                    <div class="card-meta"><span>30 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="pandas/05_merge_join_concat/index.html" class="card pandas">
+                    <div class="card-icon" style="background: rgba(21, 4, 88, 0.1); color: var(--pandas-color);">🔗</div>
+                    <h3 class="card-title">Merge, Join & Concat</h3>
+                    <p class="card-description">Combine DataFrames using merge, join, and concat</p>
+                    <div class="card-meta"><span>30 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="pandas/06_pivot_tables/index.html" class="card pandas">
+                    <div class="card-icon" style="background: rgba(21, 4, 88, 0.1); color: var(--pandas-color);">📐</div>
+                    <h3 class="card-title">Pivot Tables</h3>
+                    <p class="card-description">Create pivot tables and cross-tabulations</p>
+                    <div class="card-meta"><span>25 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="pandas/07_reshaping_data/index.html" class="card pandas">
+                    <div class="card-icon" style="background: rgba(21, 4, 88, 0.1); color: var(--pandas-color);">🔄</div>
+                    <h3 class="card-title">Reshaping Data</h3>
+                    <p class="card-description">Melt, stack, unstack, and pivot operations</p>
+                    <div class="card-meta"><span>25 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="pandas/08_time_series/index.html" class="card pandas">
+                    <div class="card-icon" style="background: rgba(21, 4, 88, 0.1); color: var(--pandas-color);">⏰</div>
+                    <h3 class="card-title">Time Series</h3>
+                    <p class="card-description">Work with datetime data and time series analysis</p>
+                    <div class="card-meta"><span>35 min</span><span>Advanced</span></div>
+                </a>
+                <a href="pandas/09_missing_data/index.html" class="card pandas">
+                    <div class="card-icon" style="background: rgba(21, 4, 88, 0.1); color: var(--pandas-color);">❓</div>
+                    <h3 class="card-title">Missing Data</h3>
+                    <p class="card-description">Handle NaN, None, and missing values</p>
+                    <div class="card-meta"><span>20 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="pandas/10_string_operations/index.html" class="card pandas">
+                    <div class="card-icon" style="background: rgba(21, 4, 88, 0.1); color: var(--pandas-color);">📝</div>
+                    <h3 class="card-title">String Operations</h3>
+                    <p class="card-description">Vectorized string methods and text processing</p>
+                    <div class="card-meta"><span>25 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="pandas/11_apply_lambda/index.html" class="card pandas">
+                    <div class="card-icon" style="background: rgba(21, 4, 88, 0.1); color: var(--pandas-color);">λ</div>
+                    <h3 class="card-title">Apply & Lambda</h3>
+                    <p class="card-description">Apply custom functions to DataFrames</p>
+                    <div class="card-meta"><span>25 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="pandas/12_multi_index/index.html" class="card pandas">
+                    <div class="card-icon" style="background: rgba(21, 4, 88, 0.1); color: var(--pandas-color);">📚</div>
+                    <h3 class="card-title">Multi-Index</h3>
+                    <p class="card-description">Hierarchical indexing with MultiIndex</p>
+                    <div class="card-meta"><span>30 min</span><span>Advanced</span></div>
+                </a>
+                <a href="pandas/13_data_types/index.html" class="card pandas">
+                    <div class="card-icon" style="background: rgba(21, 4, 88, 0.1); color: var(--pandas-color);">🏷️</div>
+                    <h3 class="card-title">Data Types</h3>
+                    <p class="card-description">Understanding and converting data types</p>
+                    <div class="card-meta"><span>20 min</span><span>Beginner</span></div>
+                </a>
+                <a href="pandas/14_reading_writing/index.html" class="card pandas">
+                    <div class="card-icon" style="background: rgba(21, 4, 88, 0.1); color: var(--pandas-color);">💾</div>
+                    <h3 class="card-title">Reading & Writing Data</h3>
+                    <p class="card-description">Read and write CSV, Excel, JSON, Parquet files</p>
+                    <div class="card-meta"><span>25 min</span><span>Beginner</span></div>
+                </a>
+                <a href="pandas/15_performance_tips/index.html" class="card pandas">
+                    <div class="card-icon" style="background: rgba(21, 4, 88, 0.1); color: var(--pandas-color);">🚀</div>
+                    <h3 class="card-title">Performance Tips</h3>
+                    <p class="card-description">Optimize Pandas operations for speed</p>
+                    <div class="card-meta"><span>30 min</span><span>Advanced</span></div>
+                </a>
+            </div>
+        </section>
+
+        <!-- SQL Section -->
+        <section id="sql" class="category-section section">
+            <div class="category-header">
+                <div class="category-icon sql">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <ellipse cx="12" cy="6" rx="8" ry="3"/>
+                        <path d="M4 6v6c0 1.657 3.582 3 8 3s8-1.343 8-3V6"/>
+                        <path d="M4 12v6c0 1.657 3.582 3 8 3s8-1.343 8-3v-6"/>
+                    </svg>
+                </div>
+                <div>
+                    <h2>SQL</h2>
+                    <p style="margin: 0; color: var(--text-muted);">Structured Query Language - Database Querying</p>
+                </div>
+            </div>
+            <div class="card-grid">
+                <a href="sql/01_select_basics/index.html" class="card sql">
+                    <div class="card-icon" style="background: rgba(51, 103, 145, 0.1); color: var(--sql-color);">📋</div>
+                    <h3 class="card-title">SELECT Basics</h3>
+                    <p class="card-description">Basic SELECT statements and column selection</p>
+                    <div class="card-meta"><span>15 min</span><span>Beginner</span></div>
+                </a>
+                <a href="sql/02_where_filtering/index.html" class="card sql">
+                    <div class="card-icon" style="background: rgba(51, 103, 145, 0.1); color: var(--sql-color);">🔍</div>
+                    <h3 class="card-title">WHERE & Filtering</h3>
+                    <p class="card-description">Filter rows using WHERE clause and conditions</p>
+                    <div class="card-meta"><span>20 min</span><span>Beginner</span></div>
+                </a>
+                <a href="sql/03_joins/index.html" class="card sql">
+                    <div class="card-icon" style="background: rgba(51, 103, 145, 0.1); color: var(--sql-color);">🔗</div>
+                    <h3 class="card-title">JOINs</h3>
+                    <p class="card-description">INNER, LEFT, RIGHT, FULL, and CROSS joins</p>
+                    <div class="card-meta"><span>35 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="sql/04_group_by/index.html" class="card sql">
+                    <div class="card-icon" style="background: rgba(51, 103, 145, 0.1); color: var(--sql-color);">📊</div>
+                    <h3 class="card-title">GROUP BY</h3>
+                    <p class="card-description">Aggregate data using GROUP BY and functions</p>
+                    <div class="card-meta"><span>25 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="sql/05_having_clause/index.html" class="card sql">
+                    <div class="card-icon" style="background: rgba(51, 103, 145, 0.1); color: var(--sql-color);">🎯</div>
+                    <h3 class="card-title">HAVING Clause</h3>
+                    <p class="card-description">Filter aggregated results with HAVING</p>
+                    <div class="card-meta"><span>15 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="sql/06_order_by/index.html" class="card sql">
+                    <div class="card-icon" style="background: rgba(51, 103, 145, 0.1); color: var(--sql-color);">📈</div>
+                    <h3 class="card-title">ORDER BY</h3>
+                    <p class="card-description">Sort results with ORDER BY clause</p>
+                    <div class="card-meta"><span>15 min</span><span>Beginner</span></div>
+                </a>
+                <a href="sql/07_subqueries/index.html" class="card sql">
+                    <div class="card-icon" style="background: rgba(51, 103, 145, 0.1); color: var(--sql-color);">🔄</div>
+                    <h3 class="card-title">Subqueries</h3>
+                    <p class="card-description">Nested queries and correlated subqueries</p>
+                    <div class="card-meta"><span>30 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="sql/08_ctes/index.html" class="card sql">
+                    <div class="card-icon" style="background: rgba(51, 103, 145, 0.1); color: var(--sql-color);">📦</div>
+                    <h3 class="card-title">Common Table Expressions</h3>
+                    <p class="card-description">WITH clause and recursive CTEs</p>
+                    <div class="card-meta"><span>30 min</span><span>Advanced</span></div>
+                </a>
+                <a href="sql/09_window_functions/index.html" class="card sql">
+                    <div class="card-icon" style="background: rgba(51, 103, 145, 0.1); color: var(--sql-color);">🪟</div>
+                    <h3 class="card-title">Window Functions</h3>
+                    <p class="card-description">ROW_NUMBER, RANK, LEAD, LAG, and more</p>
+                    <div class="card-meta"><span>40 min</span><span>Advanced</span></div>
+                </a>
+                <a href="sql/10_union_set_operations/index.html" class="card sql">
+                    <div class="card-icon" style="background: rgba(51, 103, 145, 0.1); color: var(--sql-color);">⚙️</div>
+                    <h3 class="card-title">UNION & Set Operations</h3>
+                    <p class="card-description">UNION, INTERSECT, and EXCEPT operations</p>
+                    <div class="card-meta"><span>20 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="sql/11_case_statements/index.html" class="card sql">
+                    <div class="card-icon" style="background: rgba(51, 103, 145, 0.1); color: var(--sql-color);">🔀</div>
+                    <h3 class="card-title">CASE Statements</h3>
+                    <p class="card-description">Conditional logic with CASE expressions</p>
+                    <div class="card-meta"><span>20 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="sql/12_null_handling/index.html" class="card sql">
+                    <div class="card-icon" style="background: rgba(51, 103, 145, 0.1); color: var(--sql-color);">❓</div>
+                    <h3 class="card-title">NULL Handling</h3>
+                    <p class="card-description">Working with NULL values and COALESCE</p>
+                    <div class="card-meta"><span>20 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="sql/13_indexes_performance/index.html" class="card sql">
+                    <div class="card-icon" style="background: rgba(51, 103, 145, 0.1); color: var(--sql-color);">🚀</div>
+                    <h3 class="card-title">Indexes & Performance</h3>
+                    <p class="card-description">Create indexes and optimize query performance</p>
+                    <div class="card-meta"><span>35 min</span><span>Advanced</span></div>
+                </a>
+                <a href="sql/14_views/index.html" class="card sql">
+                    <div class="card-icon" style="background: rgba(51, 103, 145, 0.1); color: var(--sql-color);">👁️</div>
+                    <h3 class="card-title">Views</h3>
+                    <p class="card-description">Create and manage views and materialized views</p>
+                    <div class="card-meta"><span>25 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="sql/15_stored_procedures/index.html" class="card sql">
+                    <div class="card-icon" style="background: rgba(51, 103, 145, 0.1); color: var(--sql-color);">⚡</div>
+                    <h3 class="card-title">Stored Procedures</h3>
+                    <p class="card-description">Create reusable stored procedures and functions</p>
+                    <div class="card-meta"><span>35 min</span><span>Advanced</span></div>
+                </a>
+            </div>
+        </section>
+
+        <!-- ETL Section -->
+        <section id="etl" class="category-section section">
+            <div class="category-header">
+                <div class="category-icon etl">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M4 4h4v4H4zM16 4h4v4h-4zM10 16h4v4h-4z"/>
+                        <path d="M6 8v4h2V8zM18 8v4h-2V8zM12 12v4h-2v-4z" fill-opacity="0.5"/>
+                    </svg>
+                </div>
+                <div>
+                    <h2>ETL</h2>
+                    <p style="margin: 0; color: var(--text-muted);">Extract, Transform, Load - Data Pipeline Concepts</p>
+                </div>
+            </div>
+            <div class="card-grid">
+                <a href="etl/01_etl_vs_elt/index.html" class="card etl">
+                    <div class="card-icon" style="background: rgba(0, 168, 107, 0.1); color: var(--etl-color);">⚖️</div>
+                    <h3 class="card-title">ETL vs ELT</h3>
+                    <p class="card-description">Compare ETL and ELT approaches and when to use each</p>
+                    <div class="card-meta"><span>20 min</span><span>Beginner</span></div>
+                </a>
+                <a href="etl/02_data_extraction/index.html" class="card etl">
+                    <div class="card-icon" style="background: rgba(0, 168, 107, 0.1); color: var(--etl-color);">📥</div>
+                    <h3 class="card-title">Data Extraction</h3>
+                    <p class="card-description">Extract data from various sources - APIs, databases, files</p>
+                    <div class="card-meta"><span>30 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="etl/03_data_transformation/index.html" class="card etl">
+                    <div class="card-icon" style="background: rgba(0, 168, 107, 0.1); color: var(--etl-color);">🔄</div>
+                    <h3 class="card-title">Data Transformation</h3>
+                    <p class="card-description">Transform data - cleaning, mapping, aggregating</p>
+                    <div class="card-meta"><span>35 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="etl/04_data_loading/index.html" class="card etl">
+                    <div class="card-icon" style="background: rgba(0, 168, 107, 0.1); color: var(--etl-color);">📤</div>
+                    <h3 class="card-title">Data Loading</h3>
+                    <p class="card-description">Load data into target systems efficiently</p>
+                    <div class="card-meta"><span>25 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="etl/05_incremental_full_load/index.html" class="card etl">
+                    <div class="card-icon" style="background: rgba(0, 168, 107, 0.1); color: var(--etl-color);">📊</div>
+                    <h3 class="card-title">Incremental vs Full Load</h3>
+                    <p class="card-description">Choose between incremental and full load strategies</p>
+                    <div class="card-meta"><span>25 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="etl/06_change_data_capture/index.html" class="card etl">
+                    <div class="card-icon" style="background: rgba(0, 168, 107, 0.1); color: var(--etl-color);">🔔</div>
+                    <h3 class="card-title">Change Data Capture</h3>
+                    <p class="card-description">Track and capture data changes in real-time</p>
+                    <div class="card-meta"><span>35 min</span><span>Advanced</span></div>
+                </a>
+                <a href="etl/07_data_quality/index.html" class="card etl">
+                    <div class="card-icon" style="background: rgba(0, 168, 107, 0.1); color: var(--etl-color);">✅</div>
+                    <h3 class="card-title">Data Quality</h3>
+                    <p class="card-description">Validate and ensure data quality in pipelines</p>
+                    <div class="card-meta"><span>30 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="etl/08_error_handling/index.html" class="card etl">
+                    <div class="card-icon" style="background: rgba(0, 168, 107, 0.1); color: var(--etl-color);">🛡️</div>
+                    <h3 class="card-title">Error Handling</h3>
+                    <p class="card-description">Handle errors gracefully in ETL pipelines</p>
+                    <div class="card-meta"><span>25 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="etl/09_logging_monitoring/index.html" class="card etl">
+                    <div class="card-icon" style="background: rgba(0, 168, 107, 0.1); color: var(--etl-color);">📊</div>
+                    <h3 class="card-title">Logging & Monitoring</h3>
+                    <p class="card-description">Monitor ETL pipelines and track metrics</p>
+                    <div class="card-meta"><span>25 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="etl/10_scheduling_orchestration/index.html" class="card etl">
+                    <div class="card-icon" style="background: rgba(0, 168, 107, 0.1); color: var(--etl-color);">⏰</div>
+                    <h3 class="card-title">Scheduling & Orchestration</h3>
+                    <p class="card-description">Schedule and orchestrate ETL workflows</p>
+                    <div class="card-meta"><span>35 min</span><span>Advanced</span></div>
+                </a>
+                <a href="etl/11_data_lineage/index.html" class="card etl">
+                    <div class="card-icon" style="background: rgba(0, 168, 107, 0.1); color: var(--etl-color);">🔍</div>
+                    <h3 class="card-title">Data Lineage</h3>
+                    <p class="card-description">Track data origin and transformations</p>
+                    <div class="card-meta"><span>25 min</span><span>Advanced</span></div>
+                </a>
+                <a href="etl/12_etl_best_practices/index.html" class="card etl">
+                    <div class="card-icon" style="background: rgba(0, 168, 107, 0.1); color: var(--etl-color);">🏆</div>
+                    <h3 class="card-title">ETL Best Practices</h3>
+                    <p class="card-description">Industry best practices for ETL development</p>
+                    <div class="card-meta"><span>30 min</span><span>Advanced</span></div>
+                </a>
+            </div>
+        </section>
+
+        <!-- Data Warehouse Section -->
+        <section id="datawarehouse" class="category-section section">
+            <div class="category-header">
+                <div class="category-icon dw">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="2" y="3" width="20" height="6" rx="1"/>
+                        <rect x="2" y="11" width="20" height="6" rx="1"/>
+                        <circle cx="6" cy="6" r="1.5"/>
+                        <circle cx="6" cy="14" r="1.5"/>
+                    </svg>
+                </div>
+                <div>
+                    <h2>Data Warehouse</h2>
+                    <p style="margin: 0; color: var(--text-muted);">Data Warehouse Design and Architecture</p>
+                </div>
+            </div>
+            <div class="card-grid">
+                <a href="datawarehouse/01_dw_architecture/index.html" class="card dw">
+                    <div class="card-icon" style="background: rgba(139, 92, 246, 0.1); color: var(--dw-color);">🏗️</div>
+                    <h3 class="card-title">DW Architecture</h3>
+                    <p class="card-description">Data warehouse architecture and components</p>
+                    <div class="card-meta"><span>30 min</span><span>Beginner</span></div>
+                </a>
+                <a href="datawarehouse/02_star_schema/index.html" class="card dw">
+                    <div class="card-icon" style="background: rgba(139, 92, 246, 0.1); color: var(--dw-color);">⭐</div>
+                    <h3 class="card-title">Star Schema</h3>
+                    <p class="card-description">Design star schema with fact and dimension tables</p>
+                    <div class="card-meta"><span>35 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="datawarehouse/03_snowflake_schema/index.html" class="card dw">
+                    <div class="card-icon" style="background: rgba(139, 92, 246, 0.1); color: var(--dw-color);">❄️</div>
+                    <h3 class="card-title">Snowflake Schema</h3>
+                    <p class="card-description">Normalized dimension tables in snowflake schema</p>
+                    <div class="card-meta"><span>30 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="datawarehouse/04_fact_tables/index.html" class="card dw">
+                    <div class="card-icon" style="background: rgba(139, 92, 246, 0.1); color: var(--dw-color);">📊</div>
+                    <h3 class="card-title">Fact Tables</h3>
+                    <p class="card-description">Design fact tables - transactional, periodic, accumulating</p>
+                    <div class="card-meta"><span>30 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="datawarehouse/05_dimension_tables/index.html" class="card dw">
+                    <div class="card-icon" style="background: rgba(139, 92, 246, 0.1); color: var(--dw-color);">📋</div>
+                    <h3 class="card-title">Dimension Tables</h3>
+                    <p class="card-description">Design dimension tables with attributes and hierarchies</p>
+                    <div class="card-meta"><span>30 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="datawarehouse/06_slowly_changing_dimensions/index.html" class="card dw">
+                    <div class="card-icon" style="background: rgba(139, 92, 246, 0.1); color: var(--dw-color);">🔄</div>
+                    <h3 class="card-title">Slowly Changing Dimensions</h3>
+                    <p class="card-description">SCD Types 1, 2, 3 and hybrid approaches</p>
+                    <div class="card-meta"><span>40 min</span><span>Advanced</span></div>
+                </a>
+                <a href="datawarehouse/07_olap_vs_oltp/index.html" class="card dw">
+                    <div class="card-icon" style="background: rgba(139, 92, 246, 0.1); color: var(--dw-color);">⚖️</div>
+                    <h3 class="card-title">OLAP vs OLTP</h3>
+                    <p class="card-description">Compare analytical and transactional processing</p>
+                    <div class="card-meta"><span>25 min</span><span>Beginner</span></div>
+                </a>
+                <a href="datawarehouse/08_data_marts/index.html" class="card dw">
+                    <div class="card-icon" style="background: rgba(139, 92, 246, 0.1); color: var(--dw-color);">🏪</div>
+                    <h3 class="card-title">Data Marts</h3>
+                    <p class="card-description">Design subject-specific data marts</p>
+                    <div class="card-meta"><span>25 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="datawarehouse/09_kimball_vs_inmon/index.html" class="card dw">
+                    <div class="card-icon" style="background: rgba(139, 92, 246, 0.1); color: var(--dw-color);">📚</div>
+                    <h3 class="card-title">Kimball vs Inmon</h3>
+                    <p class="card-description">Compare dimensional and normalized approaches</p>
+                    <div class="card-meta"><span>30 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="datawarehouse/10_surrogate_keys/index.html" class="card dw">
+                    <div class="card-icon" style="background: rgba(139, 92, 246, 0.1); color: var(--dw-color);">🔑</div>
+                    <h3 class="card-title">Surrogate Keys</h3>
+                    <p class="card-description">Use surrogate keys for dimension tables</p>
+                    <div class="card-meta"><span>20 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="datawarehouse/11_conformed_dimensions/index.html" class="card dw">
+                    <div class="card-icon" style="background: rgba(139, 92, 246, 0.1); color: var(--dw-color);">🔗</div>
+                    <h3 class="card-title">Conformed Dimensions</h3>
+                    <p class="card-description">Share dimensions across fact tables and marts</p>
+                    <div class="card-meta"><span>25 min</span><span>Advanced</span></div>
+                </a>
+                <a href="datawarehouse/12_dw_best_practices/index.html" class="card dw">
+                    <div class="card-icon" style="background: rgba(139, 92, 246, 0.1); color: var(--dw-color);">🏆</div>
+                    <h3 class="card-title">DW Best Practices</h3>
+                    <p class="card-description">Industry best practices for data warehouse design</p>
+                    <div class="card-meta"><span>35 min</span><span>Advanced</span></div>
+                </a>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container footer-content">
+            <div>
+                <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+                <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Enterprise-grade learning with 3D visualizations</p>
+            </div>
+            <div class="footer-links">
+                <a href="https://github.com/sunkaramallikarjuna369/PySpark" class="footer-link">GitHub</a>
+                <a href="CONTRIBUTING.md" class="footer-link">Contribute</a>
+                <a href="LICENSE" class="footer-link">License</a>
+            </div>
+        </div>
+    </footer>
+
+    <script src="assets/js/main.js"></script>
+    <script src="assets/js/visualization.js"></script>
+</body>
+</html>

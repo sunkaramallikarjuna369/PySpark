@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Performance Optimization - PySpark Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </a>
+            <nav class="nav">
+                <a href="../../index.html#pyspark" class="nav-link active">PySpark</a>
+                <a href="../../index.html#pandas" class="nav-link">Pandas</a>
+                <a href="../../index.html#sql" class="nav-link">SQL</a>
+                <a href="../../index.html#etl" class="nav-link">ETL</a>
+                <a href="../../index.html#datawarehouse" class="nav-link">Data Warehouse</a>
+                <button class="theme-toggle">🌙</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <nav class="breadcrumb">
+            <span class="breadcrumb-item"><a href="../../index.html">Home</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item"><a href="../../index.html#pyspark">PySpark</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item">Performance Optimization</span>
+        </nav>
+
+        <section class="section">
+            <h1>Performance Optimization</h1>
+            <p>Optimizing Spark applications involves understanding the execution model, memory management, and data distribution. This guide covers key techniques to improve performance and reduce costs.</p>
+
+            <div class="info-box info">
+                <strong>Key Concept:</strong> Performance optimization in Spark focuses on minimizing data shuffles, optimizing memory usage, and leveraging the Catalyst optimizer effectively.
+            </div>
+
+            <h2>3D Visualization: Optimization Techniques</h2>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showDataSkew()">Data Skew</button>
+                <button class="viz-btn" onclick="showShuffleOptimization()">Shuffle Optimization</button>
+                <button class="viz-btn" onclick="showMemoryManagement()">Memory Management</button>
+            </div>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="config">Configuration</button>
+                <button class="tab" data-tab="skew">Data Skew</button>
+                <button class="tab" data-tab="memory">Memory & Shuffle</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="config" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+
+# Optimized Spark session configuration
+spark = SparkSession.builder \
+    .appName("Performance Optimization") \
+    .config("spark.sql.adaptive.enabled", "true") \
+    .config("spark.sql.adaptive.coalescePartitions.enabled", "true") \
+    .config("spark.sql.adaptive.skewJoin.enabled", "true") \
+    .config("spark.sql.shuffle.partitions", "200") \
+    .config("spark.default.parallelism", "200") \
+    .config("spark.sql.autoBroadcastJoinThreshold", "10485760") \
+    .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer") \
+    .config("spark.sql.parquet.compression.codec", "snappy") \
+    .getOrCreate()
+
+# Key configurations explained:
+
+# Adaptive Query Execution (AQE) - Spark 3.0+
+spark.conf.set("spark.sql.adaptive.enabled", "true")
+# Dynamically coalesce shuffle partitions
+spark.conf.set("spark.sql.adaptive.coalescePartitions.enabled", "true")
+# Handle skewed joins automatically
+spark.conf.set("spark.sql.adaptive.skewJoin.enabled", "true")
+
+# Shuffle partitions (default 200, adjust based on data size)
+# Rule: partition_size should be 128MB - 200MB
+spark.conf.set("spark.sql.shuffle.partitions", "auto")  # AQE auto-tune
+
+# Broadcast join threshold (default 10MB)
+spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "52428800")  # 50MB
+
+# Memory configuration
+spark.conf.set("spark.memory.fraction", "0.6")  # Execution + Storage
+spark.conf.set("spark.memory.storageFraction", "0.5")  # Storage portion
+
+# Serialization
+spark.conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+spark.conf.set("spark.kryoserializer.buffer.max", "1024m")
+
+# Dynamic allocation
+spark.conf.set("spark.dynamicAllocation.enabled", "true")
+spark.conf.set("spark.dynamicAllocation.minExecutors", "1")
+spark.conf.set("spark.dynamicAllocation.maxExecutors", "100")
+
+# Speculation (re-run slow tasks)
+spark.conf.set("spark.speculation", "true")
+spark.conf.set("spark.speculation.multiplier", "1.5")
+
+# View current configuration
+print("Current Spark Configuration:")
+for item in spark.sparkContext.getConf().getAll():
+    if "spark.sql" in item[0] or "spark.memory" in item[0]:
+        print(f"  {item[0]}: {item[1]}")
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="skew" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, rand, when, lit, concat
+
+spark = SparkSession.builder.appName("Data Skew Handling").getOrCreate()
+
+# Create skewed data
+skewed_df = spark.range(1000000).withColumn(
+    "key",
+    when(col("id") < 900000, lit("hot_key"))  # 90% same key
+    .otherwise(concat(lit("key_"), col("id")))
+)
+
+# Problem: Skewed join
+small_df = spark.createDataFrame([("hot_key", "value1")], ["key", "data"])
+
+# BAD: Direct join causes one partition to be overloaded
+# skewed_df.join(small_df, "key").count()
+
+# Solution 1: Salting technique
+from pyspark.sql.functions import floor, array, explode
+
+# Add salt to skewed key
+num_salts = 10
+salted_skewed = skewed_df.withColumn(
+    "salted_key",
+    concat(col("key"), lit("_"), (rand() * num_salts).cast("int"))
+)
+
+# Explode small table with all salt values
+salt_values = spark.range(num_salts).select(col("id").alias("salt"))
+salted_small = small_df.crossJoin(salt_values).withColumn(
+    "salted_key",
+    concat(col("key"), lit("_"), col("salt"))
+)
+
+# Join on salted key
+result = salted_skewed.join(salted_small, "salted_key")
+
+# Solution 2: Broadcast join for small tables
+from pyspark.sql.functions import broadcast
+
+result_broadcast = skewed_df.join(broadcast(small_df), "key")
+
+# Solution 3: AQE Skew Join (Spark 3.0+)
+spark.conf.set("spark.sql.adaptive.enabled", "true")
+spark.conf.set("spark.sql.adaptive.skewJoin.enabled", "true")
+spark.conf.set("spark.sql.adaptive.skewJoin.skewedPartitionFactor", "5")
+spark.conf.set("spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes", "256MB")
+
+# Solution 4: Isolate and process hot keys separately
+hot_keys = ["hot_key"]
+hot_df = skewed_df.filter(col("key").isin(hot_keys))
+normal_df = skewed_df.filter(~col("key").isin(hot_keys))
+
+# Process separately and union
+hot_result = hot_df.join(broadcast(small_df), "key")
+normal_result = normal_df.join(small_df, "key")
+final_result = hot_result.union(normal_result)
+
+# Detect skew
+print("Partition distribution:")
+skewed_df.groupBy("key").count().orderBy(col("count").desc()).show(10)
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="memory" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, broadcast
+
+spark = SparkSession.builder.appName("Memory & Shuffle Optimization").getOrCreate()
+
+# 1. Reduce shuffle by filtering early
+df = spark.range(10000000)
+
+# BAD: Filter after expensive operation
+# df.repartition(100).filter(col("id") < 1000).count()
+
+# GOOD: Filter before expensive operation
+df.filter(col("id") < 1000).repartition(10).count()
+
+# 2. Use appropriate partition count
+# Rule: 2-4 partitions per CPU core
+# Rule: 128MB - 200MB per partition
+
+data_size_gb = 100
+target_partition_mb = 128
+num_partitions = int((data_size_gb * 1024) / target_partition_mb)
+print(f"Recommended partitions for {data_size_gb}GB: {num_partitions}")
+
+# 3. Coalesce vs Repartition
+large_df = spark.range(10000000).repartition(200)
+
+# Use coalesce to reduce partitions (no shuffle)
+reduced = large_df.coalesce(50)
+
+# Use repartition only when increasing or need even distribution
+redistributed = large_df.repartition(100, "id")
+
+# 4. Avoid collect() on large datasets
+# BAD: df.collect()
+# GOOD: df.take(100) or df.limit(100).collect()
+
+# 5. Use appropriate file formats
+# Parquet: Best for analytics (columnar, compressed)
+# ORC: Good for Hive integration
+# Avro: Good for row-based operations
+
+# 6. Predicate pushdown
+# Spark automatically pushes filters to data source
+df_parquet = spark.read.parquet("/path/to/data")
+filtered = df_parquet.filter(col("date") == "2023-01-01")
+filtered.explain()  # Check for PushedFilters
+
+# 7. Column pruning
+# Only select needed columns
+df_parquet.select("col1", "col2").show()  # Better than select("*")
+
+# 8. Cache strategically
+expensive_df = df.groupBy("id").count()
+expensive_df.cache()
+expensive_df.count()  # Trigger caching
+# Use cached data multiple times
+expensive_df.filter(col("count") > 1).count()
+expensive_df.unpersist()  # Release when done
+
+# 9. Avoid UDFs when possible
+# BAD: Using Python UDF
+# @udf
+# def add_one(x): return x + 1
+
+# GOOD: Use built-in functions
+from pyspark.sql.functions import lit
+df.withColumn("new_col", col("id") + lit(1))
+
+# 10. Monitor with Spark UI
+# Check: Stages, Storage, Executors tabs
+# Look for: Shuffle read/write, GC time, Task duration
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-box tip">
+                <strong>Best Practice:</strong> Always use <code>explain()</code> to understand your query execution plan. Look for unnecessary shuffles, skewed partitions, and opportunities for broadcast joins.
+            </div>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../14_spark_streaming/index.html" style="color: var(--text-muted);">← Previous: Spark Streaming</a>
+                <a href="../../index.html#pyspark" style="color: var(--accent-primary);">Back to PySpark Topics →</a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+        </div>
+    </footer>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', {
+                backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 0x1a1a2e : 0xf8f9fa,
+                cameraPosition: { x: 6, y: 4, z: 6 }
+            });
+            showDataSkew();
+        });
+
+        function showDataSkew() {
+            viz.clear();
+            
+            // Skewed partitions
+            const partitions = [
+                { x: -2, size: 1.5, label: 'P1 (90%)' },
+                { x: 0, size: 0.3, label: 'P2 (3%)' },
+                { x: 1.5, size: 0.3, label: 'P3 (3%)' },
+                { x: 2.5, size: 0.3, label: 'P4 (4%)' }
+            ];
+
+            partitions.forEach(p => {
+                viz.createDataNode({
+                    type: 'cube', size: p.size, color: p.size > 1 ? 0xe25a1c : 0x4dabf7,
+                    position: { x: p.x, y: p.size / 2, z: 0 }
+                });
+                viz.createLabel(p.label, { x: p.x, y: p.size + 0.5, z: 0 });
+            });
+
+            viz.createLabel('Data Skew - Uneven partition distribution', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showShuffleOptimization() {
+            viz.clear();
+            
+            // Before optimization (many shuffles)
+            viz.createLabel('Before', { x: -2, y: 2.5, z: 0 });
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.3, color: 0xe25a1c,
+                    position: { x: -2.5 + i * 0.4, y: 1.5, z: 0 }
+                });
+                viz.createDataNode({
+                    type: 'cube', size: 0.3, color: 0xe25a1c,
+                    position: { x: -2.5 + i * 0.4, y: 0.5, z: 0 }
+                });
+            }
+
+            // After optimization (fewer shuffles)
+            viz.createLabel('After', { x: 2, y: 2.5, z: 0 });
+            for (let i = 0; i < 2; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.5, color: 0x198754,
+                    position: { x: 1.5 + i * 0.7, y: 1, z: 0 }
+                });
+            }
+
+            viz.createArrow({ x: -0.5, y: 1, z: 0 }, { x: 1, y: 1, z: 0 }, { color: 0x888888 });
+
+            viz.createLabel('Shuffle Optimization - Reduce data movement', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showMemoryManagement() {
+            viz.clear();
+            
+            // Memory regions
+            viz.createDataNode({ type: 'cube', size: 1.5, color: 0x4dabf7, position: { x: -1.5, y: 0.75, z: 0 } });
+            viz.createLabel('Execution', { x: -1.5, y: 2, z: 0 });
+
+            viz.createDataNode({ type: 'cube', size: 1, color: 0x198754, position: { x: 1, y: 0.5, z: 0 } });
+            viz.createLabel('Storage', { x: 1, y: 1.5, z: 0 });
+
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0x8b5cf6, position: { x: 2.5, y: 0.3, z: 0 } });
+            viz.createLabel('User', { x: 2.5, y: 1, z: 0 });
+
+            // Unified memory arrow
+            viz.createArrow({ x: -0.5, y: 0.5, z: 0 }, { x: 0.5, y: 0.5, z: 0 }, { color: 0xffc107 });
+            viz.createLabel('Unified', { x: 0, y: 0.8, z: 0 });
+
+            viz.createLabel('Memory Management - Unified memory model', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

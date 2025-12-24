@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Incremental vs Full Load - ETL Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#etl" class="nav-link active">ETL</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Incremental vs Full Load</h1>
+            <p>Full load replaces all data each time, while incremental load only processes new or changed records. Choosing the right strategy impacts performance and resource usage.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showFullLoad()">Full Load</button>
+                <button class="viz-btn" onclick="showIncremental()">Incremental</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="full">Full Load</button>
+                <button class="tab" data-tab="incremental">Incremental Load</button>
+                <button class="tab" data-tab="strategies">Strategies</button>
+            </div>
+            <div class="tab-contents">
+                <div id="full" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("FullLoad").getOrCreate()
+
+# Full Load: Extract all data and replace target
+def full_load(source_path, target_path):
+    """
+    Full load strategy:
+    - Extract ALL records from source
+    - Transform data
+    - Replace ALL data in target
+    """
+    # Extract all data
+    source_df = spark.read.parquet(source_path)
+    
+    # Transform
+    transformed_df = source_df.transform(apply_transformations)
+    
+    # Load (overwrite)
+    transformed_df.write.mode("overwrite").parquet(target_path)
+    
+    return transformed_df.count()
+
+# When to use Full Load:
+# - Small datasets (< 1 million rows)
+# - Reference/dimension tables
+# - When source doesn't track changes
+# - Initial data load
+# - Data reconciliation/refresh
+
+# Pros:
+# - Simple implementation
+# - Always consistent with source
+# - No tracking of changes needed
+
+# Cons:
+# - Resource intensive for large data
+# - Longer processing time
+# - Higher storage costs (if versioning)
+# - Network bandwidth for large transfers</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="incremental" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, max as spark_max
+from datetime import datetime
+
+spark = SparkSession.builder.appName("IncrementalLoad").getOrCreate()
+
+# Incremental Load: Only process new/changed records
+def incremental_load_by_timestamp(source_path, target_path, watermark_path):
+    """
+    Timestamp-based incremental load:
+    - Track last processed timestamp
+    - Extract only records after watermark
+    - Append to target
+    """
+    # Get last watermark
+    try:
+        watermark_df = spark.read.parquet(watermark_path)
+        last_watermark = watermark_df.collect()[0]["last_processed"]
+    except:
+        last_watermark = "1900-01-01 00:00:00"
+    
+    # Extract only new records
+    source_df = spark.read.parquet(source_path)
+    new_records = source_df.filter(col("updated_at") > last_watermark)
+    
+    if new_records.count() > 0:
+        # Transform
+        transformed_df = new_records.transform(apply_transformations)
+        
+        # Load (append)
+        transformed_df.write.mode("append").parquet(target_path)
+        
+        # Update watermark
+        new_watermark = new_records.agg(spark_max("updated_at")).collect()[0][0]
+        spark.createDataFrame([(new_watermark,)], ["last_processed"]) \
+            .write.mode("overwrite").parquet(watermark_path)
+    
+    return new_records.count()
+
+# ID-based incremental load
+def incremental_load_by_id(source_path, target_path, state_path):
+    """Extract records with ID greater than last processed"""
+    last_id = get_last_processed_id(state_path)
+    new_records = spark.read.parquet(source_path).filter(col("id") > last_id)
+    # ... process and save</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="strategies" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre># Delta/Merge strategy (upsert)
+from delta.tables import DeltaTable
+
+def merge_load(source_df, target_path, key_columns):
+    """
+    Merge/Upsert: Insert new, update existing
+    Best for: Slowly changing data with updates
+    """
+    if DeltaTable.isDeltaTable(spark, target_path):
+        target = DeltaTable.forPath(spark, target_path)
+        
+        merge_condition = " AND ".join([
+            f"target.{col} = source.{col}" for col in key_columns
+        ])
+        
+        target.alias("target").merge(
+            source_df.alias("source"),
+            merge_condition
+        ).whenMatchedUpdateAll() \
+         .whenNotMatchedInsertAll() \
+         .execute()
+    else:
+        source_df.write.format("delta").save(target_path)
+
+# Comparison table
+"""
+| Strategy    | Use Case                  | Pros                    | Cons                    |
+|-------------|---------------------------|-------------------------|-------------------------|
+| Full Load   | Small data, dimensions    | Simple, consistent      | Slow, resource heavy    |
+| Timestamp   | Append-only data          | Fast, efficient         | Needs timestamp column  |
+| ID-based    | Sequential inserts        | Simple tracking         | Misses updates          |
+| CDC         | Any changes               | Captures all changes    | Complex setup           |
+| Merge/Upsert| Updates + inserts         | Handles both            | Needs unique key        |
+"""</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showFullLoad();
+        });
+        function showFullLoad() {
+            viz.clear();
+            for (let i = 0; i < 5; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.35, color: 0x4dabf7, position: { x: -2, y: 1.5 - i * 0.6, z: 0 } });
+                viz.createArrow({ x: -1.4, y: 1.5 - i * 0.6, z: 0 }, { x: 1.4, y: 1.5 - i * 0.6, z: 0 }, { color: 0x888888 });
+                viz.createDataNode({ type: 'cube', size: 0.35, color: 0x198754, position: { x: 2, y: 1.5 - i * 0.6, z: 0 } });
+            }
+            viz.createLabel('Source', { x: -2, y: 2.3, z: 0 });
+            viz.createLabel('Target', { x: 2, y: 2.3, z: 0 });
+            viz.createLabel('Full Load - All records every time', { x: 0, y: -1.8, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showIncremental() {
+            viz.clear();
+            for (let i = 0; i < 5; i++) {
+                const isNew = i >= 3;
+                viz.createDataNode({ type: 'cube', size: 0.35, color: isNew ? 0xe25a1c : 0x333333, position: { x: -2, y: 1.5 - i * 0.6, z: 0 } });
+                if (isNew) {
+                    viz.createArrow({ x: -1.4, y: 1.5 - i * 0.6, z: 0 }, { x: 1.4, y: 1.5 - i * 0.6, z: 0 }, { color: 0x888888 });
+                }
+                viz.createDataNode({ type: 'cube', size: 0.35, color: 0x198754, position: { x: 2, y: 1.5 - i * 0.6, z: 0 } });
+            }
+            viz.createLabel('Source', { x: -2, y: 2.3, z: 0 });
+            viz.createLabel('Target', { x: 2, y: 2.3, z: 0 });
+            viz.createLabel('Incremental - Only new/changed records', { x: 0, y: -1.8, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

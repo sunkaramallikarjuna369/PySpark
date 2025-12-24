@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fact Tables - DW Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#datawarehouse" class="nav-link active">Data Warehouse</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Fact Tables</h1>
+            <p>Fact tables store quantitative data for analysis and are the central tables in dimensional models, containing measures and foreign keys to dimensions.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showFactTypes()">Fact Types</button>
+                <button class="viz-btn" onclick="showGranularity()">Granularity</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="types">Fact Types</button>
+                <button class="tab" data-tab="measures">Measures</button>
+                <button class="tab" data-tab="design">Design Patterns</button>
+            </div>
+            <div class="tab-contents">
+                <div id="types" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- FACT TABLE TYPES
+
+-- 1. TRANSACTION FACT TABLE
+-- Records individual transactions at lowest grain
+-- Most common type
+CREATE TABLE fact_sales_transaction (
+    transaction_id INT PRIMARY KEY,
+    date_key INT,
+    product_key INT,
+    customer_key INT,
+    store_key INT,
+    quantity INT,
+    unit_price DECIMAL(10,2),
+    discount DECIMAL(5,2),
+    total_amount DECIMAL(12,2)
+);
+
+-- 2. PERIODIC SNAPSHOT FACT TABLE
+-- Captures state at regular intervals
+-- Good for inventory, balances
+CREATE TABLE fact_inventory_snapshot (
+    snapshot_date_key INT,
+    product_key INT,
+    warehouse_key INT,
+    quantity_on_hand INT,
+    quantity_on_order INT,
+    reorder_point INT,
+    PRIMARY KEY (snapshot_date_key, product_key, warehouse_key)
+);
+
+-- 3. ACCUMULATING SNAPSHOT FACT TABLE
+-- Tracks process milestones
+-- Updated as process progresses
+CREATE TABLE fact_order_fulfillment (
+    order_key INT PRIMARY KEY,
+    order_date_key INT,
+    ship_date_key INT,
+    delivery_date_key INT,
+    customer_key INT,
+    order_amount DECIMAL(12,2),
+    shipping_cost DECIMAL(10,2),
+    days_to_ship INT,
+    days_to_deliver INT
+);
+
+-- 4. FACTLESS FACT TABLE
+-- Records events without measures
+-- Tracks occurrences
+CREATE TABLE fact_student_attendance (
+    date_key INT,
+    student_key INT,
+    class_key INT,
+    PRIMARY KEY (date_key, student_key, class_key)
+);</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="measures" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- MEASURE TYPES IN FACT TABLES
+
+-- 1. ADDITIVE MEASURES
+-- Can be summed across all dimensions
+-- Examples: sales_amount, quantity, profit
+SELECT 
+    SUM(sales_amount) as total_sales,  -- Valid across all dims
+    SUM(quantity) as total_units
+FROM fact_sales
+GROUP BY region, product_category;
+
+-- 2. SEMI-ADDITIVE MEASURES
+-- Can be summed across some dimensions, not time
+-- Examples: account_balance, inventory_quantity
+SELECT 
+    product_key,
+    AVG(quantity_on_hand) as avg_inventory,  -- Average over time
+    MAX(quantity_on_hand) as max_inventory   -- Not SUM over time
+FROM fact_inventory_snapshot
+GROUP BY product_key;
+
+-- 3. NON-ADDITIVE MEASURES
+-- Cannot be summed, must use other aggregations
+-- Examples: ratios, percentages, unit_price
+SELECT 
+    product_key,
+    AVG(unit_price) as avg_price,      -- Average, not sum
+    AVG(profit_margin) as avg_margin   -- Percentage
+FROM fact_sales
+GROUP BY product_key;
+
+-- DERIVED MEASURES (calculated)
+SELECT 
+    date_key,
+    SUM(quantity * unit_price) as gross_sales,
+    SUM(quantity * unit_price * (1 - discount)) as net_sales,
+    SUM(quantity * unit_price) - SUM(quantity * cost) as profit
+FROM fact_sales
+GROUP BY date_key;</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="design" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, sum as spark_sum, count, avg
+
+spark = SparkSession.builder.appName("FactTables").getOrCreate()
+
+# GRANULARITY - Most important design decision
+# Grain = level of detail in fact table
+
+# Fine grain (transaction level)
+# - One row per transaction
+# - Maximum flexibility
+# - Larger storage
+fine_grain_fact = spark.read.parquet("/dw/fact_sales_transaction/")
+
+# Coarse grain (aggregated)
+# - One row per day/product
+# - Faster queries
+# - Less flexibility
+coarse_grain_fact = fine_grain_fact.groupBy(
+    "date_key", "product_key"
+).agg(
+    spark_sum("quantity").alias("total_quantity"),
+    spark_sum("total_amount").alias("total_sales"),
+    count("*").alias("transaction_count")
+)
+
+# DEGENERATE DIMENSIONS
+# Dimension attributes stored in fact table
+# No separate dimension table needed
+# Examples: order_number, invoice_number, receipt_number
+
+fact_with_degenerate = spark.createDataFrame([
+    (1, 20240115, 1, "ORD-001", 100.00),  # order_number is degenerate dim
+    (2, 20240115, 2, "ORD-002", 150.00)
+], ["fact_key", "date_key", "customer_key", "order_number", "amount"])
+
+# JUNK DIMENSIONS
+# Combine low-cardinality flags into single dimension
+junk_dim = spark.createDataFrame([
+    (1, "Y", "N", "Standard"),
+    (2, "Y", "Y", "Express"),
+    (3, "N", "N", "Standard")
+], ["junk_key", "is_promotion", "is_gift", "shipping_type"])</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showFactTypes();
+        });
+        function showFactTypes() {
+            viz.clear();
+            const types = [
+                { name: 'Transaction', color: 0x4dabf7 },
+                { name: 'Periodic', color: 0xe25a1c },
+                { name: 'Accumulating', color: 0x198754 },
+                { name: 'Factless', color: 0x8b5cf6 }
+            ];
+            types.forEach((t, i) => {
+                viz.createDataNode({ type: 'cube', size: 0.5, color: t.color, position: { x: -1.5 + i, y: 0.5, z: 0 } });
+                viz.createLabel(t.name, { x: -1.5 + i, y: 1.3, z: 0 });
+            });
+            viz.createLabel('Fact Table Types', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showGranularity() {
+            viz.clear();
+            // Fine grain (many small cubes)
+            for (let i = 0; i < 9; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.2, color: 0x4dabf7, position: { x: -1.5 + (i % 3) * 0.4, y: 0.3 + Math.floor(i / 3) * 0.4, z: 0 } });
+            }
+            viz.createLabel('Fine Grain', { x: -1.1, y: 1.8, z: 0 });
+            // Coarse grain (one large cube)
+            viz.createDataNode({ type: 'cube', size: 0.8, color: 0xe25a1c, position: { x: 1.5, y: 0.5, z: 0 } });
+            viz.createLabel('Coarse Grain', { x: 1.5, y: 1.5, z: 0 });
+            viz.createLabel('Granularity - Level of Detail', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

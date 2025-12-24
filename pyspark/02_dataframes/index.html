@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DataFrames - PySpark Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </a>
+            <nav class="nav">
+                <a href="../../index.html#pyspark" class="nav-link active">PySpark</a>
+                <a href="../../index.html#pandas" class="nav-link">Pandas</a>
+                <a href="../../index.html#sql" class="nav-link">SQL</a>
+                <a href="../../index.html#etl" class="nav-link">ETL</a>
+                <a href="../../index.html#datawarehouse" class="nav-link">Data Warehouse</a>
+                <button class="theme-toggle">🌙</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <nav class="breadcrumb">
+            <span class="breadcrumb-item"><a href="../../index.html">Home</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item"><a href="../../index.html#pyspark">PySpark</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item">DataFrames</span>
+        </nav>
+
+        <section class="section">
+            <h1>Spark DataFrames</h1>
+            <p>DataFrames are distributed collections of data organized into named columns, similar to tables in a relational database. They provide a higher-level abstraction than RDDs with optimizations through Catalyst optimizer and Tungsten execution engine.</p>
+
+            <div class="info-box info">
+                <strong>Key Concept:</strong> DataFrames combine the benefits of RDDs (distributed processing) with the optimizations of structured data (schema, query optimization).
+            </div>
+
+            <h2>3D Visualization: DataFrame Structure</h2>
+            <p>This visualization shows how a DataFrame is organized with columns and rows, distributed across partitions.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showDataFrame()">DataFrame Structure</button>
+                <button class="viz-btn" onclick="showSchema()">Schema View</button>
+                <button class="viz-btn" onclick="showPartitions()">Partitions</button>
+            </div>
+
+            <h2>Understanding DataFrames</h2>
+            
+            <h3>DataFrame vs RDD</h3>
+            <p>While RDDs are the fundamental data structure in Spark, DataFrames provide several advantages including automatic optimization, schema enforcement, and a more intuitive API for structured data processing.</p>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="create">Creating DataFrames</button>
+                <button class="tab" data-tab="schema">Schema Operations</button>
+                <button class="tab" data-tab="select">Selection & Filtering</button>
+                <button class="tab" data-tab="transform">Transformations</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="create" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType
+
+# Create SparkSession
+spark = SparkSession.builder \
+    .appName("DataFrame Basics") \
+    .master("local[*]") \
+    .getOrCreate()
+
+# Method 1: From a list of tuples
+data = [
+    ("Alice", 25, "Engineering"),
+    ("Bob", 30, "Marketing"),
+    ("Charlie", 35, "Engineering"),
+    ("Diana", 28, "Sales")
+]
+columns = ["name", "age", "department"]
+df1 = spark.createDataFrame(data, columns)
+df1.show()
+
+# Method 2: From a list of dictionaries
+data_dict = [
+    {"name": "Alice", "age": 25, "salary": 50000.0},
+    {"name": "Bob", "age": 30, "salary": 60000.0},
+    {"name": "Charlie", "age": 35, "salary": 75000.0}
+]
+df2 = spark.createDataFrame(data_dict)
+df2.show()
+
+# Method 3: With explicit schema
+schema = StructType([
+    StructField("name", StringType(), True),
+    StructField("age", IntegerType(), True),
+    StructField("salary", DoubleType(), True)
+])
+df3 = spark.createDataFrame(data_dict, schema)
+df3.printSchema()
+
+# Method 4: From CSV file
+df_csv = spark.read.csv("data/employees.csv", header=True, inferSchema=True)
+
+# Method 5: From JSON file
+df_json = spark.read.json("data/employees.json")
+
+# Method 6: From Parquet file
+df_parquet = spark.read.parquet("data/employees.parquet")
+
+# Method 7: From a Pandas DataFrame
+import pandas as pd
+pandas_df = pd.DataFrame(data, columns=columns)
+df_from_pandas = spark.createDataFrame(pandas_df)
+
+# Method 8: From an RDD
+rdd = spark.sparkContext.parallelize(data)
+df_from_rdd = rdd.toDF(columns)
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="schema" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.types import *
+
+spark = SparkSession.builder.appName("Schema Operations").getOrCreate()
+
+# Define a complex schema
+schema = StructType([
+    StructField("id", IntegerType(), False),
+    StructField("name", StringType(), True),
+    StructField("age", IntegerType(), True),
+    StructField("salary", DoubleType(), True),
+    StructField("department", StringType(), True),
+    StructField("address", StructType([
+        StructField("street", StringType(), True),
+        StructField("city", StringType(), True),
+        StructField("zip", StringType(), True)
+    ]), True),
+    StructField("skills", ArrayType(StringType()), True),
+    StructField("metadata", MapType(StringType(), StringType()), True)
+])
+
+# Create DataFrame with schema
+data = [(
+    1, "Alice", 25, 50000.0, "Engineering",
+    ("123 Main St", "NYC", "10001"),
+    ["Python", "Spark", "SQL"],
+    {"level": "senior", "team": "data"}
+)]
+
+df = spark.createDataFrame(data, schema)
+
+# View schema
+df.printSchema()
+
+# Get schema as StructType
+print(f"Schema: {df.schema}")
+
+# Get column names
+print(f"Columns: {df.columns}")
+
+# Get data types
+print(f"Data types: {df.dtypes}")
+
+# Describe statistics
+df.describe().show()
+
+# Cast column types
+from pyspark.sql.functions import col
+df_casted = df.withColumn("age", col("age").cast("double"))
+
+# Add new column
+df_with_new = df.withColumn("bonus", col("salary") * 0.1)
+
+# Rename column
+df_renamed = df.withColumnRenamed("name", "employee_name")
+
+# Drop column
+df_dropped = df.drop("metadata")
+
+# Select specific columns with new names
+df_selected = df.select(
+    col("name").alias("employee"),
+    col("salary").alias("annual_salary")
+)
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="select" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, lit, when, expr
+
+spark = SparkSession.builder.appName("Selection & Filtering").getOrCreate()
+
+# Sample data
+data = [
+    ("Alice", 25, "Engineering", 50000),
+    ("Bob", 30, "Marketing", 60000),
+    ("Charlie", 35, "Engineering", 75000),
+    ("Diana", 28, "Sales", 55000),
+    ("Eve", 32, "Engineering", 80000)
+]
+df = spark.createDataFrame(data, ["name", "age", "department", "salary"])
+
+# Select columns
+df.select("name", "age").show()
+df.select(col("name"), col("salary")).show()
+df.select(df.name, df.salary).show()
+
+# Select with expressions
+df.select(
+    col("name"),
+    (col("salary") / 12).alias("monthly_salary"),
+    expr("salary * 0.1 as bonus")
+).show()
+
+# Filter rows
+df.filter(col("age") > 28).show()
+df.filter("age > 28").show()
+df.where(col("department") == "Engineering").show()
+
+# Multiple conditions
+df.filter(
+    (col("age") > 25) & (col("salary") > 55000)
+).show()
+
+df.filter(
+    (col("department") == "Engineering") | (col("department") == "Sales")
+).show()
+
+# NOT condition
+df.filter(~(col("department") == "Marketing")).show()
+
+# LIKE pattern matching
+df.filter(col("name").like("A%")).show()
+df.filter(col("name").rlike("^[A-C].*")).show()  # Regex
+
+# IN clause
+df.filter(col("department").isin("Engineering", "Sales")).show()
+
+# BETWEEN
+df.filter(col("age").between(25, 32)).show()
+
+# IS NULL / IS NOT NULL
+df.filter(col("name").isNull()).show()
+df.filter(col("name").isNotNull()).show()
+
+# Conditional column with WHEN
+df.select(
+    col("name"),
+    col("salary"),
+    when(col("salary") > 70000, "High")
+    .when(col("salary") > 55000, "Medium")
+    .otherwise("Low").alias("salary_level")
+).show()
+
+# Distinct values
+df.select("department").distinct().show()
+
+# Drop duplicates
+df.dropDuplicates(["department"]).show()
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="transform" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+
+spark = SparkSession.builder.appName("Transformations").getOrCreate()
+
+data = [
+    ("Alice", 25, "Engineering", 50000),
+    ("Bob", 30, "Marketing", 60000),
+    ("Charlie", 35, "Engineering", 75000),
+    ("Diana", 28, "Sales", 55000),
+    ("Eve", 32, "Engineering", 80000)
+]
+df = spark.createDataFrame(data, ["name", "age", "department", "salary"])
+
+# Add columns
+df = df.withColumn("bonus", col("salary") * 0.1)
+df = df.withColumn("total_comp", col("salary") + col("bonus"))
+
+# String functions
+df.select(
+    upper(col("name")).alias("upper_name"),
+    lower(col("department")).alias("lower_dept"),
+    length(col("name")).alias("name_length"),
+    concat(col("name"), lit(" - "), col("department")).alias("combined")
+).show()
+
+# Numeric functions
+df.select(
+    col("salary"),
+    round(col("salary") / 12, 2).alias("monthly"),
+    floor(col("salary") / 1000).alias("thousands"),
+    ceil(col("salary") / 1000).alias("thousands_ceil")
+).show()
+
+# Date functions
+from datetime import date
+df_dates = spark.createDataFrame([
+    (1, date(2023, 1, 15)),
+    (2, date(2023, 6, 20)),
+    (3, date(2023, 12, 25))
+], ["id", "date"])
+
+df_dates.select(
+    col("date"),
+    year(col("date")).alias("year"),
+    month(col("date")).alias("month"),
+    dayofmonth(col("date")).alias("day"),
+    dayofweek(col("date")).alias("dow"),
+    date_format(col("date"), "yyyy-MM-dd").alias("formatted"),
+    date_add(col("date"), 30).alias("plus_30_days"),
+    datediff(current_date(), col("date")).alias("days_ago")
+).show()
+
+# Array functions
+df_arrays = spark.createDataFrame([
+    (1, ["Python", "Spark", "SQL"]),
+    (2, ["Java", "Scala"]),
+    (3, ["Python", "R", "Julia", "SQL"])
+], ["id", "skills"])
+
+df_arrays.select(
+    col("skills"),
+    size(col("skills")).alias("num_skills"),
+    array_contains(col("skills"), "Python").alias("knows_python"),
+    explode(col("skills")).alias("skill")
+).show()
+
+# Sorting
+df.orderBy("salary").show()
+df.orderBy(col("salary").desc()).show()
+df.orderBy(col("department").asc(), col("salary").desc()).show()
+
+# Limit
+df.limit(3).show()
+
+# Sample
+df.sample(fraction=0.5, seed=42).show()
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h2>Key Takeaways</h2>
+            <ul style="color: var(--text-secondary); margin-left: 1.5rem;">
+                <li>DataFrames provide a structured, optimized way to work with data in Spark</li>
+                <li>Schema enforcement ensures data quality and enables optimizations</li>
+                <li>The Catalyst optimizer automatically optimizes DataFrame operations</li>
+                <li>DataFrames support SQL-like operations with a fluent API</li>
+                <li>Multiple data sources are supported (CSV, JSON, Parquet, JDBC, etc.)</li>
+            </ul>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../01_rdd_basics/index.html" style="color: var(--text-muted);">← Previous: RDD Basics</a>
+                <a href="../03_transformations/index.html" style="color: var(--accent-primary);">Next: Transformations →</a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+        </div>
+    </footer>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', {
+                backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 0x1a1a2e : 0xf8f9fa,
+                cameraPosition: { x: 6, y: 4, z: 6 }
+            });
+            showDataFrame();
+        });
+
+        function showDataFrame() {
+            viz.clear();
+            
+            // Create table-like structure
+            const columns = ['ID', 'Name', 'Age', 'Dept'];
+            const colors = [0xe25a1c, 0x4dabf7, 0x198754, 0x8b5cf6];
+            
+            // Header row
+            columns.forEach((col, i) => {
+                viz.createDataNode({
+                    type: 'cube',
+                    size: 0.8,
+                    color: colors[i],
+                    position: { x: -2 + i * 1.5, y: 2, z: 0 }
+                });
+                viz.createLabel(col, { x: -2 + i * 1.5, y: 2.8, z: 0 });
+            });
+
+            // Data rows
+            for (let row = 0; row < 4; row++) {
+                for (let col = 0; col < 4; col++) {
+                    viz.createDataNode({
+                        type: 'cube',
+                        size: 0.6,
+                        color: 0x666666,
+                        position: { x: -2 + col * 1.5, y: 0.5 - row * 1, z: 0 }
+                    });
+                }
+            }
+
+            viz.createLabel('DataFrame', { x: 0.5, y: 3.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showSchema() {
+            viz.clear();
+            
+            // Schema tree
+            viz.createDataNode({
+                type: 'sphere',
+                size: 0.8,
+                color: 0xe25a1c,
+                position: { x: 0, y: 2, z: 0 }
+            });
+            viz.createLabel('Schema', { x: 0, y: 3, z: 0 });
+
+            const fields = [
+                { name: 'id: Int', x: -3 },
+                { name: 'name: String', x: -1 },
+                { name: 'age: Int', x: 1 },
+                { name: 'salary: Double', x: 3 }
+            ];
+
+            fields.forEach(f => {
+                viz.createDataNode({
+                    type: 'cube',
+                    size: 0.5,
+                    color: 0x4dabf7,
+                    position: { x: f.x, y: 0, z: 0 }
+                });
+                viz.createLabel(f.name, { x: f.x, y: -0.8, z: 0 });
+                viz.createConnection(
+                    { x: 0, y: 1.5, z: 0 },
+                    { x: f.x, y: 0.4, z: 0 },
+                    { color: 0x888888 }
+                );
+            });
+
+            viz.createGrid(10, 10);
+        }
+
+        function showPartitions() {
+            viz.clear();
+            
+            const colors = [0xe25a1c, 0x4dabf7, 0x198754];
+            
+            for (let p = 0; p < 3; p++) {
+                for (let r = 0; r < 3; r++) {
+                    viz.createDataNode({
+                        type: 'cube',
+                        size: 0.5,
+                        color: colors[p],
+                        position: { x: -2 + p * 2, y: 1 - r * 0.8, z: 0 }
+                    });
+                }
+                viz.createLabel(`Partition ${p}`, { x: -2 + p * 2, y: 2, z: 0 });
+            }
+
+            viz.createLabel('Distributed DataFrame', { x: 0, y: 3, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

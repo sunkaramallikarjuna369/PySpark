@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Filtering & Boolean Indexing - Pandas Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav">
+                <a href="../../index.html#pandas" class="nav-link active">Pandas</a>
+                <button class="theme-toggle">🌙</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="section">
+            <h1>Filtering & Boolean Indexing</h1>
+            <p>Boolean indexing allows you to filter DataFrames using conditions that return True/False values. This is one of the most powerful features in Pandas for data analysis.</p>
+
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showBooleanMask()">Boolean Mask</button>
+                <button class="viz-btn" onclick="showFiltered()">Filtered Result</button>
+            </div>
+
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="basic">Basic Filtering</button>
+                <button class="tab" data-tab="multiple">Multiple Conditions</button>
+                <button class="tab" data-tab="string">String Filtering</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="basic" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+df = pd.DataFrame({
+    'name': ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve'],
+    'age': [25, 30, 35, 28, 22],
+    'salary': [50000, 60000, 75000, 55000, 45000],
+    'dept': ['IT', 'HR', 'IT', 'Finance', 'IT']
+})
+
+# Simple comparison
+print("Age > 28:")
+print(df[df['age'] > 28])
+
+# Equality check
+print("\nDepartment == 'IT':")
+print(df[df['dept'] == 'IT'])
+
+# Not equal
+print("\nDepartment != 'IT':")
+print(df[df['dept'] != 'IT'])
+
+# Between values
+print("\nSalary between 50000 and 60000:")
+print(df[df['salary'].between(50000, 60000)])
+
+# isin for multiple values
+print("\nAge in [25, 30, 35]:")
+print(df[df['age'].isin([25, 30, 35])])
+
+# Negation with ~
+print("\nAge NOT in [25, 30]:")
+print(df[~df['age'].isin([25, 30])])</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="multiple" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+df = pd.DataFrame({
+    'name': ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve'],
+    'age': [25, 30, 35, 28, 22],
+    'salary': [50000, 60000, 75000, 55000, 45000],
+    'dept': ['IT', 'HR', 'IT', 'Finance', 'IT']
+})
+
+# AND condition (use &)
+print("Age > 25 AND Salary > 50000:")
+print(df[(df['age'] > 25) & (df['salary'] > 50000)])
+
+# OR condition (use |)
+print("\nDept == 'IT' OR Dept == 'HR':")
+print(df[(df['dept'] == 'IT') | (df['dept'] == 'HR')])
+
+# Complex conditions
+print("\n(Age > 25 AND Dept == 'IT') OR Salary > 70000:")
+condition = ((df['age'] > 25) & (df['dept'] == 'IT')) | (df['salary'] > 70000)
+print(df[condition])
+
+# Using query method (cleaner syntax)
+print("\nUsing query method:")
+print(df.query('age > 25 and salary > 50000'))
+
+# Query with variables
+min_age = 25
+print(f"\nQuery with variable (age > {min_age}):")
+print(df.query('age > @min_age'))</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="string" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+df = pd.DataFrame({
+    'name': ['Alice Smith', 'Bob Johnson', 'Charlie Brown', 'Diana Prince'],
+    'email': ['alice@gmail.com', 'bob@yahoo.com', 'charlie@gmail.com', 'diana@outlook.com'],
+    'city': ['New York', 'Los Angeles', 'NEW YORK', 'Chicago']
+})
+
+# String contains
+print("Name contains 'li':")
+print(df[df['name'].str.contains('li')])
+
+# Case insensitive contains
+print("\nCity contains 'york' (case insensitive):")
+print(df[df['city'].str.lower().str.contains('york')])
+
+# Starts with
+print("\nEmail starts with 'a':")
+print(df[df['email'].str.startswith('a')])
+
+# Ends with
+print("\nEmail ends with 'gmail.com':")
+print(df[df['email'].str.endswith('gmail.com')])
+
+# Regex matching
+print("\nName matches pattern (starts with A or B):")
+print(df[df['name'].str.match('^[AB]')])
+
+# String length
+print("\nName length > 10:")
+print(df[df['name'].str.len() > 10])</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showBooleanMask();
+        });
+
+        function showBooleanMask() {
+            viz.clear();
+            const mask = [true, false, true, false, true];
+            for (let i = 0; i < 5; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.5, color: mask[i] ? 0x198754 : 0xe25a1c, position: { x: 0, y: 2 - i * 0.8, z: 0 } });
+                viz.createLabel(mask[i] ? 'True' : 'False', { x: 1.2, y: 2 - i * 0.8, z: 0 });
+            }
+            viz.createLabel('Boolean Mask - True/False for each row', { x: 0, y: -2.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showFiltered() {
+            viz.clear();
+            for (let i = 0; i < 3; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.5, color: 0x198754, position: { x: 0, y: 1.5 - i * 0.8, z: 0 } });
+            }
+            viz.createLabel('Filtered Result - Only True rows', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

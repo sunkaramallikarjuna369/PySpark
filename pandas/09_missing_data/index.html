@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Missing Data - Pandas Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pandas" class="nav-link active">Pandas</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Missing Data</h1>
+            <p>Handling missing data is crucial in data analysis. Pandas provides tools to detect, remove, and fill missing values.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showMissing()">Detect Missing</button>
+                <button class="viz-btn" onclick="showFill()">Fill Missing</button>
+                <button class="viz-btn" onclick="showDrop()">Drop Missing</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="detect">Detect</button>
+                <button class="tab" data-tab="fill">Fill</button>
+                <button class="tab" data-tab="drop">Drop</button>
+            </div>
+            <div class="tab-contents">
+                <div id="detect" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+import numpy as np
+
+df = pd.DataFrame({
+    'A': [1, 2, np.nan, 4],
+    'B': [np.nan, 2, 3, 4],
+    'C': [1, 2, 3, np.nan]
+})
+
+print("DataFrame with missing values:")
+print(df)
+
+# Check for missing values
+print("\nIs null (boolean mask):")
+print(df.isnull())
+
+# Count missing values
+print("\nMissing count per column:")
+print(df.isnull().sum())
+
+print("\nTotal missing values:")
+print(df.isnull().sum().sum())
+
+# Percentage missing
+print("\nPercentage missing:")
+print((df.isnull().sum() / len(df) * 100).round(2))
+
+# Check for any missing
+print(f"\nAny missing in DataFrame: {df.isnull().any().any()}")
+
+# Check for not null
+print("\nNot null mask:")
+print(df.notnull())</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="fill" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+import numpy as np
+
+df = pd.DataFrame({
+    'A': [1, np.nan, 3, np.nan, 5],
+    'B': [np.nan, 2, np.nan, 4, 5],
+    'C': ['x', np.nan, 'z', np.nan, 'w']
+})
+
+print("Original DataFrame:")
+print(df)
+
+# Fill with constant
+print("\nFill with 0:")
+print(df['A'].fillna(0))
+
+# Fill with mean
+print("\nFill with mean:")
+print(df['A'].fillna(df['A'].mean()))
+
+# Forward fill
+print("\nForward fill:")
+print(df.fillna(method='ffill'))
+
+# Backward fill
+print("\nBackward fill:")
+print(df.fillna(method='bfill'))
+
+# Fill with different values per column
+print("\nFill with dict:")
+print(df.fillna({'A': 0, 'B': -1, 'C': 'unknown'}))
+
+# Interpolate
+df_num = pd.DataFrame({'A': [1, np.nan, np.nan, 4, 5]})
+print("\nInterpolate:")
+print(df_num.interpolate())
+
+# Replace specific values
+df_replace = df.replace({np.nan: 'MISSING'})
+print("\nReplace NaN:")
+print(df_replace)</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="drop" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+import numpy as np
+
+df = pd.DataFrame({
+    'A': [1, 2, np.nan, 4],
+    'B': [np.nan, 2, 3, 4],
+    'C': [1, np.nan, np.nan, 4]
+})
+
+print("Original DataFrame:")
+print(df)
+
+# Drop rows with any missing
+print("\nDrop rows with any NaN:")
+print(df.dropna())
+
+# Drop rows where all values are missing
+print("\nDrop rows where all NaN:")
+print(df.dropna(how='all'))
+
+# Drop with threshold (keep rows with at least n non-null)
+print("\nKeep rows with at least 2 non-null:")
+print(df.dropna(thresh=2))
+
+# Drop columns with missing
+print("\nDrop columns with any NaN:")
+print(df.dropna(axis=1))
+
+# Drop based on specific columns
+print("\nDrop rows where A is NaN:")
+print(df.dropna(subset=['A']))
+
+# Inplace modification
+df_copy = df.copy()
+df_copy.dropna(inplace=True)
+print("\nAfter inplace dropna:")
+print(df_copy)</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showMissing();
+        });
+        function showMissing() {
+            viz.clear();
+            const data = [[1, 0, 1], [0, 1, 1], [1, 1, 0], [1, 1, 1]];
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 3; j++) {
+                    const hasValue = data[i][j] === 1;
+                    viz.createDataNode({ type: 'cube', size: 0.4, color: hasValue ? 0x4dabf7 : 0xe25a1c, position: { x: -1 + j * 1, y: 1.5 - i * 0.8, z: 0 } });
+                }
+            }
+            viz.createLabel('Red = Missing (NaN)', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showFill() {
+            viz.clear();
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 3; j++) {
+                    viz.createDataNode({ type: 'cube', size: 0.4, color: 0x198754, position: { x: -1 + j * 1, y: 1.5 - i * 0.8, z: 0 } });
+                }
+            }
+            viz.createLabel('All values filled', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showDrop() {
+            viz.clear();
+            for (let i = 0; i < 2; i++) {
+                for (let j = 0; j < 3; j++) {
+                    viz.createDataNode({ type: 'cube', size: 0.4, color: 0x4dabf7, position: { x: -1 + j * 1, y: 0.8 - i * 0.8, z: 0 } });
+                }
+            }
+            viz.createLabel('Rows with NaN dropped', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

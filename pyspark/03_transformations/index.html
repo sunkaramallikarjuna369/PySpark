@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transformations - PySpark Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </a>
+            <nav class="nav">
+                <a href="../../index.html#pyspark" class="nav-link active">PySpark</a>
+                <a href="../../index.html#pandas" class="nav-link">Pandas</a>
+                <a href="../../index.html#sql" class="nav-link">SQL</a>
+                <a href="../../index.html#etl" class="nav-link">ETL</a>
+                <a href="../../index.html#datawarehouse" class="nav-link">Data Warehouse</a>
+                <button class="theme-toggle">🌙</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <nav class="breadcrumb">
+            <span class="breadcrumb-item"><a href="../../index.html">Home</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item"><a href="../../index.html#pyspark">PySpark</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item">Transformations</span>
+        </nav>
+
+        <section class="section">
+            <h1>Spark Transformations</h1>
+            <p>Transformations are lazy operations that create a new RDD/DataFrame from an existing one. They are not executed until an action is called, allowing Spark to optimize the execution plan.</p>
+
+            <div class="info-box info">
+                <strong>Key Concept:</strong> Transformations are lazy - they build up a computation plan (DAG) that is only executed when an action is triggered.
+            </div>
+
+            <h2>3D Visualization: Transformation Pipeline</h2>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showMapTransform()">Map</button>
+                <button class="viz-btn" onclick="showFilterTransform()">Filter</button>
+                <button class="viz-btn" onclick="showFlatMapTransform()">FlatMap</button>
+                <button class="viz-btn" onclick="showPipeline()">Full Pipeline</button>
+            </div>
+
+            <h2>Types of Transformations</h2>
+            
+            <h3>Narrow Transformations</h3>
+            <p>Operations where each input partition contributes to at most one output partition. No data shuffle is required.</p>
+            <ul style="color: var(--text-secondary); margin-left: 1.5rem;">
+                <li><code>map()</code> - Apply function to each element</li>
+                <li><code>filter()</code> - Keep elements matching condition</li>
+                <li><code>flatMap()</code> - Map and flatten results</li>
+                <li><code>mapPartitions()</code> - Apply function to each partition</li>
+            </ul>
+
+            <h3>Wide Transformations</h3>
+            <p>Operations that require data from multiple partitions (shuffle).</p>
+            <ul style="color: var(--text-secondary); margin-left: 1.5rem;">
+                <li><code>groupByKey()</code> - Group values by key</li>
+                <li><code>reduceByKey()</code> - Aggregate values by key</li>
+                <li><code>join()</code> - Join two datasets</li>
+                <li><code>repartition()</code> - Change number of partitions</li>
+            </ul>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="narrow">Narrow Transformations</button>
+                <button class="tab" data-tab="wide">Wide Transformations</button>
+                <button class="tab" data-tab="df">DataFrame Transformations</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="narrow" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark import SparkContext
+
+sc = SparkContext("local[*]", "Narrow Transformations")
+
+# Sample data
+numbers = sc.parallelize([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+words = sc.parallelize(["hello world", "spark transformations", "big data"])
+
+# map() - Apply function to each element
+squared = numbers.map(lambda x: x ** 2)
+print(f"map(x^2): {squared.collect()}")
+# Output: [1, 4, 9, 16, 25, 36, 49, 64, 81, 100]
+
+# filter() - Keep elements matching condition
+evens = numbers.filter(lambda x: x % 2 == 0)
+print(f"filter(even): {evens.collect()}")
+# Output: [2, 4, 6, 8, 10]
+
+# flatMap() - Map and flatten
+word_list = words.flatMap(lambda line: line.split(" "))
+print(f"flatMap(split): {word_list.collect()}")
+# Output: ['hello', 'world', 'spark', 'transformations', 'big', 'data']
+
+# mapPartitions() - Apply function to each partition
+def sum_partition(iterator):
+    yield sum(iterator)
+
+partition_sums = numbers.mapPartitions(sum_partition)
+print(f"mapPartitions(sum): {partition_sums.collect()}")
+
+# mapPartitionsWithIndex() - Include partition index
+def partition_info(index, iterator):
+    yield (index, list(iterator))
+
+partitioned = numbers.repartition(3).mapPartitionsWithIndex(partition_info)
+print(f"mapPartitionsWithIndex: {partitioned.collect()}")
+
+# sample() - Random sample
+sampled = numbers.sample(withReplacement=False, fraction=0.5, seed=42)
+print(f"sample(50%): {sampled.collect()}")
+
+# distinct() - Remove duplicates
+with_dups = sc.parallelize([1, 2, 2, 3, 3, 3, 4])
+unique = with_dups.distinct()
+print(f"distinct(): {unique.collect()}")
+
+# union() - Combine RDDs
+rdd1 = sc.parallelize([1, 2, 3])
+rdd2 = sc.parallelize([4, 5, 6])
+combined = rdd1.union(rdd2)
+print(f"union(): {combined.collect()}")
+
+# intersection() - Common elements
+rdd3 = sc.parallelize([1, 2, 3, 4])
+rdd4 = sc.parallelize([3, 4, 5, 6])
+common = rdd3.intersection(rdd4)
+print(f"intersection(): {common.collect()}")
+
+# subtract() - Elements in first but not second
+diff = rdd3.subtract(rdd4)
+print(f"subtract(): {diff.collect()}")
+
+sc.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="wide" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark import SparkContext
+
+sc = SparkContext("local[*]", "Wide Transformations")
+
+# Sample pair RDD
+pairs = sc.parallelize([
+    ("apple", 3), ("banana", 2), ("apple", 5),
+    ("orange", 1), ("banana", 4), ("apple", 2)
+])
+
+# groupByKey() - Group values by key (avoid if possible)
+grouped = pairs.groupByKey()
+result = [(k, list(v)) for k, v in grouped.collect()]
+print(f"groupByKey(): {result}")
+# Output: [('apple', [3, 5, 2]), ('banana', [2, 4]), ('orange', [1])]
+
+# reduceByKey() - Aggregate values by key (preferred)
+sum_by_key = pairs.reduceByKey(lambda a, b: a + b)
+print(f"reduceByKey(sum): {sum_by_key.collect()}")
+# Output: [('apple', 10), ('banana', 6), ('orange', 1)]
+
+# aggregateByKey() - More flexible aggregation
+# (zero_value, seq_func, comb_func)
+agg = pairs.aggregateByKey(
+    (0, 0),  # (sum, count)
+    lambda acc, val: (acc[0] + val, acc[1] + 1),  # within partition
+    lambda acc1, acc2: (acc1[0] + acc2[0], acc1[1] + acc2[1])  # across partitions
+)
+avg_by_key = agg.mapValues(lambda x: x[0] / x[1])
+print(f"aggregateByKey(avg): {avg_by_key.collect()}")
+
+# combineByKey() - Most flexible aggregation
+combined = pairs.combineByKey(
+    lambda v: (v, 1),  # createCombiner
+    lambda acc, v: (acc[0] + v, acc[1] + 1),  # mergeValue
+    lambda acc1, acc2: (acc1[0] + acc2[0], acc1[1] + acc2[1])  # mergeCombiners
+)
+print(f"combineByKey(): {combined.collect()}")
+
+# sortByKey() - Sort by key
+sorted_pairs = pairs.sortByKey()
+print(f"sortByKey(): {sorted_pairs.collect()}")
+
+# sortBy() - Sort by custom function
+sorted_by_value = pairs.sortBy(lambda x: x[1], ascending=False)
+print(f"sortBy(value desc): {sorted_by_value.collect()}")
+
+# Join operations
+employees = sc.parallelize([(1, "Alice"), (2, "Bob"), (3, "Charlie")])
+salaries = sc.parallelize([(1, 50000), (2, 60000), (4, 70000)])
+
+# join() - Inner join
+inner = employees.join(salaries)
+print(f"join(): {inner.collect()}")
+# Output: [(1, ('Alice', 50000)), (2, ('Bob', 60000))]
+
+# leftOuterJoin()
+left = employees.leftOuterJoin(salaries)
+print(f"leftOuterJoin(): {left.collect()}")
+
+# rightOuterJoin()
+right = employees.rightOuterJoin(salaries)
+print(f"rightOuterJoin(): {right.collect()}")
+
+# fullOuterJoin()
+full = employees.fullOuterJoin(salaries)
+print(f"fullOuterJoin(): {full.collect()}")
+
+# cogroup() - Group by key across multiple RDDs
+cogrouped = employees.cogroup(salaries)
+result = [(k, (list(v1), list(v2))) for k, (v1, v2) in cogrouped.collect()]
+print(f"cogroup(): {result}")
+
+# repartition() - Change number of partitions (shuffle)
+data = sc.parallelize(range(100), 4)
+print(f"Original partitions: {data.getNumPartitions()}")
+repartitioned = data.repartition(8)
+print(f"After repartition(8): {repartitioned.getNumPartitions()}")
+
+# coalesce() - Reduce partitions (no shuffle)
+coalesced = repartitioned.coalesce(2)
+print(f"After coalesce(2): {coalesced.getNumPartitions()}")
+
+sc.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="df" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, expr, when, lit, upper, lower
+from pyspark.sql.functions import year, month, datediff, current_date
+
+spark = SparkSession.builder.appName("DataFrame Transformations").getOrCreate()
+
+# Sample data
+data = [
+    ("Alice", 25, "Engineering", 50000, "2020-01-15"),
+    ("Bob", 30, "Marketing", 60000, "2019-06-20"),
+    ("Charlie", 35, "Engineering", 75000, "2018-03-10"),
+    ("Diana", 28, "Sales", 55000, "2021-09-05"),
+    ("Eve", 32, "Engineering", 80000, "2017-11-30")
+]
+df = spark.createDataFrame(data, ["name", "age", "department", "salary", "hire_date"])
+
+# select() - Select columns
+print("select():")
+df.select("name", "salary").show()
+
+# selectExpr() - Select with SQL expressions
+print("selectExpr():")
+df.selectExpr("name", "salary * 1.1 as new_salary").show()
+
+# withColumn() - Add or replace column
+print("withColumn():")
+df.withColumn("bonus", col("salary") * 0.1).show()
+
+# withColumnRenamed() - Rename column
+print("withColumnRenamed():")
+df.withColumnRenamed("name", "employee_name").show()
+
+# drop() - Remove columns
+print("drop():")
+df.drop("hire_date").show()
+
+# filter() / where() - Filter rows
+print("filter():")
+df.filter(col("age") > 28).show()
+df.where("salary > 55000").show()
+
+# orderBy() / sort() - Sort rows
+print("orderBy():")
+df.orderBy(col("salary").desc()).show()
+
+# groupBy() - Group and aggregate
+print("groupBy():")
+from pyspark.sql.functions import count, avg, sum as spark_sum, min as spark_min, max as spark_max
+df.groupBy("department").agg(
+    count("*").alias("count"),
+    avg("salary").alias("avg_salary"),
+    spark_sum("salary").alias("total_salary")
+).show()
+
+# distinct() - Remove duplicates
+print("distinct():")
+df.select("department").distinct().show()
+
+# dropDuplicates() - Remove duplicates based on columns
+print("dropDuplicates():")
+df.dropDuplicates(["department"]).show()
+
+# limit() - Limit rows
+print("limit():")
+df.limit(3).show()
+
+# sample() - Random sample
+print("sample():")
+df.sample(fraction=0.5, seed=42).show()
+
+# union() - Combine DataFrames
+df2 = spark.createDataFrame([("Frank", 40, "HR", 65000, "2022-01-01")], df.columns)
+print("union():")
+df.union(df2).show()
+
+# join() - Join DataFrames
+departments = spark.createDataFrame([
+    ("Engineering", "Building A"),
+    ("Marketing", "Building B"),
+    ("Sales", "Building C")
+], ["department", "location"])
+
+print("join():")
+df.join(departments, "department", "left").show()
+
+# Chaining transformations
+print("Chained transformations:")
+result = (df
+    .filter(col("age") > 25)
+    .withColumn("annual_bonus", col("salary") * 0.15)
+    .select("name", "department", "salary", "annual_bonus")
+    .orderBy(col("annual_bonus").desc())
+)
+result.show()
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-box tip">
+                <strong>Best Practice:</strong> Prefer <code>reduceByKey()</code> over <code>groupByKey()</code> as it performs partial aggregation on each partition before shuffling, reducing network traffic.
+            </div>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../02_dataframes/index.html" style="color: var(--text-muted);">← Previous: DataFrames</a>
+                <a href="../04_actions/index.html" style="color: var(--accent-primary);">Next: Actions →</a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+        </div>
+    </footer>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', {
+                backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 0x1a1a2e : 0xf8f9fa,
+                cameraPosition: { x: 5, y: 3, z: 5 }
+            });
+            showMapTransform();
+        });
+
+        function showMapTransform() {
+            viz.clear();
+            
+            // Input
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.4, color: 0xe25a1c,
+                    position: { x: -3, y: 1 - i * 0.7, z: 0 }
+                });
+            }
+            viz.createLabel('Input [1,2,3,4]', { x: -3, y: 2, z: 0 });
+
+            // Transform
+            viz.createDataNode({
+                type: 'cylinder', size: 0.8, color: 0x4dabf7,
+                position: { x: 0, y: 0, z: 0 },
+                animate: (obj) => { obj.rotation.y += 0.02; }
+            });
+            viz.createLabel('map(x => x*2)', { x: 0, y: 1.5, z: 0 });
+
+            // Output
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.5, color: 0x198754,
+                    position: { x: 3, y: 1 - i * 0.7, z: 0 }
+                });
+            }
+            viz.createLabel('Output [2,4,6,8]', { x: 3, y: 2, z: 0 });
+
+            viz.createArrow({ x: -2.5, y: 0, z: 0 }, { x: -0.6, y: 0, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.6, y: 0, z: 0 }, { x: 2.5, y: 0, z: 0 }, { color: 0x888888 });
+            viz.createGrid(10, 10);
+        }
+
+        function showFilterTransform() {
+            viz.clear();
+            
+            // Input (6 elements)
+            for (let i = 0; i < 6; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.35, color: i % 2 === 0 ? 0x198754 : 0xe25a1c,
+                    position: { x: -3, y: 1.5 - i * 0.6, z: 0 }
+                });
+            }
+            viz.createLabel('Input [1-6]', { x: -3, y: 2.5, z: 0 });
+
+            // Filter
+            viz.createDataNode({
+                type: 'cylinder', size: 0.8, color: 0x4dabf7,
+                position: { x: 0, y: 0, z: 0 },
+                animate: (obj) => { obj.rotation.y += 0.02; }
+            });
+            viz.createLabel('filter(even)', { x: 0, y: 1.5, z: 0 });
+
+            // Output (3 elements)
+            for (let i = 0; i < 3; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.4, color: 0x198754,
+                    position: { x: 3, y: 0.7 - i * 0.7, z: 0 }
+                });
+            }
+            viz.createLabel('Output [2,4,6]', { x: 3, y: 2, z: 0 });
+
+            viz.createArrow({ x: -2.5, y: 0, z: 0 }, { x: -0.6, y: 0, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.6, y: 0, z: 0 }, { x: 2.5, y: 0, z: 0 }, { color: 0x888888 });
+            viz.createGrid(10, 10);
+        }
+
+        function showFlatMapTransform() {
+            viz.clear();
+            
+            // Input (2 strings)
+            for (let i = 0; i < 2; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.6, color: 0xe25a1c,
+                    position: { x: -3, y: 0.5 - i, z: 0 }
+                });
+            }
+            viz.createLabel('["a b", "c d"]', { x: -3, y: 2, z: 0 });
+
+            // FlatMap
+            viz.createDataNode({
+                type: 'cylinder', size: 0.8, color: 0x4dabf7,
+                position: { x: 0, y: 0, z: 0 },
+                animate: (obj) => { obj.rotation.y += 0.02; }
+            });
+            viz.createLabel('flatMap(split)', { x: 0, y: 1.5, z: 0 });
+
+            // Output (4 words)
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.35, color: 0x198754,
+                    position: { x: 3, y: 1 - i * 0.6, z: 0 }
+                });
+            }
+            viz.createLabel('["a","b","c","d"]', { x: 3, y: 2, z: 0 });
+
+            viz.createArrow({ x: -2.5, y: 0, z: 0 }, { x: -0.6, y: 0, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.6, y: 0, z: 0 }, { x: 2.5, y: 0, z: 0 }, { color: 0x888888 });
+            viz.createGrid(10, 10);
+        }
+
+        function showPipeline() {
+            viz.clear();
+            
+            const stages = [
+                { x: -4, label: 'Source', color: 0xe25a1c },
+                { x: -1.5, label: 'map()', color: 0x4dabf7 },
+                { x: 1, label: 'filter()', color: 0x8b5cf6 },
+                { x: 3.5, label: 'Result', color: 0x198754 }
+            ];
+
+            stages.forEach((s, i) => {
+                viz.createDataNode({
+                    type: i === 0 || i === 3 ? 'cube' : 'cylinder',
+                    size: 0.7, color: s.color,
+                    position: { x: s.x, y: 0, z: 0 },
+                    animate: i > 0 && i < 3 ? (obj) => { obj.rotation.y += 0.02; } : null
+                });
+                viz.createLabel(s.label, { x: s.x, y: 1.2, z: 0 });
+                
+                if (i < stages.length - 1) {
+                    viz.createArrow(
+                        { x: s.x + 0.5, y: 0, z: 0 },
+                        { x: stages[i+1].x - 0.5, y: 0, z: 0 },
+                        { color: 0x888888 }
+                    );
+                }
+            });
+
+            viz.createDataFlow([
+                { x: -4, y: 0, z: 0 },
+                { x: -1.5, y: 0, z: 0 },
+                { x: 1, y: 0, z: 0 },
+                { x: 3.5, y: 0, z: 0 }
+            ], { color: 0x00ff00, particleCount: 6 });
+
+            viz.createLabel('Transformation Pipeline', { x: 0, y: 2.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

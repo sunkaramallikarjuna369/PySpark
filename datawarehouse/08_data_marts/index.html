@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Marts - DW Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#datawarehouse" class="nav-link active">Data Warehouse</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Data Marts</h1>
+            <p>Data marts are subject-specific subsets of a data warehouse, designed for specific business lines or departments with focused, optimized data access.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showDataMarts()">Data Marts</button>
+                <button class="viz-btn" onclick="showTypes()">Types</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="concepts">Concepts</button>
+                <button class="tab" data-tab="create">Create Data Mart</button>
+                <button class="tab" data-tab="types">Types</button>
+            </div>
+            <div class="tab-contents">
+                <div id="concepts" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Text</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>Data Mart Characteristics:
+
+DEFINITION:
+- Subject-specific subset of data warehouse
+- Focused on single business area
+- Optimized for specific department needs
+
+EXAMPLES:
+- Sales Data Mart: Sales team analytics
+- Marketing Data Mart: Campaign analysis
+- Finance Data Mart: Financial reporting
+- HR Data Mart: Employee analytics
+
+BENEFITS:
+1. Faster query performance (smaller data)
+2. Simplified access for business users
+3. Department-specific optimizations
+4. Reduced load on main warehouse
+5. Better security (limited data exposure)
+6. Easier to understand and maintain
+
+DATA MART vs DATA WAREHOUSE:
+| Aspect      | Data Warehouse      | Data Mart           |
+|-------------|---------------------|---------------------|
+| Scope       | Enterprise-wide     | Department/Subject  |
+| Size        | Large (TB-PB)       | Smaller (GB-TB)     |
+| Users       | All departments     | Specific department |
+| Complexity  | Complex             | Simpler             |
+| Build Time  | Months              | Weeks               |
+| Data        | All subjects        | Single subject      |</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="create" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, sum as spark_sum, count, avg
+
+spark = SparkSession.builder.appName("DataMarts").getOrCreate()
+
+# Create Sales Data Mart from Data Warehouse
+def create_sales_data_mart(spark, dw_path, mart_path):
+    """
+    Create Sales Data Mart with:
+    - Sales fact table (filtered/aggregated)
+    - Relevant dimensions only
+    - Pre-computed metrics
+    """
+    
+    # Read from main warehouse
+    fact_sales = spark.read.parquet(f"{dw_path}/fact_sales/")
+    dim_product = spark.read.parquet(f"{dw_path}/dim_product/")
+    dim_customer = spark.read.parquet(f"{dw_path}/dim_customer/")
+    dim_date = spark.read.parquet(f"{dw_path}/dim_date/")
+    
+    # Create denormalized sales mart fact
+    sales_mart = fact_sales \
+        .join(dim_product, "product_key") \
+        .join(dim_customer, "customer_key") \
+        .join(dim_date, "date_key") \
+        .select(
+            # Date attributes
+            col("full_date"),
+            col("year"),
+            col("quarter"),
+            col("month"),
+            # Product attributes
+            col("product_name"),
+            col("category"),
+            col("brand"),
+            # Customer attributes
+            col("customer_name"),
+            col("segment"),
+            col("region"),
+            # Measures
+            col("quantity"),
+            col("unit_price"),
+            col("total_amount"),
+            col("profit")
+        )
+    
+    # Write to data mart location
+    sales_mart.write.mode("overwrite") \
+        .partitionBy("year", "month") \
+        .parquet(f"{mart_path}/sales_mart/")
+    
+    # Create pre-aggregated summary tables
+    monthly_summary = sales_mart.groupBy("year", "month", "category") \
+        .agg(
+            spark_sum("total_amount").alias("total_sales"),
+            spark_sum("quantity").alias("units_sold"),
+            spark_sum("profit").alias("total_profit")
+        )
+    
+    monthly_summary.write.mode("overwrite") \
+        .parquet(f"{mart_path}/monthly_summary/")</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="types" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Text</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>Data Mart Types:
+
+1. DEPENDENT DATA MART
+   - Created FROM enterprise data warehouse
+   - Data flows: Sources -> DW -> Data Mart
+   - Ensures consistency with DW
+   - Recommended approach (Inmon)
+   
+   Sources --> ETL --> Data Warehouse --> Data Marts
+                              |
+                    +---------+---------+
+                    |         |         |
+                  Sales    Marketing  Finance
+                  Mart       Mart      Mart
+
+2. INDEPENDENT DATA MART
+   - Created directly from source systems
+   - Bypasses data warehouse
+   - Faster to build
+   - Risk of inconsistency (data silos)
+   
+   Sources --> ETL --> Sales Mart
+   Sources --> ETL --> Marketing Mart
+   (No central warehouse)
+
+3. HYBRID DATA MART
+   - Combines dependent and independent
+   - Some data from DW, some from sources
+   - Flexibility with some consistency
+
+BEST PRACTICES:
+- Use conformed dimensions across marts
+- Maintain consistent grain
+- Document data lineage
+- Implement proper security
+- Regular refresh schedules
+- Monitor usage and performance</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showDataMarts();
+        });
+        function showDataMarts() {
+            viz.clear();
+            // Central DW
+            viz.createDataNode({ type: 'cylinder', size: 0.7, color: 0x4dabf7, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('DW', { x: 0, y: 1.4, z: 0 });
+            // Data Marts
+            const marts = [
+                { name: 'Sales', angle: 0 },
+                { name: 'Marketing', angle: 2 * Math.PI / 3 },
+                { name: 'Finance', angle: 4 * Math.PI / 3 }
+            ];
+            marts.forEach(m => {
+                const x = Math.cos(m.angle) * 1.8;
+                const z = Math.sin(m.angle) * 1.8;
+                viz.createDataNode({ type: 'cube', size: 0.45, color: 0xe25a1c, position: { x, y: 0.5, z } });
+                viz.createLabel(m.name, { x: x * 1.3, y: 1, z: z * 1.3 });
+                viz.createArrow({ x: x * 0.3, y: 0.5, z: z * 0.3 }, { x: x * 0.7, y: 0.5, z: z * 0.7 }, { color: 0x888888 });
+            });
+            viz.createLabel('Data Marts - Subject-specific subsets', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showTypes() {
+            viz.clear();
+            // Dependent
+            viz.createDataNode({ type: 'cylinder', size: 0.5, color: 0x4dabf7, position: { x: -1.5, y: 0.5, z: 0 } });
+            viz.createLabel('Dependent', { x: -1.5, y: 1.3, z: 0 });
+            // Independent
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0xe25a1c, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('Independent', { x: 0, y: 1.3, z: 0 });
+            // Hybrid
+            viz.createDataNode({ type: 'sphere', size: 0.4, color: 0x198754, position: { x: 1.5, y: 0.5, z: 0 } });
+            viz.createLabel('Hybrid', { x: 1.5, y: 1.3, z: 0 });
+            viz.createLabel('Data Mart Types', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

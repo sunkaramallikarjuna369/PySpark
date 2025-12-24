@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pivot Tables - Pandas Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pandas" class="nav-link active">Pandas</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Pivot Tables</h1>
+            <p>Pivot tables reshape data by turning unique values from one column into multiple columns, creating a summary table for analysis.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showPivot()">Pivot</button>
+                <button class="viz-btn" onclick="showPivotTable()">Pivot Table</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="pivot">pivot()</button>
+                <button class="tab" data-tab="pivottable">pivot_table()</button>
+                <button class="tab" data-tab="crosstab">crosstab()</button>
+            </div>
+            <div class="tab-contents">
+                <div id="pivot" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+df = pd.DataFrame({
+    'date': ['2023-01', '2023-01', '2023-02', '2023-02'],
+    'product': ['A', 'B', 'A', 'B'],
+    'sales': [100, 150, 120, 180]
+})
+
+print("Original DataFrame:")
+print(df)
+
+# Basic pivot
+pivoted = df.pivot(index='date', columns='product', values='sales')
+print("\nPivoted DataFrame:")
+print(pivoted)
+
+# Access pivoted data
+print("\nProduct A sales:")
+print(pivoted['A'])
+
+# Fill NaN values
+pivoted_filled = pivoted.fillna(0)
+print("\nWith NaN filled:")
+print(pivoted_filled)</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="pivottable" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+import numpy as np
+
+df = pd.DataFrame({
+    'date': ['2023-01', '2023-01', '2023-01', '2023-02', '2023-02'],
+    'product': ['A', 'A', 'B', 'A', 'B'],
+    'region': ['East', 'West', 'East', 'East', 'West'],
+    'sales': [100, 150, 120, 180, 200]
+})
+
+# pivot_table with aggregation
+print("Pivot table with sum:")
+pt = pd.pivot_table(df, values='sales', index='date', 
+                    columns='product', aggfunc='sum')
+print(pt)
+
+# Multiple aggregations
+print("\nMultiple aggregations:")
+pt2 = pd.pivot_table(df, values='sales', index='date',
+                     columns='product', aggfunc=['sum', 'mean', 'count'])
+print(pt2)
+
+# Multiple index levels
+print("\nMultiple index levels:")
+pt3 = pd.pivot_table(df, values='sales', index=['date', 'region'],
+                     columns='product', aggfunc='sum', fill_value=0)
+print(pt3)
+
+# With margins (totals)
+print("\nWith margins:")
+pt4 = pd.pivot_table(df, values='sales', index='date',
+                     columns='product', aggfunc='sum', margins=True)
+print(pt4)</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="crosstab" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+df = pd.DataFrame({
+    'gender': ['M', 'F', 'M', 'F', 'M', 'F'],
+    'department': ['IT', 'HR', 'IT', 'IT', 'HR', 'HR'],
+    'salary': [50000, 60000, 55000, 52000, 48000, 58000]
+})
+
+# Basic crosstab (frequency count)
+print("Crosstab (count):")
+print(pd.crosstab(df['gender'], df['department']))
+
+# With margins
+print("\nWith margins:")
+print(pd.crosstab(df['gender'], df['department'], margins=True))
+
+# Normalize (percentages)
+print("\nNormalized (row percentages):")
+print(pd.crosstab(df['gender'], df['department'], normalize='index'))
+
+# With values and aggregation
+print("\nWith values (mean salary):")
+print(pd.crosstab(df['gender'], df['department'], 
+                  values=df['salary'], aggfunc='mean'))</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showPivot();
+        });
+        function showPivot() {
+            viz.clear();
+            // Original data (vertical)
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.4, color: 0x4dabf7, position: { x: -2, y: 1.5 - i * 0.8, z: 0 } });
+            }
+            viz.createLabel('Original', { x: -2, y: 2.3, z: 0 });
+            // Arrow
+            viz.createArrow({ x: -1, y: 0.5, z: 0 }, { x: 0.5, y: 0.5, z: 0 }, { color: 0x888888 });
+            // Pivoted (grid)
+            for (let i = 0; i < 2; i++) {
+                for (let j = 0; j < 2; j++) {
+                    viz.createDataNode({ type: 'cube', size: 0.4, color: 0xe25a1c, position: { x: 1.5 + j * 0.8, y: 1 - i * 0.8, z: 0 } });
+                }
+            }
+            viz.createLabel('Pivoted', { x: 2, y: 2, z: 0 });
+            viz.createLabel('Pivot - Reshape long to wide', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showPivotTable() {
+            viz.clear();
+            // Aggregated pivot table
+            for (let i = 0; i < 2; i++) {
+                for (let j = 0; j < 3; j++) {
+                    viz.createDataNode({ type: 'cube', size: 0.5, color: j === 2 ? 0x198754 : 0x4dabf7, position: { x: -1 + j * 1, y: 0.8 - i * 1, z: 0 } });
+                }
+            }
+            viz.createLabel('Pivot Table with Aggregation', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

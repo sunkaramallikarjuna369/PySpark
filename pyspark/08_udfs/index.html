@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Defined Functions (UDFs) - PySpark Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </a>
+            <nav class="nav">
+                <a href="../../index.html#pyspark" class="nav-link active">PySpark</a>
+                <a href="../../index.html#pandas" class="nav-link">Pandas</a>
+                <a href="../../index.html#sql" class="nav-link">SQL</a>
+                <a href="../../index.html#etl" class="nav-link">ETL</a>
+                <a href="../../index.html#datawarehouse" class="nav-link">Data Warehouse</a>
+                <button class="theme-toggle">🌙</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <nav class="breadcrumb">
+            <span class="breadcrumb-item"><a href="../../index.html">Home</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item"><a href="../../index.html#pyspark">PySpark</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item">UDFs</span>
+        </nav>
+
+        <section class="section">
+            <h1>User Defined Functions (UDFs)</h1>
+            <p>UDFs allow you to extend Spark's built-in functions with custom Python logic. While powerful, UDFs should be used judiciously as they can impact performance due to serialization overhead.</p>
+
+            <div class="info-box warning">
+                <strong>Performance Note:</strong> Regular Python UDFs serialize data between JVM and Python, causing overhead. Use Pandas UDFs (vectorized UDFs) for better performance when possible.
+            </div>
+
+            <h2>3D Visualization: UDF Execution</h2>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showRegularUDF()">Regular UDF</button>
+                <button class="viz-btn" onclick="showPandasUDF()">Pandas UDF</button>
+                <button class="viz-btn" onclick="showUDAF()">UDAF</button>
+            </div>
+
+            <h2>Types of UDFs</h2>
+            <ul style="color: var(--text-secondary); margin-left: 1.5rem;">
+                <li><strong>Regular UDF:</strong> Row-by-row processing with Python</li>
+                <li><strong>Pandas UDF:</strong> Vectorized processing with Pandas (faster)</li>
+                <li><strong>UDAF:</strong> User-defined aggregate functions</li>
+            </ul>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="regular">Regular UDFs</button>
+                <button class="tab" data-tab="pandas">Pandas UDFs</button>
+                <button class="tab" data-tab="advanced">Advanced UDFs</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="regular" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import udf, col
+from pyspark.sql.types import StringType, IntegerType, FloatType, ArrayType
+
+spark = SparkSession.builder.appName("UDFs").getOrCreate()
+
+data = [
+    ("Alice", "alice@email.com", 75000),
+    ("Bob", "bob@company.org", 80000),
+    ("Charlie", "charlie@test.net", 65000)
+]
+df = spark.createDataFrame(data, ["name", "email", "salary"])
+
+# Method 1: Using @udf decorator
+@udf(returnType=StringType())
+def extract_domain(email):
+    if email and "@" in email:
+        return email.split("@")[1]
+    return None
+
+df.withColumn("domain", extract_domain(col("email"))).show()
+
+# Method 2: Using udf() function
+def calculate_bonus(salary):
+    if salary > 70000:
+        return salary * 0.15
+    return salary * 0.10
+
+bonus_udf = udf(calculate_bonus, FloatType())
+df.withColumn("bonus", bonus_udf(col("salary"))).show()
+
+# Method 3: Lambda UDF
+upper_udf = udf(lambda x: x.upper() if x else None, StringType())
+df.withColumn("name_upper", upper_udf(col("name"))).show()
+
+# UDF with multiple parameters
+@udf(returnType=StringType())
+def format_employee(name, salary):
+    return f"{name}: ${salary:,}"
+
+df.withColumn("formatted", format_employee(col("name"), col("salary"))).show()
+
+# UDF returning complex type
+@udf(returnType=ArrayType(StringType()))
+def split_name(name):
+    if name:
+        return name.split()
+    return []
+
+df.withColumn("name_parts", split_name(col("name"))).show()
+
+# Register UDF for SQL
+spark.udf.register("extract_domain_sql", extract_domain)
+df.createOrReplaceTempView("employees")
+spark.sql("SELECT name, extract_domain_sql(email) as domain FROM employees").show()
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="pandas" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import pandas_udf, col
+from pyspark.sql.types import StringType, FloatType, LongType
+import pandas as pd
+
+spark = SparkSession.builder.appName("Pandas UDFs").getOrCreate()
+
+data = [
+    ("Alice", 75000),
+    ("Bob", 80000),
+    ("Charlie", 65000),
+    ("Diana", 90000)
+]
+df = spark.createDataFrame(data, ["name", "salary"])
+
+# Scalar Pandas UDF - processes Series, returns Series
+@pandas_udf(FloatType())
+def calculate_tax(salary: pd.Series) -> pd.Series:
+    return salary * 0.25
+
+df.withColumn("tax", calculate_tax(col("salary"))).show()
+
+# Scalar Pandas UDF with multiple columns
+@pandas_udf(FloatType())
+def calculate_net_salary(salary: pd.Series, tax_rate: pd.Series) -> pd.Series:
+    return salary * (1 - tax_rate)
+
+df_with_rate = df.withColumn("tax_rate", col("salary") / 100000 * 0.3)
+df_with_rate.withColumn("net", calculate_net_salary(col("salary"), col("tax_rate"))).show()
+
+# Grouped Map Pandas UDF (applyInPandas)
+def normalize_salary(pdf: pd.DataFrame) -> pd.DataFrame:
+    pdf["normalized_salary"] = (pdf["salary"] - pdf["salary"].mean()) / pdf["salary"].std()
+    return pdf
+
+schema = "name string, salary long, normalized_salary double"
+df.groupBy().applyInPandas(normalize_salary, schema).show()
+
+# Grouped Aggregate Pandas UDF
+@pandas_udf(FloatType())
+def mean_salary(salary: pd.Series) -> float:
+    return salary.mean()
+
+df.select(mean_salary(col("salary")).alias("avg_salary")).show()
+
+# Map Pandas UDF (mapInPandas)
+def add_bonus(iterator):
+    for pdf in iterator:
+        pdf["bonus"] = pdf["salary"] * 0.1
+        yield pdf
+
+df.mapInPandas(add_bonus, "name string, salary long, bonus double").show()
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="advanced" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import udf, col, struct
+from pyspark.sql.types import (
+    StructType, StructField, StringType, IntegerType, 
+    ArrayType, MapType, FloatType
+)
+
+spark = SparkSession.builder.appName("Advanced UDFs").getOrCreate()
+
+# UDF returning Struct
+schema = StructType([
+    StructField("first_name", StringType()),
+    StructField("last_name", StringType())
+])
+
+@udf(returnType=schema)
+def parse_full_name(name):
+    if name:
+        parts = name.split()
+        if len(parts) >= 2:
+            return (parts[0], parts[-1])
+        return (parts[0], "")
+    return (None, None)
+
+data = [("Alice Smith",), ("Bob Johnson",), ("Charlie",)]
+df = spark.createDataFrame(data, ["full_name"])
+df.withColumn("parsed", parse_full_name(col("full_name"))) \
+  .select("full_name", "parsed.first_name", "parsed.last_name").show()
+
+# UDF returning Map
+@udf(returnType=MapType(StringType(), IntegerType()))
+def word_count(text):
+    if text:
+        words = text.lower().split()
+        return {word: words.count(word) for word in set(words)}
+    return {}
+
+text_data = [("hello world hello",), ("spark is great spark",)]
+text_df = spark.createDataFrame(text_data, ["text"])
+text_df.withColumn("word_counts", word_count(col("text"))).show(truncate=False)
+
+# UDF with exception handling
+@udf(returnType=FloatType())
+def safe_divide(a, b):
+    try:
+        if b == 0:
+            return None
+        return float(a) / float(b)
+    except Exception:
+        return None
+
+numbers = [(10, 2), (20, 0), (30, 5)]
+num_df = spark.createDataFrame(numbers, ["a", "b"])
+num_df.withColumn("result", safe_divide(col("a"), col("b"))).show()
+
+# Broadcast variable in UDF
+lookup_data = {"A": "Alpha", "B": "Beta", "C": "Charlie"}
+broadcast_lookup = spark.sparkContext.broadcast(lookup_data)
+
+@udf(returnType=StringType())
+def lookup_value(key):
+    return broadcast_lookup.value.get(key, "Unknown")
+
+code_data = [("A",), ("B",), ("D",)]
+code_df = spark.createDataFrame(code_data, ["code"])
+code_df.withColumn("name", lookup_value(col("code"))).show()
+
+# Chaining UDFs
+@udf(returnType=StringType())
+def clean_text(text):
+    return text.strip().lower() if text else None
+
+@udf(returnType=IntegerType())
+def count_words(text):
+    return len(text.split()) if text else 0
+
+text_df = spark.createDataFrame([("  Hello World  ",), ("  Spark SQL  ",)], ["text"])
+text_df.withColumn("cleaned", clean_text(col("text"))) \
+       .withColumn("word_count", count_words(col("cleaned"))).show()
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-box tip">
+                <strong>Best Practice:</strong> Always prefer built-in Spark functions over UDFs. When UDFs are necessary, use Pandas UDFs for better performance as they process data in batches using Apache Arrow.
+            </div>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../07_aggregations/index.html" style="color: var(--text-muted);">← Previous: Aggregations</a>
+                <a href="../09_spark_sql/index.html" style="color: var(--accent-primary);">Next: Spark SQL →</a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+        </div>
+    </footer>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', {
+                backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 0x1a1a2e : 0xf8f9fa,
+                cameraPosition: { x: 5, y: 3, z: 5 }
+            });
+            showRegularUDF();
+        });
+
+        function showRegularUDF() {
+            viz.clear();
+            
+            // JVM side
+            viz.createDataNode({ type: 'cube', size: 0.8, color: 0xe25a1c, position: { x: -2.5, y: 1, z: 0 } });
+            viz.createLabel('JVM', { x: -2.5, y: 2, z: 0 });
+
+            // Python side
+            viz.createDataNode({ type: 'sphere', size: 0.6, color: 0x4dabf7, position: { x: 2.5, y: 1, z: 0 } });
+            viz.createLabel('Python', { x: 2.5, y: 2, z: 0 });
+
+            // Data flow arrows (row by row)
+            for (let i = 0; i < 3; i++) {
+                viz.createArrow({ x: -1.8, y: 0.5 - i * 0.4, z: 0 }, { x: 1.8, y: 0.5 - i * 0.4, z: 0 }, { color: 0x888888 });
+                viz.createArrow({ x: 1.8, y: 0.3 - i * 0.4, z: 0 }, { x: -1.8, y: 0.3 - i * 0.4, z: 0 }, { color: 0x198754 });
+            }
+
+            viz.createLabel('Regular UDF - Row-by-row serialization', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showPandasUDF() {
+            viz.clear();
+            
+            // JVM side
+            viz.createDataNode({ type: 'cube', size: 0.8, color: 0xe25a1c, position: { x: -2.5, y: 1, z: 0 } });
+            viz.createLabel('JVM', { x: -2.5, y: 2, z: 0 });
+
+            // Python/Pandas side
+            viz.createDataNode({ type: 'sphere', size: 0.8, color: 0x4dabf7, position: { x: 2.5, y: 1, z: 0 } });
+            viz.createLabel('Pandas', { x: 2.5, y: 2, z: 0 });
+
+            // Batch data flow (Arrow)
+            viz.createDataNode({ type: 'cylinder', size: 0.4, color: 0x198754, position: { x: 0, y: 0.8, z: 0 } });
+            viz.createLabel('Arrow Batch', { x: 0, y: 0.2, z: 0 });
+
+            viz.createArrow({ x: -1.8, y: 1, z: 0 }, { x: -0.5, y: 0.8, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.5, y: 0.8, z: 0 }, { x: 1.8, y: 1, z: 0 }, { color: 0x888888 });
+
+            viz.createLabel('Pandas UDF - Vectorized with Arrow', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showUDAF() {
+            viz.clear();
+            
+            // Input rows
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.35, color: 0xe25a1c,
+                    position: { x: -2.5, y: 1.2 - i * 0.6, z: 0 }
+                });
+            }
+            viz.createLabel('Input Rows', { x: -2.5, y: 2, z: 0 });
+
+            // Aggregation
+            viz.createDataNode({
+                type: 'sphere', size: 0.7, color: 0x4dabf7,
+                position: { x: 0, y: 0.5, z: 0 },
+                animate: (obj) => { obj.rotation.y += 0.02; }
+            });
+            viz.createLabel('UDAF', { x: 0, y: 1.5, z: 0 });
+
+            // Result
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x198754, position: { x: 2.5, y: 0.5, z: 0 } });
+            viz.createLabel('Result', { x: 2.5, y: 1.5, z: 0 });
+
+            viz.createArrow({ x: -2, y: 0.5, z: 0 }, { x: -0.5, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.5, y: 0.5, z: 0 }, { x: 2, y: 0.5, z: 0 }, { color: 0x888888 });
+
+            viz.createLabel('UDAF - Custom aggregation logic', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

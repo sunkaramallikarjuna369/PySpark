@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETL Best Practices - ETL Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#etl" class="nav-link active">ETL</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>ETL Best Practices</h1>
+            <p>Following best practices ensures ETL pipelines are reliable, maintainable, performant, and scalable. These guidelines come from industry experience.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showPillars()">Pillars</button>
+                <button class="viz-btn" onclick="showChecklist()">Checklist</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="design">Design Principles</button>
+                <button class="tab" data-tab="performance">Performance</button>
+                <button class="tab" data-tab="operations">Operations</button>
+            </div>
+            <div class="tab-contents">
+                <div id="design" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+ETL Design Best Practices:
+
+1. IDEMPOTENCY
+   - Running the same job multiple times produces same result
+   - Use overwrite mode or merge with deduplication
+   - Essential for retry and recovery
+
+2. MODULARITY
+   - Separate Extract, Transform, Load into distinct functions
+   - Reusable transformation functions
+   - Configuration-driven pipelines
+
+3. TESTABILITY
+   - Unit tests for transformations
+   - Integration tests for full pipeline
+   - Data quality tests
+
+4. DOCUMENTATION
+   - Clear naming conventions
+   - Inline comments for complex logic
+   - Data dictionaries
+"""
+
+# Idempotent ETL pattern
+def idempotent_load(df, target_path, key_columns):
+    """Load data idempotently using merge"""
+    from delta.tables import DeltaTable
+    
+    if DeltaTable.isDeltaTable(spark, target_path):
+        target = DeltaTable.forPath(spark, target_path)
+        merge_condition = " AND ".join([
+            f"target.{c} = source.{c}" for c in key_columns
+        ])
+        target.alias("target").merge(
+            df.alias("source"),
+            merge_condition
+        ).whenMatchedUpdateAll() \
+         .whenNotMatchedInsertAll() \
+         .execute()
+    else:
+        df.write.format("delta").save(target_path)
+
+# Modular transformation
+class TransformationPipeline:
+    def __init__(self, config):
+        self.config = config
+        self.transformations = []
+    
+    def add_transformation(self, func):
+        self.transformations.append(func)
+        return self
+    
+    def execute(self, df):
+        for transform in self.transformations:
+            df = transform(df)
+        return df</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="performance" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Performance Best Practices:
+"""
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, broadcast
+
+# 1. Partition pruning - filter early
+df = spark.read.parquet("/data/sales/") \
+    .filter(col("date") >= "2024-01-01")  # Prune partitions
+
+# 2. Column pruning - select only needed columns
+df = df.select("id", "amount", "date")  # Don't use SELECT *
+
+# 3. Broadcast small tables
+small_df = spark.read.parquet("/data/lookup/")  # < 10MB
+result = large_df.join(broadcast(small_df), "key")
+
+# 4. Avoid shuffles when possible
+# Bad: Multiple shuffles
+df.groupBy("a").agg(...).groupBy("b").agg(...)
+# Good: Single shuffle
+df.groupBy("a", "b").agg(...)
+
+# 5. Cache strategically
+df.cache()  # Cache if reused multiple times
+df.count()  # Trigger cache
+# ... multiple operations on df ...
+df.unpersist()  # Release when done
+
+# 6. Optimize file sizes
+df.repartition(100).write.parquet("/output/")  # ~128MB per file
+
+# 7. Use appropriate file formats
+# Parquet/ORC for analytics (columnar)
+# Avro for streaming (row-based, schema evolution)
+# Delta for ACID transactions
+
+# 8. Tune Spark configurations
+spark.conf.set("spark.sql.shuffle.partitions", "200")
+spark.conf.set("spark.sql.adaptive.enabled", "true")</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="operations" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Operational Best Practices:
+"""
+
+# 1. Configuration management
+import yaml
+
+def load_config(env):
+    with open(f"config/{env}.yaml") as f:
+        return yaml.safe_load(f)
+
+config = load_config("production")
+
+# 2. Environment separation
+# - Development: Small data samples
+# - Staging: Production-like data
+# - Production: Full data, strict SLAs
+
+# 3. Monitoring and alerting
+def etl_with_monitoring(spark, config):
+    metrics = {
+        "start_time": datetime.now(),
+        "records_processed": 0,
+        "errors": []
+    }
+    
+    try:
+        # ETL logic
+        pass
+    finally:
+        metrics["end_time"] = datetime.now()
+        publish_metrics(metrics)
+        
+        if metrics["errors"]:
+            send_alert(metrics)
+
+# 4. Data validation gates
+def validate_before_load(df, rules):
+    """Validate data before loading to production"""
+    for rule in rules:
+        if not rule.check(df):
+            raise DataQualityError(f"Failed: {rule.name}")
+    return df
+
+# 5. Rollback capability
+def load_with_rollback(df, target_path):
+    backup_path = f"{target_path}_backup_{datetime.now().strftime('%Y%m%d')}"
+    
+    # Backup current data
+    spark.read.parquet(target_path).write.parquet(backup_path)
+    
+    try:
+        df.write.mode("overwrite").parquet(target_path)
+    except Exception as e:
+        # Rollback
+        spark.read.parquet(backup_path).write.mode("overwrite").parquet(target_path)
+        raise
+
+# 6. Documentation
+"""
+Every ETL job should have:
+- README with purpose and dependencies
+- Data dictionary for inputs/outputs
+- Runbook for operations
+- SLA documentation
+"""</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showPillars();
+        });
+        function showPillars() {
+            viz.clear();
+            const pillars = [
+                { name: 'Reliable', color: 0x4dabf7 },
+                { name: 'Scalable', color: 0xe25a1c },
+                { name: 'Maintainable', color: 0x198754 },
+                { name: 'Testable', color: 0x8b5cf6 }
+            ];
+            pillars.forEach((p, i) => {
+                viz.createDataNode({ type: 'cube', size: 0.5, color: p.color, position: { x: -1.5 + i, y: 0.5, z: 0 } });
+                viz.createLabel(p.name, { x: -1.5 + i, y: 1.3, z: 0 });
+            });
+            viz.createLabel('ETL Best Practice Pillars', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showChecklist() {
+            viz.clear();
+            const items = ['Idempotent', 'Modular', 'Tested', 'Monitored', 'Documented'];
+            items.forEach((item, i) => {
+                viz.createDataNode({ type: 'cube', size: 0.35, color: 0x198754, position: { x: 0, y: 1.5 - i * 0.6, z: 0 } });
+                viz.createLabel(item, { x: 1, y: 1.5 - i * 0.6, z: 0 });
+            });
+            viz.createLabel('ETL Checklist', { x: 0, y: -1.8, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

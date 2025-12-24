@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NULL Handling - SQL Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#sql" class="nav-link active">SQL</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>NULL Handling</h1>
+            <p>NULL represents missing or unknown data. Understanding NULL behavior is crucial as it follows three-valued logic (TRUE, FALSE, UNKNOWN).</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showNull()">NULL Logic</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="check">Checking NULL</button>
+                <button class="tab" data-tab="functions">NULL Functions</button>
+                <button class="tab" data-tab="behavior">NULL Behavior</button>
+            </div>
+            <div class="tab-contents">
+                <div id="check" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- Check for NULL
+SELECT * FROM employees WHERE manager_id IS NULL;
+SELECT * FROM employees WHERE manager_id IS NOT NULL;
+
+-- WRONG: This doesn't work!
+SELECT * FROM employees WHERE manager_id = NULL;  -- Always returns nothing
+SELECT * FROM employees WHERE manager_id != NULL; -- Always returns nothing
+
+-- NULL in comparisons
+SELECT * FROM employees WHERE commission > 0;  -- Excludes NULLs
+SELECT * FROM employees WHERE commission > 0 OR commission IS NULL;
+
+-- NULL in IN clause
+SELECT * FROM employees WHERE department_id IN (10, 20, NULL);
+-- NULL in IN doesn't match NULL values!
+
+-- NULL in NOT IN (dangerous!)
+SELECT * FROM employees 
+WHERE department_id NOT IN (SELECT dept_id FROM inactive_depts);
+-- If subquery returns any NULL, entire result is empty!</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="functions" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- COALESCE - First non-null value
+SELECT COALESCE(commission, 0) AS commission FROM employees;
+SELECT COALESCE(phone, mobile, email, 'No Contact') AS contact FROM employees;
+
+-- NULLIF - Returns NULL if equal
+SELECT NULLIF(value, 0) AS value;  -- NULL if value is 0
+SELECT salary / NULLIF(hours, 0) AS hourly_rate;  -- Avoid division by zero
+
+-- NVL (Oracle) / IFNULL (MySQL) / ISNULL (SQL Server)
+SELECT NVL(commission, 0) FROM employees;      -- Oracle
+SELECT IFNULL(commission, 0) FROM employees;   -- MySQL
+SELECT ISNULL(commission, 0) FROM employees;   -- SQL Server
+
+-- NVL2 (Oracle) - Different values for NULL and non-NULL
+SELECT NVL2(commission, 'Has Commission', 'No Commission') FROM employees;
+
+-- NULLS FIRST / NULLS LAST in ORDER BY
+SELECT * FROM employees ORDER BY commission NULLS FIRST;
+SELECT * FROM employees ORDER BY commission DESC NULLS LAST;</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="behavior" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- NULL in arithmetic
+SELECT 10 + NULL;  -- NULL
+SELECT 10 * NULL;  -- NULL
+SELECT NULL / 0;   -- NULL (not error!)
+
+-- NULL in string concatenation
+SELECT 'Hello' || NULL;  -- NULL (standard SQL)
+SELECT CONCAT('Hello', NULL);  -- 'Hello' (MySQL)
+
+-- NULL in aggregates
+SELECT SUM(salary) FROM employees;  -- Ignores NULLs
+SELECT AVG(commission) FROM employees;  -- Ignores NULLs
+SELECT COUNT(*) FROM employees;  -- Counts all rows
+SELECT COUNT(commission) FROM employees;  -- Counts non-NULL only
+
+-- NULL in DISTINCT
+SELECT DISTINCT department_id FROM employees;  -- NULL is one distinct value
+
+-- NULL in GROUP BY
+SELECT department_id, COUNT(*) FROM employees GROUP BY department_id;
+-- NULL values form their own group
+
+-- NULL in UNION
+SELECT NULL UNION SELECT NULL;  -- Returns one NULL (duplicates removed)
+SELECT NULL UNION ALL SELECT NULL;  -- Returns two NULLs</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showNull();
+        });
+        function showNull() {
+            viz.clear();
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x4dabf7, position: { x: -1, y: 0.5, z: 0 } });
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x333333, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0xe25a1c, position: { x: 1, y: 0.5, z: 0 } });
+            viz.createLabel('Value', { x: -1, y: 1.2, z: 0 });
+            viz.createLabel('NULL', { x: 0, y: 1.2, z: 0 });
+            viz.createLabel('Value', { x: 1, y: 1.2, z: 0 });
+            viz.createLabel('NULL - Unknown/Missing value', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

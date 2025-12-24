@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Performance Tips - Pandas Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pandas" class="nav-link active">Pandas</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Performance Tips</h1>
+            <p>Optimize Pandas operations for better performance with vectorization, efficient data types, and avoiding common pitfalls.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showVectorized()">Vectorized</button>
+                <button class="viz-btn" onclick="showMemory()">Memory</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="vectorize">Vectorization</button>
+                <button class="tab" data-tab="memory">Memory</button>
+                <button class="tab" data-tab="tips">Best Practices</button>
+            </div>
+            <div class="tab-contents">
+                <div id="vectorize" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+import numpy as np
+
+df = pd.DataFrame({'A': range(100000), 'B': range(100000)})
+
+# BAD: Using loops
+# for i in range(len(df)):
+#     df.loc[i, 'C'] = df.loc[i, 'A'] + df.loc[i, 'B']
+
+# GOOD: Vectorized operation
+df['C'] = df['A'] + df['B']
+
+# BAD: Using apply with lambda
+# df['D'] = df['A'].apply(lambda x: x * 2)
+
+# GOOD: Vectorized
+df['D'] = df['A'] * 2
+
+# Use NumPy functions
+df['E'] = np.sqrt(df['A'])
+df['F'] = np.where(df['A'] > 50000, 'High', 'Low')
+
+# Avoid iterrows - use vectorized operations
+# BAD:
+# for idx, row in df.iterrows():
+#     df.loc[idx, 'G'] = row['A'] * row['B']
+
+# GOOD:
+df['G'] = df['A'] * df['B']
+
+# If you must iterate, use itertuples (faster than iterrows)
+# for row in df.itertuples():
+#     print(row.A, row.B)
+
+# Use eval for complex expressions
+df['H'] = df.eval('A + B * 2 - C')
+
+# Use query for filtering
+result = df.query('A > 50000 and B < 75000')</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="memory" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+import numpy as np
+
+# Check memory usage
+df = pd.DataFrame({
+    'int_col': range(100000),
+    'str_col': ['category_' + str(i % 10) for i in range(100000)]
+})
+
+print("Memory before optimization:")
+print(df.memory_usage(deep=True))
+
+# Use appropriate int types
+df['int_col'] = pd.to_numeric(df['int_col'], downcast='integer')
+
+# Use categorical for low-cardinality strings
+df['str_col'] = df['str_col'].astype('category')
+
+print("\nMemory after optimization:")
+print(df.memory_usage(deep=True))
+
+# Read only needed columns
+df = pd.read_csv('large.csv', usecols=['col1', 'col2'])
+
+# Specify dtypes when reading
+df = pd.read_csv('large.csv', dtype={
+    'id': 'int32',
+    'category': 'category',
+    'value': 'float32'
+})
+
+# Process large files in chunks
+chunks = []
+for chunk in pd.read_csv('large.csv', chunksize=10000):
+    processed = chunk[chunk['value'] > 0]
+    chunks.append(processed)
+df = pd.concat(chunks, ignore_index=True)
+
+# Use sparse data for mostly-null columns
+sparse_col = pd.arrays.SparseArray([0, 0, 1, 0, 0, 2, 0, 0])
+print(f"\nSparse memory: {sparse_col.nbytes}")</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="tips" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+import numpy as np
+
+# 1. Avoid chained indexing
+df = pd.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6]})
+# BAD: df[df['A'] > 1]['B'] = 10  # May not work
+# GOOD:
+df.loc[df['A'] > 1, 'B'] = 10
+
+# 2. Use inplace=True sparingly (often not faster)
+# df.drop(columns=['A'], inplace=True)  # Not recommended
+df = df.drop(columns=['A'])  # Clearer
+
+# 3. Preallocate DataFrames
+# BAD: Growing DataFrame in loop
+# for i in range(1000):
+#     df = df.append({'A': i}, ignore_index=True)
+
+# GOOD: Create all at once
+df = pd.DataFrame({'A': range(1000)})
+
+# 4. Use appropriate index
+df = df.set_index('key_column')  # Faster lookups
+
+# 5. Sort for faster operations
+df = df.sort_values('key_column')
+
+# 6. Use copy() to avoid SettingWithCopyWarning
+df_subset = df[df['A'] > 0].copy()
+df_subset['B'] = 10  # Safe
+
+# 7. Profile your code
+# %timeit df['A'].apply(lambda x: x * 2)
+# %timeit df['A'] * 2
+
+# 8. Consider alternatives for very large data
+# - Dask: Parallel pandas
+# - Polars: Fast DataFrame library
+# - PySpark: Distributed processing
+
+# 9. Use swifter for automatic parallelization
+# import swifter
+# df['B'] = df['A'].swifter.apply(complex_function)</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showVectorized();
+        });
+        function showVectorized() {
+            viz.clear();
+            // Loop (slow)
+            for (let i = 0; i < 5; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.3, color: 0xe25a1c, position: { x: -2, y: 1.5 - i * 0.6, z: 0 } });
+            }
+            viz.createLabel('Loop (slow)', { x: -2, y: 2.3, z: 0 });
+            // Vectorized (fast)
+            viz.createDataNode({ type: 'cube', size: 1.2, color: 0x198754, position: { x: 1.5, y: 0.5, z: 0 } });
+            viz.createLabel('Vectorized (fast)', { x: 1.5, y: 1.8, z: 0 });
+            viz.createLabel('Vectorization - Process all at once', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showMemory() {
+            viz.clear();
+            viz.createDataNode({ type: 'cube', size: 1.2, color: 0xe25a1c, position: { x: -1.5, y: 0.6, z: 0 } });
+            viz.createLabel('int64 (8 bytes)', { x: -1.5, y: 1.6, z: 0 });
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0x198754, position: { x: 1.5, y: 0.3, z: 0 } });
+            viz.createLabel('int8 (1 byte)', { x: 1.5, y: 1, z: 0 });
+            viz.createArrow({ x: -0.5, y: 0.5, z: 0 }, { x: 0.8, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createLabel('Downcast - Reduce memory', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

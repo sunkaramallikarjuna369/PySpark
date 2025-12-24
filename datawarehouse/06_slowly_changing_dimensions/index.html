@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Slowly Changing Dimensions (SCD) - DW Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#datawarehouse" class="nav-link active">Data Warehouse</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Slowly Changing Dimensions (SCD)</h1>
+            <p>SCD techniques manage dimension attribute changes over time. Different types preserve varying levels of historical data.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showSCDTypes()">SCD Types</button>
+                <button class="viz-btn" onclick="showSCD2()">SCD Type 2</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="type1">Type 1 (Overwrite)</button>
+                <button class="tab" data-tab="type2">Type 2 (History)</button>
+                <button class="tab" data-tab="type3">Type 3 & Hybrid</button>
+            </div>
+            <div class="tab-contents">
+                <div id="type1" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+SCD TYPE 1: OVERWRITE
+- Simply overwrite old value with new value
+- No history preserved
+- Use when: History not important, corrections
+"""
+
+from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
+
+spark = SparkSession.builder.appName("SCD1").getOrCreate()
+
+def scd_type1(source_df, target_path, key_columns):
+    """
+    SCD Type 1: Overwrite existing records
+    """
+    target = DeltaTable.forPath(spark, target_path)
+    
+    merge_condition = " AND ".join([
+        f"target.{col} = source.{col}" for col in key_columns
+    ])
+    
+    target.alias("target").merge(
+        source_df.alias("source"),
+        merge_condition
+    ).whenMatchedUpdateAll() \
+     .whenNotMatchedInsertAll() \
+     .execute()
+
+# Example: Customer changes address
+# Before: customer_key=1, name="Alice", city="New York"
+# After:  customer_key=1, name="Alice", city="Los Angeles"
+# Result: Old city "New York" is lost
+
+# When to use SCD Type 1:
+# - Correcting data errors
+# - Attributes where history doesn't matter
+# - Keeping dimension table small
+# - Phone numbers, email addresses (current only needed)</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="type2" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+SCD TYPE 2: ADD NEW ROW (FULL HISTORY)
+- Create new row for each change
+- Preserve complete history
+- Use surrogate keys
+- Track with effective/expiration dates and current flag
+"""
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, lit, current_date, when
+from delta.tables import DeltaTable
+
+def scd_type2(source_df, target_path, key_columns, tracked_columns):
+    """
+    SCD Type 2: Preserve full history with new rows
+    """
+    target = DeltaTable.forPath(spark, target_path)
+    
+    # Find changed records
+    merge_condition = " AND ".join([
+        f"target.{col} = source.{col}" for col in key_columns
+    ])
+    
+    change_condition = " OR ".join([
+        f"target.{col} != source.{col}" for col in tracked_columns
+    ])
+    
+    # Step 1: Expire old records
+    target.alias("target").merge(
+        source_df.alias("source"),
+        f"{merge_condition} AND target.is_current = true"
+    ).whenMatchedUpdate(
+        condition=change_condition,
+        set={
+            "is_current": lit(False),
+            "expiration_date": current_date()
+        }
+    ).execute()
+    
+    # Step 2: Insert new records for changes
+    new_records = source_df.alias("source").join(
+        target.toDF().alias("target"),
+        on=key_columns,
+        how="left"
+    ).filter(
+        (col("target.is_current") == False) | col("target.is_current").isNull()
+    ).select("source.*") \
+     .withColumn("is_current", lit(True)) \
+     .withColumn("effective_date", current_date()) \
+     .withColumn("expiration_date", lit("9999-12-31"))
+    
+    new_records.write.format("delta").mode("append").save(target_path)
+
+# Example Result:
+# | customer_key | customer_id | city        | effective  | expiration | is_current |
+# |--------------|-------------|-------------|------------|------------|------------|
+# | 1            | C001        | New York    | 2023-01-01 | 2024-01-15 | false      |
+# | 2            | C001        | Los Angeles | 2024-01-15 | 9999-12-31 | true       |</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="type3" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+SCD TYPE 3: ADD NEW COLUMN
+- Add column for previous value
+- Limited history (usually just previous)
+- Simpler than Type 2
+"""
+
+# Type 3 Schema
+# | customer_key | name  | current_city | previous_city | city_change_date |
+# |--------------|-------|--------------|---------------|------------------|
+# | 1            | Alice | Los Angeles  | New York      | 2024-01-15       |
+
+def scd_type3(source_df, target_path, key_columns, tracked_column):
+    """
+    SCD Type 3: Store previous value in separate column
+    """
+    target = DeltaTable.forPath(spark, target_path)
+    
+    merge_condition = " AND ".join([
+        f"target.{col} = source.{col}" for col in key_columns
+    ])
+    
+    target.alias("target").merge(
+        source_df.alias("source"),
+        merge_condition
+    ).whenMatchedUpdate(
+        condition=f"target.current_{tracked_column} != source.{tracked_column}",
+        set={
+            f"previous_{tracked_column}": col(f"target.current_{tracked_column}"),
+            f"current_{tracked_column}": col(f"source.{tracked_column}"),
+            f"{tracked_column}_change_date": current_date()
+        }
+    ).whenNotMatchedInsertAll() \
+     .execute()
+
+"""
+SCD TYPE 4: MINI-DIMENSION
+- Separate rapidly changing attributes into mini-dimension
+- Main dimension stays stable
+- Reduces Type 2 overhead
+"""
+
+"""
+SCD TYPE 6: HYBRID (1 + 2 + 3)
+- Combines Type 1, 2, and 3
+- Current value column (Type 1)
+- Historical rows (Type 2)
+- Previous value column (Type 3)
+"""
+
+# Type 6 Schema
+# | key | customer_id | current_city | city    | previous_city | effective | is_current |
+# |-----|-------------|--------------|---------|---------------|-----------|------------|
+# | 1   | C001        | LA           | NY      | NULL          | 2023-01   | false      |
+# | 2   | C001        | LA           | LA      | NY            | 2024-01   | true       |</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showSCDTypes();
+        });
+        function showSCDTypes() {
+            viz.clear();
+            const types = [
+                { name: 'Type 1', desc: 'Overwrite', color: 0x4dabf7 },
+                { name: 'Type 2', desc: 'History', color: 0xe25a1c },
+                { name: 'Type 3', desc: 'Previous', color: 0x198754 }
+            ];
+            types.forEach((t, i) => {
+                viz.createDataNode({ type: 'cube', size: 0.5, color: t.color, position: { x: -1.5 + i * 1.5, y: 0.5, z: 0 } });
+                viz.createLabel(t.name, { x: -1.5 + i * 1.5, y: 1.3, z: 0 });
+                viz.createLabel(t.desc, { x: -1.5 + i * 1.5, y: -0.3, z: 0 });
+            });
+            viz.createLabel('SCD Types - Managing Dimension Changes', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showSCD2() {
+            viz.clear();
+            // Show Type 2 versioning
+            for (let i = 0; i < 3; i++) {
+                const isCurrent = i === 2;
+                viz.createDataNode({ type: 'cube', size: 0.4, color: isCurrent ? 0x198754 : 0x666666, position: { x: 0, y: 1.2 - i * 0.6, z: 0 } });
+                viz.createLabel(isCurrent ? 'Current' : `v${i + 1}`, { x: 0.8, y: 1.2 - i * 0.6, z: 0 });
+            }
+            viz.createLabel('SCD Type 2 - Full History', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

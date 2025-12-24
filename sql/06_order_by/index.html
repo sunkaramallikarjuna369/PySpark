@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORDER BY - SQL Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#sql" class="nav-link active">SQL</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>ORDER BY</h1>
+            <p>ORDER BY sorts the result set by one or more columns in ascending (ASC) or descending (DESC) order.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showAsc()">ASC</button>
+                <button class="viz-btn" onclick="showDesc()">DESC</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="basic">Basic ORDER BY</button>
+                <button class="tab" data-tab="advanced">Advanced Sorting</button>
+            </div>
+            <div class="tab-contents">
+                <div id="basic" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- Ascending order (default)
+SELECT * FROM employees ORDER BY salary;
+SELECT * FROM employees ORDER BY salary ASC;
+
+-- Descending order
+SELECT * FROM employees ORDER BY salary DESC;
+
+-- Multiple columns
+SELECT * FROM employees 
+ORDER BY department_id ASC, salary DESC;
+
+-- Order by column position
+SELECT first_name, salary FROM employees ORDER BY 2 DESC;
+
+-- Order by alias
+SELECT first_name, salary * 12 AS annual
+FROM employees ORDER BY annual DESC;
+
+-- Order by expression
+SELECT * FROM employees ORDER BY salary * 1.1 DESC;
+
+-- NULLS handling
+SELECT * FROM employees ORDER BY commission NULLS FIRST;
+SELECT * FROM employees ORDER BY commission NULLS LAST;</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="advanced" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- LIMIT with ORDER BY
+SELECT * FROM employees ORDER BY salary DESC LIMIT 10;
+
+-- OFFSET for pagination
+SELECT * FROM employees ORDER BY salary DESC LIMIT 10 OFFSET 20;
+
+-- Top N per group (using window functions)
+SELECT * FROM (
+    SELECT *, ROW_NUMBER() OVER (
+        PARTITION BY department_id ORDER BY salary DESC
+    ) AS rn
+    FROM employees
+) t WHERE rn <= 3;
+
+-- Custom sort order with CASE
+SELECT * FROM employees
+ORDER BY 
+    CASE status
+        WHEN 'Active' THEN 1
+        WHEN 'Pending' THEN 2
+        WHEN 'Inactive' THEN 3
+    END;
+
+-- Collation for string sorting
+SELECT * FROM employees 
+ORDER BY last_name COLLATE utf8_general_ci;
+
+-- Random order
+SELECT * FROM employees ORDER BY RANDOM();  -- PostgreSQL
+SELECT * FROM employees ORDER BY RAND();    -- MySQL</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showAsc();
+        });
+        function showAsc() {
+            viz.clear();
+            for (let i = 0; i < 5; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.3 + i * 0.1, color: 0x4dabf7, position: { x: 0, y: 1.5 - i * 0.7, z: 0 } });
+            }
+            viz.createLabel('ORDER BY ASC - Smallest to largest', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showDesc() {
+            viz.clear();
+            for (let i = 0; i < 5; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.7 - i * 0.1, color: 0xe25a1c, position: { x: 0, y: 1.5 - i * 0.7, z: 0 } });
+            }
+            viz.createLabel('ORDER BY DESC - Largest to smallest', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

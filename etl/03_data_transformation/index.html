@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Transformation - ETL Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#etl" class="nav-link active">ETL</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Data Transformation</h1>
+            <p>Data transformation converts raw data into a format suitable for analysis. This includes cleaning, standardizing, enriching, and restructuring data.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showTransform()">Transform</button>
+                <button class="viz-btn" onclick="showPipeline()">Pipeline</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="cleaning">Data Cleaning</button>
+                <button class="tab" data-tab="enrichment">Enrichment</button>
+                <button class="tab" data-tab="restructure">Restructuring</button>
+            </div>
+            <div class="tab-contents">
+                <div id="cleaning" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, trim, lower, upper, regexp_replace, when, coalesce, lit
+
+spark = SparkSession.builder.appName("DataTransformation").getOrCreate()
+
+# Sample raw data
+raw_df = spark.createDataFrame([
+    (1, "  Alice  ", "alice@EMAIL.com", "123-456-7890", None),
+    (2, "BOB", "bob@email.com", "(123) 456-7890", 50000),
+    (3, "charlie", None, "123.456.7890", 60000)
+], ["id", "name", "email", "phone", "salary"])
+
+# Data cleaning transformations
+cleaned_df = raw_df \
+    .withColumn("name", trim(col("name"))) \
+    .withColumn("name", upper(col("name"))) \
+    .withColumn("email", lower(col("email"))) \
+    .withColumn("phone", regexp_replace(col("phone"), r"[^0-9]", "")) \
+    .withColumn("salary", coalesce(col("salary"), lit(0))) \
+    .filter(col("email").isNotNull())
+
+# Handle nulls
+df_no_nulls = raw_df \
+    .na.fill({"salary": 0, "email": "unknown@example.com"}) \
+    .na.drop(subset=["name"])
+
+# Remove duplicates
+df_deduped = raw_df.dropDuplicates(["email"])
+
+# Type casting
+df_typed = raw_df \
+    .withColumn("salary", col("salary").cast("double")) \
+    .withColumn("id", col("id").cast("string"))</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="enrichment" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql.functions import col, when, lit, current_timestamp, date_format, year, month
+
+# Derived columns
+enriched_df = raw_df \
+    .withColumn("salary_band", 
+        when(col("salary") >= 100000, "Executive")
+        .when(col("salary") >= 70000, "Senior")
+        .when(col("salary") >= 50000, "Mid")
+        .otherwise("Junior")) \
+    .withColumn("processed_at", current_timestamp()) \
+    .withColumn("source_system", lit("CRM"))
+
+# Lookup enrichment (join with reference data)
+department_df = spark.createDataFrame([
+    (101, "Engineering"), (102, "Sales"), (103, "Marketing")
+], ["dept_id", "dept_name"])
+
+enriched_with_lookup = raw_df.join(
+    department_df,
+    raw_df.dept_id == department_df.dept_id,
+    "left"
+)
+
+# Date enrichment
+date_df = spark.createDataFrame([
+    (1, "2024-01-15"), (2, "2024-06-20")
+], ["id", "date_str"])
+
+date_enriched = date_df \
+    .withColumn("date", col("date_str").cast("date")) \
+    .withColumn("year", year(col("date"))) \
+    .withColumn("month", month(col("date"))) \
+    .withColumn("quarter", (month(col("date")) - 1) / 3 + 1)
+
+# Aggregation enrichment
+from pyspark.sql.window import Window
+from pyspark.sql.functions import sum, avg, row_number
+
+window_spec = Window.partitionBy("dept_id").orderBy(col("salary").desc())
+ranked_df = raw_df \
+    .withColumn("dept_rank", row_number().over(window_spec)) \
+    .withColumn("dept_avg_salary", avg("salary").over(Window.partitionBy("dept_id")))</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="restructure" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql.functions import col, explode, array, struct, collect_list
+
+# Pivot (wide format)
+sales_df = spark.createDataFrame([
+    ("Product A", "Q1", 100), ("Product A", "Q2", 150),
+    ("Product B", "Q1", 200), ("Product B", "Q2", 250)
+], ["product", "quarter", "sales"])
+
+pivoted_df = sales_df.groupBy("product").pivot("quarter").sum("sales")
+
+# Unpivot (long format)
+from pyspark.sql.functions import expr
+unpivoted_df = pivoted_df.selectExpr(
+    "product",
+    "stack(2, 'Q1', Q1, 'Q2', Q2) as (quarter, sales)"
+)
+
+# Flatten nested structures
+nested_df = spark.createDataFrame([
+    (1, {"name": "Alice", "age": 30}),
+    (2, {"name": "Bob", "age": 25})
+], ["id", "info"])
+
+flattened_df = nested_df.select(
+    col("id"),
+    col("info.name").alias("name"),
+    col("info.age").alias("age")
+)
+
+# Explode arrays
+array_df = spark.createDataFrame([
+    (1, ["a", "b", "c"]),
+    (2, ["d", "e"])
+], ["id", "items"])
+
+exploded_df = array_df.select(col("id"), explode(col("items")).alias("item"))
+
+# Aggregate to nested
+grouped_df = exploded_df.groupBy("id").agg(
+    collect_list("item").alias("items")
+)</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showTransform();
+        });
+        function showTransform() {
+            viz.clear();
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.35, color: 0x4dabf7, position: { x: -2, y: 1.2 - i * 0.6, z: 0 } });
+            }
+            viz.createLabel('Raw', { x: -2, y: 2, z: 0 });
+            viz.createDataNode({ type: 'sphere', size: 0.6, color: 0xe25a1c, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('Transform', { x: 0, y: 1.4, z: 0 });
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.35, color: 0x198754, position: { x: 2, y: 1.2 - i * 0.6, z: 0 } });
+            }
+            viz.createLabel('Clean', { x: 2, y: 2, z: 0 });
+            viz.createArrow({ x: -1.3, y: 0.5, z: 0 }, { x: -0.5, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.5, y: 0.5, z: 0 }, { x: 1.3, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createLabel('Data Transformation', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showPipeline() {
+            viz.clear();
+            const steps = ['Clean', 'Enrich', 'Validate', 'Format'];
+            steps.forEach((s, i) => {
+                viz.createDataNode({ type: 'cube', size: 0.5, color: [0x4dabf7, 0xe25a1c, 0x198754, 0x8b5cf6][i], position: { x: -2 + i * 1.3, y: 0.5, z: 0 } });
+                viz.createLabel(s, { x: -2 + i * 1.3, y: 1.3, z: 0 });
+                if (i < 3) viz.createArrow({ x: -1.5 + i * 1.3, y: 0.5, z: 0 }, { x: -0.9 + i * 1.3, y: 0.5, z: 0 }, { color: 0x888888 });
+            });
+            viz.createLabel('Transformation Pipeline', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

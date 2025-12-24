@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Caching & Persistence - PySpark Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </a>
+            <nav class="nav">
+                <a href="../../index.html#pyspark" class="nav-link active">PySpark</a>
+                <a href="../../index.html#pandas" class="nav-link">Pandas</a>
+                <a href="../../index.html#sql" class="nav-link">SQL</a>
+                <a href="../../index.html#etl" class="nav-link">ETL</a>
+                <a href="../../index.html#datawarehouse" class="nav-link">Data Warehouse</a>
+                <button class="theme-toggle">🌙</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <nav class="breadcrumb">
+            <span class="breadcrumb-item"><a href="../../index.html">Home</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item"><a href="../../index.html#pyspark">PySpark</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item">Caching & Persistence</span>
+        </nav>
+
+        <section class="section">
+            <h1>Caching & Persistence</h1>
+            <p>Caching and persistence allow you to store intermediate results in memory or disk, avoiding recomputation when the same data is accessed multiple times. This is crucial for iterative algorithms and interactive analysis.</p>
+
+            <div class="info-box info">
+                <strong>Key Concept:</strong> Use <code>cache()</code> for memory-only storage or <code>persist()</code> with different storage levels for more control over where and how data is stored.
+            </div>
+
+            <h2>3D Visualization: Storage Levels</h2>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showMemoryOnly()">MEMORY_ONLY</button>
+                <button class="viz-btn" onclick="showMemoryDisk()">MEMORY_AND_DISK</button>
+                <button class="viz-btn" onclick="showSerialized()">MEMORY_ONLY_SER</button>
+            </div>
+
+            <h2>Storage Levels</h2>
+            <ul style="color: var(--text-secondary); margin-left: 1.5rem;">
+                <li><strong>MEMORY_ONLY:</strong> Store as deserialized objects in JVM heap</li>
+                <li><strong>MEMORY_AND_DISK:</strong> Spill to disk if memory is insufficient</li>
+                <li><strong>MEMORY_ONLY_SER:</strong> Store as serialized objects (more compact)</li>
+                <li><strong>DISK_ONLY:</strong> Store only on disk</li>
+                <li><strong>OFF_HEAP:</strong> Store in off-heap memory</li>
+            </ul>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="basic">Basic Caching</button>
+                <button class="tab" data-tab="levels">Storage Levels</button>
+                <button class="tab" data-tab="best">Best Practices</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="basic" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
+import time
+
+spark = SparkSession.builder.appName("Caching").getOrCreate()
+
+# Create a large DataFrame
+df = spark.range(10000000).withColumn("value", col("id") * 2)
+
+# Without caching - each action recomputes
+start = time.time()
+count1 = df.filter(col("value") > 1000).count()
+print(f"First count (no cache): {count1}, Time: {time.time() - start:.2f}s")
+
+start = time.time()
+count2 = df.filter(col("value") > 1000).count()
+print(f"Second count (no cache): {count2}, Time: {time.time() - start:.2f}s")
+
+# With caching
+df_cached = df.cache()  # Same as df.persist(StorageLevel.MEMORY_ONLY)
+
+# First action triggers caching
+start = time.time()
+count3 = df_cached.filter(col("value") > 1000).count()
+print(f"First count (with cache): {count3}, Time: {time.time() - start:.2f}s")
+
+# Subsequent actions use cached data
+start = time.time()
+count4 = df_cached.filter(col("value") > 1000).count()
+print(f"Second count (with cache): {count4}, Time: {time.time() - start:.2f}s")
+
+# Check if DataFrame is cached
+print(f"Is cached: {df_cached.is_cached}")
+
+# View cached DataFrames in Spark UI
+# spark.catalog.cacheTable("table_name")  # For SQL tables
+
+# Unpersist when done
+df_cached.unpersist()
+print(f"After unpersist - Is cached: {df_cached.is_cached}")
+
+# Force unpersist (blocking)
+# df_cached.unpersist(blocking=True)
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="levels" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark import StorageLevel
+
+spark = SparkSession.builder.appName("Storage Levels").getOrCreate()
+
+df = spark.range(1000000)
+
+# MEMORY_ONLY - Default, fastest but uses most memory
+df1 = df.persist(StorageLevel.MEMORY_ONLY)
+df1.count()  # Trigger caching
+
+# MEMORY_AND_DISK - Spills to disk if memory is full
+df2 = df.persist(StorageLevel.MEMORY_AND_DISK)
+df2.count()
+
+# MEMORY_ONLY_SER - Serialized, more compact but slower
+df3 = df.persist(StorageLevel.MEMORY_ONLY_SER)
+df3.count()
+
+# MEMORY_AND_DISK_SER - Serialized with disk spillover
+df4 = df.persist(StorageLevel.MEMORY_AND_DISK_SER)
+df4.count()
+
+# DISK_ONLY - Only on disk, slowest but saves memory
+df5 = df.persist(StorageLevel.DISK_ONLY)
+df5.count()
+
+# OFF_HEAP - Uses off-heap memory (requires configuration)
+# spark.conf.set("spark.memory.offHeap.enabled", "true")
+# spark.conf.set("spark.memory.offHeap.size", "1g")
+# df6 = df.persist(StorageLevel.OFF_HEAP)
+
+# Replicated storage (for fault tolerance)
+df7 = df.persist(StorageLevel.MEMORY_ONLY_2)  # 2 replicas
+df7.count()
+
+# Check storage level
+print(f"Storage level: {df1.storageLevel}")
+
+# Custom storage level
+custom_level = StorageLevel(
+    useDisk=True,
+    useMemory=True,
+    useOffHeap=False,
+    deserialized=True,
+    replication=1
+)
+df8 = df.persist(custom_level)
+
+# Cleanup
+for cached_df in [df1, df2, df3, df4, df5, df7, df8]:
+    cached_df.unpersist()
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="best" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark import StorageLevel
+from pyspark.sql.functions import col
+
+spark = SparkSession.builder.appName("Caching Best Practices").getOrCreate()
+
+# Best Practice 1: Cache after expensive transformations
+raw_df = spark.read.csv("/path/to/large/file.csv", header=True)
+transformed_df = raw_df \
+    .filter(col("status") == "active") \
+    .groupBy("category") \
+    .agg({"amount": "sum"})
+
+# Cache the transformed result, not the raw data
+transformed_df.cache()
+
+# Best Practice 2: Cache DataFrames used multiple times
+df = spark.range(1000000)
+df_filtered = df.filter(col("id") > 500000).cache()
+
+# Multiple operations on cached data
+count = df_filtered.count()
+max_val = df_filtered.agg({"id": "max"}).collect()[0][0]
+sample = df_filtered.take(10)
+
+# Best Practice 3: Use appropriate storage level
+# - MEMORY_ONLY: When data fits in memory
+# - MEMORY_AND_DISK: When data might not fit in memory
+# - MEMORY_ONLY_SER: When memory is tight (Python objects are large)
+
+# Best Practice 4: Unpersist when done
+df_filtered.unpersist()
+
+# Best Practice 5: Cache SQL tables
+df.createOrReplaceTempView("numbers")
+spark.sql("CACHE TABLE numbers")
+spark.sql("SELECT COUNT(*) FROM numbers").show()
+spark.sql("UNCACHE TABLE numbers")
+
+# Best Practice 6: Monitor cache usage
+# Check Spark UI -> Storage tab for cache statistics
+
+# Best Practice 7: Checkpoint for very long lineages
+spark.sparkContext.setCheckpointDir("/tmp/checkpoints")
+df_complex = spark.range(1000000)
+for i in range(10):
+    df_complex = df_complex.withColumn(f"col_{i}", col("id") * i)
+
+# Checkpoint breaks lineage and saves to reliable storage
+df_complex.checkpoint()
+
+# Best Practice 8: Use broadcast for small lookup tables
+from pyspark.sql.functions import broadcast
+small_df = spark.createDataFrame([(1, "A"), (2, "B")], ["id", "name"])
+large_df = spark.range(1000000)
+
+# Broadcast small table for efficient join
+result = large_df.join(broadcast(small_df), "id")
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../10_partitioning_bucketing/index.html" style="color: var(--text-muted);">← Previous: Partitioning & Bucketing</a>
+                <a href="../12_broadcast_variables/index.html" style="color: var(--accent-primary);">Next: Broadcast Variables →</a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+        </div>
+    </footer>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', {
+                backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 0x1a1a2e : 0xf8f9fa,
+                cameraPosition: { x: 5, y: 3, z: 5 }
+            });
+            showMemoryOnly();
+        });
+
+        function showMemoryOnly() {
+            viz.clear();
+            
+            // Memory representation
+            viz.createDataNode({ type: 'cube', size: 1.5, color: 0x4dabf7, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('JVM Heap Memory', { x: 0, y: 2, z: 0 });
+
+            // Cached data blocks
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.3, color: 0xe25a1c,
+                    position: { x: -0.4 + (i % 2) * 0.5, y: 0.3 + Math.floor(i / 2) * 0.4, z: 0.5 }
+                });
+            }
+
+            viz.createLabel('MEMORY_ONLY - Fast, deserialized', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showMemoryDisk() {
+            viz.clear();
+            
+            // Memory
+            viz.createDataNode({ type: 'cube', size: 1, color: 0x4dabf7, position: { x: -1.5, y: 0.5, z: 0 } });
+            viz.createLabel('Memory', { x: -1.5, y: 1.8, z: 0 });
+
+            // Disk
+            viz.createDataNode({ type: 'cylinder', size: 0.8, color: 0x198754, position: { x: 1.5, y: 0.3, z: 0 } });
+            viz.createLabel('Disk', { x: 1.5, y: 1.5, z: 0 });
+
+            // Data in memory
+            for (let i = 0; i < 2; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.25, color: 0xe25a1c,
+                    position: { x: -1.5 + i * 0.4, y: 0.5, z: 0.4 }
+                });
+            }
+
+            // Spillover to disk
+            viz.createDataNode({ type: 'cube', size: 0.25, color: 0xffc107, position: { x: 1.5, y: 0.5, z: 0 } });
+
+            viz.createArrow({ x: -0.8, y: 0.5, z: 0 }, { x: 0.8, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createLabel('Spillover', { x: 0, y: 0.8, z: 0 });
+
+            viz.createLabel('MEMORY_AND_DISK - Spills when full', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showSerialized() {
+            viz.clear();
+            
+            // Memory with serialized data (more compact)
+            viz.createDataNode({ type: 'cube', size: 1.5, color: 0x4dabf7, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('JVM Heap Memory', { x: 0, y: 2, z: 0 });
+
+            // Serialized data (smaller blocks)
+            for (let i = 0; i < 6; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.2, color: 0x8b5cf6,
+                    position: { x: -0.3 + (i % 3) * 0.3, y: 0.3 + Math.floor(i / 3) * 0.3, z: 0.5 }
+                });
+            }
+
+            viz.createLabel('MEMORY_ONLY_SER - Compact, serialized', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

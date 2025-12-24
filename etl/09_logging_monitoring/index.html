@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logging & Monitoring - ETL Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#etl" class="nav-link active">ETL</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Logging & Monitoring</h1>
+            <p>Effective logging and monitoring provide visibility into ETL pipeline health, performance, and issues. They enable proactive problem detection and debugging.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showMetrics()">Metrics</button>
+                <button class="viz-btn" onclick="showAlerts()">Alerts</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="logging">Logging</button>
+                <button class="tab" data-tab="metrics">Metrics</button>
+                <button class="tab" data-tab="alerting">Alerting</button>
+            </div>
+            <div class="tab-contents">
+                <div id="logging" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import logging
+from datetime import datetime
+import json
+
+# Configure structured logging
+class JSONFormatter(logging.Formatter):
+    def format(self, record):
+        log_obj = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "level": record.levelname,
+            "message": record.getMessage(),
+            "module": record.module,
+            "function": record.funcName,
+            "line": record.lineno
+        }
+        if hasattr(record, 'extra'):
+            log_obj.update(record.extra)
+        return json.dumps(log_obj)
+
+# Setup logger
+logger = logging.getLogger("ETL")
+handler = logging.StreamHandler()
+handler.setFormatter(JSONFormatter())
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
+# ETL with comprehensive logging
+def etl_with_logging(spark, source, target):
+    job_id = f"etl_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    
+    logger.info("ETL job started", extra={
+        "job_id": job_id,
+        "source": source,
+        "target": target
+    })
+    
+    start_time = datetime.now()
+    
+    try:
+        # Extract
+        df = spark.read.parquet(source)
+        extract_count = df.count()
+        logger.info("Extraction complete", extra={
+            "job_id": job_id,
+            "records_extracted": extract_count
+        })
+        
+        # Transform
+        transformed = df.transform(apply_transformations)
+        transform_count = transformed.count()
+        
+        # Load
+        transformed.write.mode("overwrite").parquet(target)
+        
+        duration = (datetime.now() - start_time).total_seconds()
+        logger.info("ETL job completed", extra={
+            "job_id": job_id,
+            "duration_seconds": duration,
+            "records_processed": transform_count
+        })
+        
+    except Exception as e:
+        logger.error("ETL job failed", extra={
+            "job_id": job_id,
+            "error": str(e)
+        })
+        raise</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="metrics" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from dataclasses import dataclass
+from datetime import datetime
+from typing import Dict, Any
+
+@dataclass
+class ETLMetrics:
+    job_id: str
+    start_time: datetime
+    end_time: datetime = None
+    records_read: int = 0
+    records_written: int = 0
+    records_failed: int = 0
+    bytes_processed: int = 0
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "job_id": self.job_id,
+            "start_time": self.start_time.isoformat(),
+            "end_time": self.end_time.isoformat() if self.end_time else None,
+            "duration_seconds": (self.end_time - self.start_time).total_seconds() if self.end_time else None,
+            "records_read": self.records_read,
+            "records_written": self.records_written,
+            "records_failed": self.records_failed,
+            "throughput_rps": self.records_written / max((self.end_time - self.start_time).total_seconds(), 1) if self.end_time else 0
+        }
+
+class MetricsCollector:
+    def __init__(self, spark):
+        self.spark = spark
+        self.metrics = []
+    
+    def collect_spark_metrics(self):
+        """Collect Spark execution metrics"""
+        sc = self.spark.sparkContext
+        return {
+            "active_jobs": len(sc.statusTracker().getActiveJobIds()),
+            "executor_memory": sc.getConf().get("spark.executor.memory", "unknown"),
+            "num_executors": sc.getConf().get("spark.executor.instances", "unknown")
+        }
+    
+    def publish_to_cloudwatch(self, metrics: ETLMetrics):
+        """Publish metrics to CloudWatch (AWS)"""
+        import boto3
+        cloudwatch = boto3.client('cloudwatch')
+        cloudwatch.put_metric_data(
+            Namespace='ETL/Pipeline',
+            MetricData=[
+                {'MetricName': 'RecordsProcessed', 'Value': metrics.records_written},
+                {'MetricName': 'Duration', 'Value': (metrics.end_time - metrics.start_time).total_seconds()}
+            ]
+        )</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="alerting" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import smtplib
+from email.mime.text import MIMEText
+import requests
+
+class AlertManager:
+    def __init__(self, config):
+        self.config = config
+    
+    def send_slack_alert(self, message, severity="warning"):
+        """Send alert to Slack"""
+        webhook_url = self.config["slack_webhook"]
+        color = {"info": "#36a64f", "warning": "#ff9800", "error": "#f44336"}
+        
+        payload = {
+            "attachments": [{
+                "color": color.get(severity, "#808080"),
+                "title": f"ETL Alert - {severity.upper()}",
+                "text": message,
+                "ts": datetime.now().timestamp()
+            }]
+        }
+        requests.post(webhook_url, json=payload)
+    
+    def send_pagerduty_alert(self, message, severity="warning"):
+        """Send alert to PagerDuty"""
+        requests.post(
+            "https://events.pagerduty.com/v2/enqueue",
+            json={
+                "routing_key": self.config["pagerduty_key"],
+                "event_action": "trigger",
+                "payload": {
+                    "summary": message,
+                    "severity": severity,
+                    "source": "ETL Pipeline"
+                }
+            }
+        )
+
+# Alert conditions
+def check_and_alert(metrics: ETLMetrics, alert_manager: AlertManager):
+    # SLA breach
+    if metrics.duration_seconds > 3600:
+        alert_manager.send_slack_alert(
+            f"ETL job {metrics.job_id} exceeded SLA: {metrics.duration_seconds}s",
+            severity="warning"
+        )
+    
+    # High failure rate
+    failure_rate = metrics.records_failed / max(metrics.records_read, 1)
+    if failure_rate > 0.05:
+        alert_manager.send_pagerduty_alert(
+            f"High failure rate: {failure_rate:.2%}",
+            severity="error"
+        )</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showMetrics();
+        });
+        function showMetrics() {
+            viz.clear();
+            const metrics = [
+                { label: 'Records', value: 0.8 },
+                { label: 'Duration', value: 0.5 },
+                { label: 'Errors', value: 0.1 },
+                { label: 'Throughput', value: 0.7 }
+            ];
+            metrics.forEach((m, i) => {
+                viz.createDataNode({ type: 'cube', size: 0.3, color: 0x4dabf7, position: { x: -1.5 + i, y: m.value, z: 0 } });
+                viz.createLabel(m.label, { x: -1.5 + i, y: -0.3, z: 0 });
+            });
+            viz.createLabel('ETL Metrics Dashboard', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showAlerts() {
+            viz.clear();
+            viz.createDataNode({ type: 'sphere', size: 0.5, color: 0x198754, position: { x: -1.5, y: 0.5, z: 0 } });
+            viz.createLabel('OK', { x: -1.5, y: 1.2, z: 0 });
+            viz.createDataNode({ type: 'sphere', size: 0.5, color: 0xffc107, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('Warning', { x: 0, y: 1.2, z: 0 });
+            viz.createDataNode({ type: 'sphere', size: 0.5, color: 0xe25a1c, position: { x: 1.5, y: 0.5, z: 0 } });
+            viz.createLabel('Critical', { x: 1.5, y: 1.2, z: 0 });
+            viz.createLabel('Alert Severity Levels', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apply & Lambda - Pandas Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pandas" class="nav-link active">Pandas</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Apply & Lambda</h1>
+            <p>The apply() method allows you to apply custom functions to DataFrames and Series. Combined with lambda functions, it provides powerful data transformation capabilities.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showApply()">Apply</button>
+                <button class="viz-btn" onclick="showMap()">Map</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="apply">apply()</button>
+                <button class="tab" data-tab="map">map() & applymap()</button>
+                <button class="tab" data-tab="vectorized">Vectorized</button>
+            </div>
+            <div class="tab-contents">
+                <div id="apply" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+df = pd.DataFrame({
+    'name': ['Alice', 'Bob', 'Charlie'],
+    'age': [25, 30, 35],
+    'salary': [50000, 60000, 75000]
+})
+
+# Apply to Series with lambda
+print("Age + 5:")
+print(df['age'].apply(lambda x: x + 5))
+
+# Apply with named function
+def categorize_salary(salary):
+    if salary < 55000:
+        return 'Low'
+    elif salary < 70000:
+        return 'Medium'
+    else:
+        return 'High'
+
+df['salary_category'] = df['salary'].apply(categorize_salary)
+print("\nWith salary category:")
+print(df)
+
+# Apply to DataFrame (row-wise)
+print("\nRow-wise apply (sum of numeric):")
+print(df[['age', 'salary']].apply(sum, axis=1))
+
+# Apply to DataFrame (column-wise)
+print("\nColumn-wise apply (mean):")
+print(df[['age', 'salary']].apply('mean', axis=0))
+
+# Apply with multiple arguments
+def multiply(x, factor):
+    return x * factor
+
+print("\nApply with args:")
+print(df['salary'].apply(multiply, factor=1.1))</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="map" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+df = pd.DataFrame({
+    'name': ['Alice', 'Bob', 'Charlie'],
+    'grade': ['A', 'B', 'A'],
+    'score': [90, 80, 95]
+})
+
+# Map with dictionary
+grade_points = {'A': 4.0, 'B': 3.0, 'C': 2.0}
+df['gpa'] = df['grade'].map(grade_points)
+print("Map with dictionary:")
+print(df)
+
+# Map with function
+df['name_upper'] = df['name'].map(str.upper)
+print("\nMap with function:")
+print(df)
+
+# Map with Series
+s = pd.Series({'Alice': 'NYC', 'Bob': 'LA', 'Charlie': 'Chicago'})
+df['city'] = df['name'].map(s)
+print("\nMap with Series:")
+print(df)
+
+# applymap (element-wise on DataFrame) - deprecated, use map
+df_num = pd.DataFrame({'A': [1, 2], 'B': [3, 4]})
+print("\nElement-wise operation:")
+print(df_num.map(lambda x: x ** 2))
+
+# Replace (alternative to map for simple cases)
+df['grade_full'] = df['grade'].replace({'A': 'Excellent', 'B': 'Good'})
+print("\nUsing replace:")
+print(df)</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="vectorized" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+import numpy as np
+
+df = pd.DataFrame({
+    'A': [1, 2, 3, 4, 5],
+    'B': [10, 20, 30, 40, 50]
+})
+
+# Prefer vectorized operations over apply
+# BAD (slow):
+# df['C'] = df['A'].apply(lambda x: x * 2)
+
+# GOOD (fast):
+df['C'] = df['A'] * 2
+print("Vectorized multiplication:")
+print(df)
+
+# Use numpy functions
+df['D'] = np.sqrt(df['B'])
+print("\nNumPy sqrt:")
+print(df)
+
+# Conditional with np.where (faster than apply)
+df['E'] = np.where(df['A'] > 2, 'High', 'Low')
+print("\nNumPy where:")
+print(df)
+
+# Multiple conditions with np.select
+conditions = [
+    df['A'] <= 2,
+    df['A'] <= 4,
+    df['A'] > 4
+]
+choices = ['Low', 'Medium', 'High']
+df['F'] = np.select(conditions, choices)
+print("\nNumPy select:")
+print(df)
+
+# Performance comparison tip:
+# 1. Vectorized operations (fastest)
+# 2. NumPy functions
+# 3. .apply() with built-in functions
+# 4. .apply() with lambda (slowest)</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showApply();
+        });
+        function showApply() {
+            viz.clear();
+            // Input
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.4, color: 0x4dabf7, position: { x: -2, y: 1.5 - i * 0.8, z: 0 } });
+            }
+            viz.createLabel('Input', { x: -2, y: 2.3, z: 0 });
+            // Function
+            viz.createDataNode({ type: 'sphere', size: 0.5, color: 0xe25a1c, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('f(x)', { x: 0, y: 1.3, z: 0 });
+            // Output
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.4, color: 0x198754, position: { x: 2, y: 1.5 - i * 0.8, z: 0 } });
+            }
+            viz.createLabel('Output', { x: 2, y: 2.3, z: 0 });
+            viz.createArrow({ x: -1.3, y: 0.5, z: 0 }, { x: -0.5, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.5, y: 0.5, z: 0 }, { x: 1.3, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createLabel('Apply - Transform each element', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showMap() {
+            viz.clear();
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x4dabf7, position: { x: -1.5, y: 0.5, z: 0 } });
+            viz.createLabel('A', { x: -1.5, y: 1.2, z: 0 });
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x198754, position: { x: 1.5, y: 0.5, z: 0 } });
+            viz.createLabel('4.0', { x: 1.5, y: 1.2, z: 0 });
+            viz.createArrow({ x: -0.8, y: 0.5, z: 0 }, { x: 0.8, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createLabel('Map - Dictionary lookup', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

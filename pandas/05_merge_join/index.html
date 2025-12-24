@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Merge, Join & Concat - Pandas Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pandas" class="nav-link active">Pandas</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Merge, Join & Concat</h1>
+            <p>Pandas provides multiple ways to combine DataFrames: merge (SQL-like joins), join (index-based), and concat (stacking).</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showInnerJoin()">Inner Join</button>
+                <button class="viz-btn" onclick="showLeftJoin()">Left Join</button>
+                <button class="viz-btn" onclick="showConcat()">Concat</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="merge">Merge</button>
+                <button class="tab" data-tab="join">Join</button>
+                <button class="tab" data-tab="concat">Concat</button>
+            </div>
+            <div class="tab-contents">
+                <div id="merge" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+# Sample DataFrames
+employees = pd.DataFrame({
+    'emp_id': [1, 2, 3, 4],
+    'name': ['Alice', 'Bob', 'Charlie', 'Diana'],
+    'dept_id': [101, 102, 101, 103]
+})
+
+departments = pd.DataFrame({
+    'dept_id': [101, 102, 104],
+    'dept_name': ['IT', 'HR', 'Finance']
+})
+
+# Inner merge (default)
+print("Inner merge:")
+print(pd.merge(employees, departments, on='dept_id'))
+
+# Left merge
+print("\nLeft merge:")
+print(pd.merge(employees, departments, on='dept_id', how='left'))
+
+# Right merge
+print("\nRight merge:")
+print(pd.merge(employees, departments, on='dept_id', how='right'))
+
+# Outer merge
+print("\nOuter merge:")
+print(pd.merge(employees, departments, on='dept_id', how='outer'))
+
+# Merge on different column names
+df1 = pd.DataFrame({'id': [1, 2], 'value': ['a', 'b']})
+df2 = pd.DataFrame({'key': [1, 2], 'data': ['x', 'y']})
+print("\nMerge on different columns:")
+print(pd.merge(df1, df2, left_on='id', right_on='key'))</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="join" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+# DataFrames with index
+df1 = pd.DataFrame({
+    'A': [1, 2, 3],
+    'B': [4, 5, 6]
+}, index=['a', 'b', 'c'])
+
+df2 = pd.DataFrame({
+    'C': [7, 8, 9],
+    'D': [10, 11, 12]
+}, index=['a', 'b', 'd'])
+
+# Join on index (default is left join)
+print("Left join on index:")
+print(df1.join(df2))
+
+# Inner join
+print("\nInner join:")
+print(df1.join(df2, how='inner'))
+
+# Outer join
+print("\nOuter join:")
+print(df1.join(df2, how='outer'))
+
+# Join with suffix for overlapping columns
+df3 = pd.DataFrame({'A': [100, 200]}, index=['a', 'b'])
+print("\nJoin with suffix:")
+print(df1.join(df3, lsuffix='_left', rsuffix='_right'))</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="concat" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+df1 = pd.DataFrame({'A': [1, 2], 'B': [3, 4]})
+df2 = pd.DataFrame({'A': [5, 6], 'B': [7, 8]})
+df3 = pd.DataFrame({'C': [9, 10], 'D': [11, 12]})
+
+# Vertical concat (stack rows)
+print("Vertical concat:")
+print(pd.concat([df1, df2]))
+
+# Reset index after concat
+print("\nWith reset index:")
+print(pd.concat([df1, df2], ignore_index=True))
+
+# Horizontal concat (add columns)
+print("\nHorizontal concat:")
+print(pd.concat([df1, df3], axis=1))
+
+# Concat with keys (hierarchical index)
+print("\nConcat with keys:")
+print(pd.concat([df1, df2], keys=['first', 'second']))
+
+# Append (deprecated, use concat)
+print("\nUsing concat instead of append:")
+print(pd.concat([df1, df2], ignore_index=True))</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showInnerJoin();
+        });
+        function showInnerJoin() {
+            viz.clear();
+            viz.createDataNode({ type: 'cube', size: 0.8, color: 0xe25a1c, position: { x: -1.5, y: 0.5, z: 0 } });
+            viz.createDataNode({ type: 'cube', size: 0.8, color: 0x4dabf7, position: { x: 1.5, y: 0.5, z: 0 } });
+            viz.createDataNode({ type: 'sphere', size: 0.4, color: 0x198754, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('Inner Join - Only matching', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showLeftJoin() {
+            viz.clear();
+            viz.createDataNode({ type: 'cube', size: 1, color: 0xe25a1c, position: { x: -1, y: 0.5, z: 0 } });
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0x4dabf7, position: { x: 1, y: 0.5, z: 0 } });
+            viz.createArrow({ x: -0.3, y: 0.5, z: 0 }, { x: 0.5, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createLabel('Left Join - All from left', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showConcat() {
+            viz.clear();
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0xe25a1c, position: { x: 0, y: 1.2, z: 0 } });
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0x4dabf7, position: { x: 0, y: 0.3, z: 0 } });
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0x198754, position: { x: 0, y: -0.6, z: 0 } });
+            viz.createLabel('Concat - Stack DataFrames', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

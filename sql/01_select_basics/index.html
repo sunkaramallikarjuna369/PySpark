@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SELECT Basics - SQL Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#sql" class="nav-link active">SQL</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>SELECT Basics</h1>
+            <p>The SELECT statement is the foundation of SQL queries. It retrieves data from one or more tables and is the most commonly used SQL command.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showSelectAll()">SELECT *</button>
+                <button class="viz-btn" onclick="showSelectColumns()">SELECT Columns</button>
+                <button class="viz-btn" onclick="showDistinct()">DISTINCT</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="basic">Basic SELECT</button>
+                <button class="tab" data-tab="columns">Column Selection</button>
+                <button class="tab" data-tab="aliases">Aliases & Expressions</button>
+            </div>
+            <div class="tab-contents">
+                <div id="basic" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- Select all columns from a table
+SELECT * FROM employees;
+
+-- Select all with table alias
+SELECT * FROM employees e;
+
+-- Select with schema prefix
+SELECT * FROM hr.employees;
+
+-- Limit results (different syntax per database)
+-- MySQL/PostgreSQL:
+SELECT * FROM employees LIMIT 10;
+
+-- SQL Server:
+SELECT TOP 10 * FROM employees;
+
+-- Oracle:
+SELECT * FROM employees WHERE ROWNUM <= 10;
+
+-- Count all rows
+SELECT COUNT(*) FROM employees;
+
+-- Check if table has data
+SELECT EXISTS (SELECT 1 FROM employees);</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="columns" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- Select specific columns
+SELECT first_name, last_name, salary
+FROM employees;
+
+-- Select with column order
+SELECT last_name, first_name, email
+FROM employees;
+
+-- Select distinct values
+SELECT DISTINCT department_id
+FROM employees;
+
+-- Select distinct combinations
+SELECT DISTINCT department_id, job_id
+FROM employees;
+
+-- Count distinct values
+SELECT COUNT(DISTINCT department_id)
+FROM employees;
+
+-- Select with table prefix (useful in joins)
+SELECT employees.first_name, employees.last_name
+FROM employees;
+
+-- Using table alias
+SELECT e.first_name, e.last_name
+FROM employees e;</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="aliases" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- Column aliases
+SELECT 
+    first_name AS "First Name",
+    last_name AS "Last Name",
+    salary AS annual_salary
+FROM employees;
+
+-- Calculated columns
+SELECT 
+    first_name,
+    last_name,
+    salary,
+    salary * 12 AS annual_salary,
+    salary * 1.1 AS salary_with_raise
+FROM employees;
+
+-- String concatenation
+-- Standard SQL:
+SELECT first_name || ' ' || last_name AS full_name FROM employees;
+-- MySQL:
+SELECT CONCAT(first_name, ' ', last_name) AS full_name FROM employees;
+-- SQL Server:
+SELECT first_name + ' ' + last_name AS full_name FROM employees;
+
+-- Literal values
+SELECT 
+    first_name,
+    'Active' AS status,
+    2024 AS year
+FROM employees;
+
+-- CASE expression in SELECT
+SELECT 
+    first_name,
+    salary,
+    CASE 
+        WHEN salary > 10000 THEN 'High'
+        WHEN salary > 5000 THEN 'Medium'
+        ELSE 'Low'
+    END AS salary_level
+FROM employees;</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showSelectAll();
+        });
+        function showSelectAll() {
+            viz.clear();
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 4; j++) {
+                    viz.createDataNode({ type: 'cube', size: 0.4, color: 0x4dabf7, position: { x: -1.5 + j * 1, y: 1.5 - i * 0.8, z: 0 } });
+                }
+            }
+            viz.createLabel('SELECT * - All columns selected', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showSelectColumns() {
+            viz.clear();
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 4; j++) {
+                    const selected = j === 0 || j === 2;
+                    viz.createDataNode({ type: 'cube', size: 0.4, color: selected ? 0xe25a1c : 0x333333, position: { x: -1.5 + j * 1, y: 1.5 - i * 0.8, z: 0 } });
+                }
+            }
+            viz.createLabel('SELECT col1, col3 - Specific columns', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showDistinct() {
+            viz.clear();
+            const colors = [0xe25a1c, 0x4dabf7, 0x198754];
+            for (let i = 0; i < 3; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.5, color: colors[i], position: { x: -1 + i * 1, y: 0.5, z: 0 } });
+            }
+            viz.createLabel('DISTINCT - Unique values only', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

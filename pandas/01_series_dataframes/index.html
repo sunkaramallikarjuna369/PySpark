@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Series & DataFrames - Pandas Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav">
+                <a href="../../index.html#pyspark" class="nav-link">PySpark</a>
+                <a href="../../index.html#pandas" class="nav-link active">Pandas</a>
+                <a href="../../index.html#sql" class="nav-link">SQL</a>
+                <a href="../../index.html#etl" class="nav-link">ETL</a>
+                <a href="../../index.html#datawarehouse" class="nav-link">Data Warehouse</a>
+                <button class="theme-toggle">🌙</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <nav class="breadcrumb">
+            <span class="breadcrumb-item"><a href="../../index.html">Home</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item"><a href="../../index.html#pandas">Pandas</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item">Series & DataFrames</span>
+        </nav>
+
+        <section class="section">
+            <h1>Series & DataFrames</h1>
+            <p>Series and DataFrames are the two primary data structures in Pandas. A Series is a one-dimensional labeled array, while a DataFrame is a two-dimensional labeled data structure with columns of potentially different types.</p>
+
+            <div class="info-box info">
+                <strong>Key Concept:</strong> Series is like a column in a spreadsheet, while DataFrame is like the entire spreadsheet with multiple columns and rows.
+            </div>
+
+            <h2>3D Visualization: Data Structures</h2>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showSeries()">Series</button>
+                <button class="viz-btn" onclick="showDataFrame()">DataFrame</button>
+                <button class="viz-btn" onclick="showIndex()">Index</button>
+            </div>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="series">Series</button>
+                <button class="tab" data-tab="dataframe">DataFrame</button>
+                <button class="tab" data-tab="operations">Operations</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="series" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>import pandas as pd
+import numpy as np
+
+# Create Series from list
+s1 = pd.Series([1, 2, 3, 4, 5])
+print("Series from list:")
+print(s1)
+
+# Create Series with custom index
+s2 = pd.Series([10, 20, 30], index=['a', 'b', 'c'])
+print("\nSeries with custom index:")
+print(s2)
+
+# Create Series from dictionary
+data = {'apple': 100, 'banana': 200, 'cherry': 150}
+s3 = pd.Series(data)
+print("\nSeries from dictionary:")
+print(s3)
+
+# Create Series from NumPy array
+arr = np.array([1.5, 2.5, 3.5, 4.5])
+s4 = pd.Series(arr, name='values')
+print("\nSeries from NumPy array:")
+print(s4)
+
+# Series attributes
+print(f"\nSeries attributes:")
+print(f"  dtype: {s1.dtype}")
+print(f"  size: {s1.size}")
+print(f"  shape: {s1.shape}")
+print(f"  index: {s1.index.tolist()}")
+print(f"  values: {s1.values}")
+print(f"  name: {s4.name}")
+
+# Accessing elements
+print(f"\nAccessing elements:")
+print(f"  s2['a']: {s2['a']}")
+print(f"  s2[0]: {s2.iloc[0]}")
+print(f"  s2['a':'b']: {s2['a':'b'].tolist()}")
+
+# Series operations
+print(f"\nSeries operations:")
+print(f"  sum: {s1.sum()}")
+print(f"  mean: {s1.mean()}")
+print(f"  std: {s1.std():.2f}")
+print(f"  min: {s1.min()}")
+print(f"  max: {s1.max()}")</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="dataframe" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+# Create DataFrame from dictionary
+data = {
+    'name': ['Alice', 'Bob', 'Charlie', 'Diana'],
+    'age': [25, 30, 35, 28],
+    'city': ['NYC', 'LA', 'Chicago', 'Houston'],
+    'salary': [50000, 60000, 75000, 55000]
+}
+df = pd.DataFrame(data)
+print("DataFrame from dictionary:")
+print(df)
+
+# Create DataFrame with custom index
+df2 = pd.DataFrame(data, index=['emp1', 'emp2', 'emp3', 'emp4'])
+print("\nDataFrame with custom index:")
+print(df2)
+
+# Create DataFrame from list of dictionaries
+records = [
+    {'product': 'Laptop', 'price': 1000, 'quantity': 5},
+    {'product': 'Phone', 'price': 500, 'quantity': 10},
+    {'product': 'Tablet', 'price': 300, 'quantity': 8}
+]
+df3 = pd.DataFrame(records)
+print("\nDataFrame from list of dictionaries:")
+print(df3)
+
+# Create DataFrame from NumPy array
+import numpy as np
+arr = np.random.randint(1, 100, size=(4, 3))
+df4 = pd.DataFrame(arr, columns=['A', 'B', 'C'])
+print("\nDataFrame from NumPy array:")
+print(df4)
+
+# DataFrame attributes
+print(f"\nDataFrame attributes:")
+print(f"  shape: {df.shape}")
+print(f"  columns: {df.columns.tolist()}")
+print(f"  index: {df.index.tolist()}")
+print(f"  dtypes:\n{df.dtypes}")
+
+# DataFrame info
+print("\nDataFrame info:")
+df.info()
+
+# DataFrame describe
+print("\nDataFrame describe:")
+print(df.describe())</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="operations" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+df = pd.DataFrame({
+    'name': ['Alice', 'Bob', 'Charlie'],
+    'age': [25, 30, 35],
+    'salary': [50000, 60000, 75000]
+})
+
+# Selecting columns
+print("Select single column (Series):")
+print(df['name'])
+
+print("\nSelect multiple columns (DataFrame):")
+print(df[['name', 'salary']])
+
+# Adding columns
+df['bonus'] = df['salary'] * 0.1
+print("\nAfter adding bonus column:")
+print(df)
+
+# Renaming columns
+df_renamed = df.rename(columns={'name': 'employee_name', 'age': 'employee_age'})
+print("\nRenamed columns:")
+print(df_renamed.columns.tolist())
+
+# Dropping columns
+df_dropped = df.drop(columns=['bonus'])
+print("\nAfter dropping bonus:")
+print(df_dropped)
+
+# Reordering columns
+df_reordered = df[['name', 'salary', 'bonus', 'age']]
+print("\nReordered columns:")
+print(df_reordered)
+
+# Setting index
+df_indexed = df.set_index('name')
+print("\nWith name as index:")
+print(df_indexed)
+
+# Reset index
+df_reset = df_indexed.reset_index()
+print("\nReset index:")
+print(df_reset)
+
+# Copying DataFrames
+df_copy = df.copy()  # Deep copy
+df_view = df  # Reference (not a copy)</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../../index.html#pandas" style="color: var(--text-muted);">← Back to Pandas</a>
+                <a href="../02_data_selection/index.html" style="color: var(--accent-primary);">Next: Data Selection →</a>
+            </div>
+        </section>
+    </main>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showSeries();
+        });
+
+        function showSeries() {
+            viz.clear();
+            for (let i = 0; i < 5; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.5, color: 0x4dabf7, position: { x: 0, y: 2 - i * 0.8, z: 0 } });
+                viz.createLabel(`[${i}]`, { x: -1, y: 2 - i * 0.8, z: 0 });
+            }
+            viz.createLabel('Series - 1D labeled array', { x: 0, y: -2.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showDataFrame() {
+            viz.clear();
+            const colors = [0xe25a1c, 0x4dabf7, 0x198754];
+            for (let col = 0; col < 3; col++) {
+                for (let row = 0; row < 4; row++) {
+                    viz.createDataNode({ type: 'cube', size: 0.4, color: colors[col], position: { x: -1.5 + col * 1.2, y: 1.5 - row * 0.8, z: 0 } });
+                }
+                viz.createLabel(['Col A', 'Col B', 'Col C'][col], { x: -1.5 + col * 1.2, y: 2.3, z: 0 });
+            }
+            viz.createLabel('DataFrame - 2D labeled structure', { x: 0, y: -2.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showIndex() {
+            viz.clear();
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({ type: 'sphere', size: 0.3, color: 0x8b5cf6, position: { x: -2, y: 1.5 - i * 0.8, z: 0 } });
+                viz.createLabel(`idx_${i}`, { x: -2.8, y: 1.5 - i * 0.8, z: 0 });
+                viz.createDataNode({ type: 'cube', size: 0.4, color: 0x4dabf7, position: { x: 0, y: 1.5 - i * 0.8, z: 0 } });
+                viz.createArrow({ x: -1.5, y: 1.5 - i * 0.8, z: 0 }, { x: -0.5, y: 1.5 - i * 0.8, z: 0 }, { color: 0x888888 });
+            }
+            viz.createLabel('Index - Labels for data access', { x: 0, y: -2.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

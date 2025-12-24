@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subqueries - SQL Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#sql" class="nav-link active">SQL</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Subqueries</h1>
+            <p>Subqueries are queries nested inside another query. They can appear in SELECT, FROM, WHERE, and HAVING clauses.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showSubquery()">Subquery</button>
+                <button class="viz-btn" onclick="showCorrelated()">Correlated</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="scalar">Scalar Subqueries</button>
+                <button class="tab" data-tab="table">Table Subqueries</button>
+                <button class="tab" data-tab="correlated">Correlated</button>
+            </div>
+            <div class="tab-contents">
+                <div id="scalar" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- Scalar subquery in WHERE
+SELECT * FROM employees
+WHERE salary > (SELECT AVG(salary) FROM employees);
+
+-- Scalar subquery in SELECT
+SELECT 
+    first_name,
+    salary,
+    (SELECT AVG(salary) FROM employees) AS avg_salary,
+    salary - (SELECT AVG(salary) FROM employees) AS diff
+FROM employees;
+
+-- Subquery with IN
+SELECT * FROM employees
+WHERE department_id IN (
+    SELECT department_id FROM departments 
+    WHERE location_id = 1700
+);
+
+-- Subquery with NOT IN
+SELECT * FROM employees
+WHERE department_id NOT IN (
+    SELECT department_id FROM departments 
+    WHERE manager_id IS NOT NULL
+);
+
+-- Subquery with comparison operators
+SELECT * FROM employees
+WHERE salary >= ALL (
+    SELECT salary FROM employees WHERE department_id = 10
+);
+
+SELECT * FROM employees
+WHERE salary > ANY (
+    SELECT salary FROM employees WHERE department_id = 10
+);</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="table" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- Subquery in FROM (derived table)
+SELECT dept_avg.department_id, dept_avg.avg_salary
+FROM (
+    SELECT department_id, AVG(salary) AS avg_salary
+    FROM employees
+    GROUP BY department_id
+) AS dept_avg
+WHERE dept_avg.avg_salary > 50000;
+
+-- Multiple subqueries in FROM
+SELECT a.department_id, a.avg_sal, b.max_sal
+FROM (
+    SELECT department_id, AVG(salary) AS avg_sal
+    FROM employees GROUP BY department_id
+) a
+JOIN (
+    SELECT department_id, MAX(salary) AS max_sal
+    FROM employees GROUP BY department_id
+) b ON a.department_id = b.department_id;
+
+-- Subquery with EXISTS
+SELECT * FROM departments d
+WHERE EXISTS (
+    SELECT 1 FROM employees e 
+    WHERE e.department_id = d.department_id
+);
+
+-- Subquery with NOT EXISTS
+SELECT * FROM departments d
+WHERE NOT EXISTS (
+    SELECT 1 FROM employees e 
+    WHERE e.department_id = d.department_id
+);</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="correlated" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- Correlated subquery (references outer query)
+SELECT e.first_name, e.salary, e.department_id
+FROM employees e
+WHERE e.salary > (
+    SELECT AVG(salary) 
+    FROM employees 
+    WHERE department_id = e.department_id
+);
+
+-- Correlated subquery in SELECT
+SELECT 
+    e.first_name,
+    e.department_id,
+    (SELECT COUNT(*) FROM employees 
+     WHERE department_id = e.department_id) AS dept_count
+FROM employees e;
+
+-- Correlated EXISTS
+SELECT d.department_name
+FROM departments d
+WHERE EXISTS (
+    SELECT 1 FROM employees e
+    WHERE e.department_id = d.department_id
+    AND e.salary > 50000
+);
+
+-- Lateral join (modern alternative to correlated)
+SELECT e.first_name, recent_orders.*
+FROM employees e
+CROSS JOIN LATERAL (
+    SELECT * FROM orders o
+    WHERE o.employee_id = e.employee_id
+    ORDER BY order_date DESC
+    LIMIT 3
+) recent_orders;</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showSubquery();
+        });
+        function showSubquery() {
+            viz.clear();
+            viz.createDataNode({ type: 'cube', size: 1, color: 0x4dabf7, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0xe25a1c, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('Outer Query', { x: 0, y: 1.8, z: 0 });
+            viz.createLabel('Inner Query', { x: 0, y: 0.5, z: 1 });
+            viz.createLabel('Subquery - Query inside query', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showCorrelated() {
+            viz.clear();
+            viz.createDataNode({ type: 'cube', size: 0.8, color: 0x4dabf7, position: { x: -1, y: 0.5, z: 0 } });
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0xe25a1c, position: { x: 1, y: 0.5, z: 0 } });
+            viz.createArrow({ x: -0.4, y: 0.5, z: 0 }, { x: 0.4, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.4, y: 0.3, z: 0 }, { x: -0.4, y: 0.3, z: 0 }, { color: 0x888888 });
+            viz.createLabel('Correlated - References outer query', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

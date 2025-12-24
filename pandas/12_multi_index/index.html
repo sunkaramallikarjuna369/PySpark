@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Index - Pandas Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pandas" class="nav-link active">Pandas</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Multi-Index (Hierarchical Indexing)</h1>
+            <p>MultiIndex allows you to have multiple levels of indexes on rows or columns, enabling complex data organization and efficient slicing.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showMultiIndex()">MultiIndex</button>
+                <button class="viz-btn" onclick="showSlicing()">Slicing</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="create">Create</button>
+                <button class="tab" data-tab="select">Select</button>
+                <button class="tab" data-tab="operations">Operations</button>
+            </div>
+            <div class="tab-contents">
+                <div id="create" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+# Create MultiIndex from tuples
+index = pd.MultiIndex.from_tuples([
+    ('A', 1), ('A', 2), ('B', 1), ('B', 2)
+], names=['letter', 'number'])
+
+df = pd.DataFrame({'value': [10, 20, 30, 40]}, index=index)
+print("MultiIndex DataFrame:")
+print(df)
+
+# Create from arrays
+arrays = [['A', 'A', 'B', 'B'], [1, 2, 1, 2]]
+index2 = pd.MultiIndex.from_arrays(arrays, names=['letter', 'number'])
+
+# Create from product (all combinations)
+index3 = pd.MultiIndex.from_product(
+    [['A', 'B'], [1, 2, 3]], 
+    names=['letter', 'number']
+)
+print("\nFrom product:")
+print(pd.DataFrame({'value': range(6)}, index=index3))
+
+# Set MultiIndex from columns
+df2 = pd.DataFrame({
+    'year': [2022, 2022, 2023, 2023],
+    'quarter': ['Q1', 'Q2', 'Q1', 'Q2'],
+    'sales': [100, 150, 120, 180]
+})
+df2_multi = df2.set_index(['year', 'quarter'])
+print("\nSet index from columns:")
+print(df2_multi)
+
+# MultiIndex on columns
+df3 = pd.DataFrame(
+    [[1, 2, 3, 4], [5, 6, 7, 8]],
+    columns=pd.MultiIndex.from_product([['A', 'B'], ['x', 'y']])
+)
+print("\nMultiIndex columns:")
+print(df3)</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="select" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+index = pd.MultiIndex.from_product(
+    [['A', 'B'], [1, 2, 3]], 
+    names=['letter', 'number']
+)
+df = pd.DataFrame({'value': [10, 20, 30, 40, 50, 60]}, index=index)
+print("DataFrame:")
+print(df)
+
+# Select outer level
+print("\nSelect 'A':")
+print(df.loc['A'])
+
+# Select specific combination
+print("\nSelect ('A', 1):")
+print(df.loc[('A', 1)])
+
+# Select with slice
+print("\nSlice outer level:")
+print(df.loc['A':'B'])
+
+# Cross-section (xs)
+print("\nCross-section (number=1):")
+print(df.xs(1, level='number'))
+
+# Select inner level with IndexSlice
+idx = pd.IndexSlice
+print("\nUsing IndexSlice:")
+print(df.loc[idx[:, 2], :])
+
+# Query with MultiIndex
+df_reset = df.reset_index()
+print("\nQuery after reset:")
+print(df_reset.query('letter == "A" and number > 1'))</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="operations" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+index = pd.MultiIndex.from_product(
+    [['A', 'B'], [1, 2]], 
+    names=['letter', 'number']
+)
+df = pd.DataFrame({'value': [10, 20, 30, 40]}, index=index)
+
+# Swap levels
+print("Swap levels:")
+print(df.swaplevel())
+
+# Sort index
+df_unsorted = df.iloc[[3, 1, 2, 0]]
+print("\nSorted index:")
+print(df_unsorted.sort_index())
+
+# Reset index
+print("\nReset index:")
+print(df.reset_index())
+
+# Reset specific level
+print("\nReset level 'number':")
+print(df.reset_index(level='number'))
+
+# Droplevel
+print("\nDrop level 'number':")
+print(df.droplevel('number'))
+
+# Rename levels
+df_renamed = df.rename_axis(['Letter', 'Number'])
+print("\nRenamed levels:")
+print(df_renamed)
+
+# GroupBy with MultiIndex
+print("\nGroupBy outer level:")
+print(df.groupby(level='letter').sum())</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showMultiIndex();
+        });
+        function showMultiIndex() {
+            viz.clear();
+            // Level 0
+            viz.createDataNode({ type: 'cube', size: 0.8, color: 0xe25a1c, position: { x: -1.5, y: 1, z: 0 } });
+            viz.createDataNode({ type: 'cube', size: 0.8, color: 0x4dabf7, position: { x: -1.5, y: -0.5, z: 0 } });
+            viz.createLabel('A', { x: -2.3, y: 1, z: 0 });
+            viz.createLabel('B', { x: -2.3, y: -0.5, z: 0 });
+            // Level 1
+            for (let i = 0; i < 2; i++) {
+                for (let j = 0; j < 2; j++) {
+                    viz.createDataNode({ type: 'cube', size: 0.35, color: 0x198754, position: { x: 0 + j * 0.6, y: 1.2 - i * 1.5 - j * 0.4, z: 0 } });
+                }
+            }
+            viz.createLabel('MultiIndex - Hierarchical levels', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showSlicing() {
+            viz.clear();
+            for (let i = 0; i < 4; i++) {
+                const selected = i < 2;
+                viz.createDataNode({ type: 'cube', size: 0.5, color: selected ? 0xe25a1c : 0x4dabf7, position: { x: 0, y: 1.5 - i * 0.8, z: 0 } });
+            }
+            viz.createLabel('df.loc["A"] - Select level', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

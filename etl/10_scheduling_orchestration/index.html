@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scheduling & Orchestration - ETL Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#etl" class="nav-link active">ETL</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Scheduling & Orchestration</h1>
+            <p>Orchestration tools manage complex ETL workflows, handling dependencies, scheduling, retries, and monitoring across multiple jobs and systems.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showDAG()">DAG</button>
+                <button class="viz-btn" onclick="showSchedule()">Schedule</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="airflow">Apache Airflow</button>
+                <button class="tab" data-tab="prefect">Prefect</button>
+                <button class="tab" data-tab="databricks">Databricks</button>
+            </div>
+            <div class="tab-contents">
+                <div id="airflow" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from airflow import DAG
+from airflow.operators.python import PythonOperator
+from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
+from airflow.sensors.filesystem import FileSensor
+from datetime import datetime, timedelta
+
+default_args = {
+    'owner': 'data_team',
+    'depends_on_past': False,
+    'start_date': datetime(2024, 1, 1),
+    'email_on_failure': True,
+    'email': ['alerts@company.com'],
+    'retries': 3,
+    'retry_delay': timedelta(minutes=5)
+}
+
+with DAG(
+    'etl_pipeline',
+    default_args=default_args,
+    description='Daily ETL Pipeline',
+    schedule_interval='0 6 * * *',  # Daily at 6 AM
+    catchup=False,
+    tags=['etl', 'production']
+) as dag:
+    
+    # Wait for source file
+    wait_for_file = FileSensor(
+        task_id='wait_for_source_file',
+        filepath='/data/incoming/daily_*.csv',
+        poke_interval=300,
+        timeout=3600
+    )
+    
+    # Extract task
+    extract = SparkSubmitOperator(
+        task_id='extract_data',
+        application='/jobs/extract.py',
+        conn_id='spark_default',
+        conf={'spark.executor.memory': '4g'}
+    )
+    
+    # Transform task
+    transform = SparkSubmitOperator(
+        task_id='transform_data',
+        application='/jobs/transform.py',
+        conn_id='spark_default'
+    )
+    
+    # Load task
+    load = SparkSubmitOperator(
+        task_id='load_data',
+        application='/jobs/load.py',
+        conn_id='spark_default'
+    )
+    
+    # Define dependencies
+    wait_for_file >> extract >> transform >> load</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="prefect" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from prefect import flow, task
+from prefect.tasks import task_input_hash
+from datetime import timedelta
+
+@task(retries=3, retry_delay_seconds=60, cache_key_fn=task_input_hash)
+def extract_data(source_path: str):
+    """Extract data from source"""
+    spark = get_spark_session()
+    df = spark.read.parquet(source_path)
+    return df
+
+@task(retries=2)
+def transform_data(df):
+    """Apply transformations"""
+    return df.transform(apply_business_rules)
+
+@task
+def load_data(df, target_path: str):
+    """Load to target"""
+    df.write.mode("overwrite").parquet(target_path)
+    return df.count()
+
+@task
+def send_notification(records_count: int):
+    """Send completion notification"""
+    print(f"ETL completed: {records_count} records processed")
+
+@flow(name="ETL Pipeline", log_prints=True)
+def etl_pipeline(source: str, target: str):
+    """Main ETL flow"""
+    # Extract
+    raw_data = extract_data(source)
+    
+    # Transform
+    transformed = transform_data(raw_data)
+    
+    # Load
+    count = load_data(transformed, target)
+    
+    # Notify
+    send_notification(count)
+    
+    return count
+
+# Schedule with Prefect
+from prefect.deployments import Deployment
+from prefect.server.schemas.schedules import CronSchedule
+
+deployment = Deployment.build_from_flow(
+    flow=etl_pipeline,
+    name="daily-etl",
+    schedule=CronSchedule(cron="0 6 * * *"),
+    parameters={"source": "/data/raw", "target": "/data/processed"}
+)</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="databricks" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre># Databricks Workflows (Jobs API)
+import requests
+import json
+
+databricks_host = "https://your-workspace.cloud.databricks.com"
+token = "your-token"
+
+# Create a multi-task job
+job_config = {
+    "name": "ETL_Pipeline",
+    "tasks": [
+        {
+            "task_key": "extract",
+            "notebook_task": {
+                "notebook_path": "/ETL/extract"
+            },
+            "new_cluster": {
+                "spark_version": "13.3.x-scala2.12",
+                "num_workers": 2
+            }
+        },
+        {
+            "task_key": "transform",
+            "depends_on": [{"task_key": "extract"}],
+            "notebook_task": {
+                "notebook_path": "/ETL/transform"
+            },
+            "existing_cluster_id": "cluster-id"
+        },
+        {
+            "task_key": "load",
+            "depends_on": [{"task_key": "transform"}],
+            "notebook_task": {
+                "notebook_path": "/ETL/load"
+            }
+        }
+    ],
+    "schedule": {
+        "quartz_cron_expression": "0 0 6 * * ?",
+        "timezone_id": "UTC"
+    },
+    "email_notifications": {
+        "on_failure": ["alerts@company.com"]
+    }
+}
+
+# Create job via API
+response = requests.post(
+    f"{databricks_host}/api/2.1/jobs/create",
+    headers={"Authorization": f"Bearer {token}"},
+    json=job_config
+)</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showDAG();
+        });
+        function showDAG() {
+            viz.clear();
+            const tasks = [
+                { name: 'Extract', pos: { x: -2, y: 0.5, z: 0 } },
+                { name: 'Transform', pos: { x: 0, y: 0.5, z: 0 } },
+                { name: 'Load', pos: { x: 2, y: 0.5, z: 0 } }
+            ];
+            tasks.forEach((t, i) => {
+                viz.createDataNode({ type: 'cube', size: 0.5, color: [0x4dabf7, 0xe25a1c, 0x198754][i], position: t.pos });
+                viz.createLabel(t.name, { x: t.pos.x, y: 1.3, z: 0 });
+                if (i < 2) viz.createArrow({ x: t.pos.x + 0.5, y: 0.5, z: 0 }, { x: t.pos.x + 1.5, y: 0.5, z: 0 }, { color: 0x888888 });
+            });
+            viz.createLabel('DAG - Directed Acyclic Graph', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showSchedule() {
+            viz.clear();
+            for (let i = 0; i < 7; i++) {
+                const isRun = i % 2 === 0;
+                viz.createDataNode({ type: 'cube', size: 0.3, color: isRun ? 0x198754 : 0x333333, position: { x: -2.5 + i * 0.8, y: 0.5, z: 0 } });
+            }
+            viz.createLabel('Schedule - Daily/Hourly runs', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

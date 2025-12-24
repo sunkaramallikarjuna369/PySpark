@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Selection - Pandas Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav">
+                <a href="../../index.html#pyspark" class="nav-link">PySpark</a>
+                <a href="../../index.html#pandas" class="nav-link active">Pandas</a>
+                <a href="../../index.html#sql" class="nav-link">SQL</a>
+                <a href="../../index.html#etl" class="nav-link">ETL</a>
+                <a href="../../index.html#datawarehouse" class="nav-link">Data Warehouse</a>
+                <button class="theme-toggle">🌙</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="section">
+            <h1>Data Selection</h1>
+            <p>Pandas provides multiple ways to select and access data: loc (label-based), iloc (integer-based), and direct column access. Understanding these methods is crucial for efficient data manipulation.</p>
+
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showLoc()">loc (Label)</button>
+                <button class="viz-btn" onclick="showIloc()">iloc (Integer)</button>
+                <button class="viz-btn" onclick="showSlicing()">Slicing</button>
+            </div>
+
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="loc">loc Selection</button>
+                <button class="tab" data-tab="iloc">iloc Selection</button>
+                <button class="tab" data-tab="advanced">Advanced</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="loc" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+df = pd.DataFrame({
+    'name': ['Alice', 'Bob', 'Charlie', 'Diana'],
+    'age': [25, 30, 35, 28],
+    'salary': [50000, 60000, 75000, 55000]
+}, index=['a', 'b', 'c', 'd'])
+
+# Select single row by label
+print("Single row (loc['a']):")
+print(df.loc['a'])
+
+# Select multiple rows
+print("\nMultiple rows (loc[['a', 'c']]):")
+print(df.loc[['a', 'c']])
+
+# Select row and column
+print("\nSpecific cell (loc['b', 'name']):")
+print(df.loc['b', 'name'])
+
+# Select rows and columns
+print("\nRows and columns (loc['a':'c', ['name', 'salary']]):")
+print(df.loc['a':'c', ['name', 'salary']])
+
+# Conditional selection with loc
+print("\nConditional (loc[df['age'] > 28]):")
+print(df.loc[df['age'] > 28])</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="iloc" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+df = pd.DataFrame({
+    'name': ['Alice', 'Bob', 'Charlie', 'Diana'],
+    'age': [25, 30, 35, 28],
+    'salary': [50000, 60000, 75000, 55000]
+})
+
+# Select single row by position
+print("First row (iloc[0]):")
+print(df.iloc[0])
+
+# Select multiple rows
+print("\nRows 0 and 2 (iloc[[0, 2]]):")
+print(df.iloc[[0, 2]])
+
+# Select row and column by position
+print("\nCell at row 1, col 0 (iloc[1, 0]):")
+print(df.iloc[1, 0])
+
+# Slicing with iloc
+print("\nFirst 2 rows, first 2 columns (iloc[:2, :2]):")
+print(df.iloc[:2, :2])
+
+# Negative indexing
+print("\nLast row (iloc[-1]):")
+print(df.iloc[-1])
+
+# Step slicing
+print("\nEvery other row (iloc[::2]):")
+print(df.iloc[::2])</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="advanced" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>import pandas as pd
+
+df = pd.DataFrame({
+    'name': ['Alice', 'Bob', 'Charlie', 'Diana'],
+    'age': [25, 30, 35, 28],
+    'salary': [50000, 60000, 75000, 55000],
+    'dept': ['IT', 'HR', 'IT', 'Finance']
+})
+
+# at and iat for scalar access (faster)
+print("at['a', 'name']:", df.at[0, 'name'])
+print("iat[0, 0]:", df.iat[0, 0])
+
+# Query method
+print("\nQuery method:")
+print(df.query('age > 28 and dept == "IT"'))
+
+# isin for multiple values
+print("\nUsing isin:")
+print(df[df['dept'].isin(['IT', 'HR'])])
+
+# where method
+print("\nUsing where (keeps shape):")
+print(df.where(df['age'] > 28))
+
+# mask method (opposite of where)
+print("\nUsing mask:")
+print(df.mask(df['age'] > 28))
+
+# Select dtypes
+print("\nSelect numeric columns:")
+print(df.select_dtypes(include=['int64']))</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showLoc();
+        });
+
+        function showLoc() {
+            viz.clear();
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 3; j++) {
+                    const highlight = (i === 1);
+                    viz.createDataNode({ type: 'cube', size: 0.4, color: highlight ? 0xe25a1c : 0x4dabf7, position: { x: -1 + j * 1, y: 1.5 - i * 0.8, z: 0 } });
+                }
+                viz.createLabel(['a', 'b', 'c', 'd'][i], { x: -2.2, y: 1.5 - i * 0.8, z: 0 });
+            }
+            viz.createLabel('loc["b"] - Select by label', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showIloc() {
+            viz.clear();
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 3; j++) {
+                    const highlight = (i === 0);
+                    viz.createDataNode({ type: 'cube', size: 0.4, color: highlight ? 0x198754 : 0x4dabf7, position: { x: -1 + j * 1, y: 1.5 - i * 0.8, z: 0 } });
+                }
+                viz.createLabel(String(i), { x: -2.2, y: 1.5 - i * 0.8, z: 0 });
+            }
+            viz.createLabel('iloc[0] - Select by position', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showSlicing() {
+            viz.clear();
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 3; j++) {
+                    const highlight = (i < 2 && j < 2);
+                    viz.createDataNode({ type: 'cube', size: 0.4, color: highlight ? 0x8b5cf6 : 0x4dabf7, position: { x: -1 + j * 1, y: 1.5 - i * 0.8, z: 0 } });
+                }
+            }
+            viz.createLabel('iloc[:2, :2] - Slice rows and columns', { x: 0, y: -2, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

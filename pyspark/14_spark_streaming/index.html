@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spark Streaming - PySpark Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo">
+                <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                    <rect width="40" height="40" rx="8" fill="#e25a1c"/>
+                    <path d="M12 20L20 12L28 20L20 28L12 20Z" fill="white"/>
+                    <circle cx="20" cy="20" r="4" fill="#e25a1c"/>
+                </svg>
+                <span>Data Engineering Hub</span>
+            </a>
+            <nav class="nav">
+                <a href="../../index.html#pyspark" class="nav-link active">PySpark</a>
+                <a href="../../index.html#pandas" class="nav-link">Pandas</a>
+                <a href="../../index.html#sql" class="nav-link">SQL</a>
+                <a href="../../index.html#etl" class="nav-link">ETL</a>
+                <a href="../../index.html#datawarehouse" class="nav-link">Data Warehouse</a>
+                <button class="theme-toggle">🌙</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <nav class="breadcrumb">
+            <span class="breadcrumb-item"><a href="../../index.html">Home</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item"><a href="../../index.html#pyspark">PySpark</a></span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item">Spark Streaming</span>
+        </nav>
+
+        <section class="section">
+            <h1>Spark Streaming</h1>
+            <p>Spark Structured Streaming is a scalable and fault-tolerant stream processing engine built on the Spark SQL engine. It allows you to process real-time data streams using the same DataFrame/Dataset API used for batch processing.</p>
+
+            <div class="info-box info">
+                <strong>Key Concept:</strong> Structured Streaming treats a live data stream as a table that is continuously appended. You can express your streaming computation as a standard batch-like query.
+            </div>
+
+            <h2>3D Visualization: Streaming Architecture</h2>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showStreamFlow()">Stream Flow</button>
+                <button class="viz-btn" onclick="showMicroBatch()">Micro-Batch</button>
+                <button class="viz-btn" onclick="showWatermark()">Watermarking</button>
+            </div>
+
+            <h2>Code Examples</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="basic">Basic Streaming</button>
+                <button class="tab" data-tab="window">Windowing</button>
+                <button class="tab" data-tab="kafka">Kafka Integration</button>
+            </div>
+
+            <div class="tab-contents">
+                <div id="basic" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import explode, split, col, current_timestamp
+from pyspark.sql.types import StructType, StringType, TimestampType
+
+spark = SparkSession.builder \
+    .appName("Structured Streaming") \
+    .getOrCreate()
+
+# Read from socket (for testing)
+lines = spark.readStream \
+    .format("socket") \
+    .option("host", "localhost") \
+    .option("port", 9999) \
+    .load()
+
+# Word count streaming
+words = lines.select(explode(split(col("value"), " ")).alias("word"))
+word_counts = words.groupBy("word").count()
+
+# Write to console
+query = word_counts.writeStream \
+    .outputMode("complete") \
+    .format("console") \
+    .start()
+
+# Read from files (common pattern)
+schema = StructType() \
+    .add("id", "integer") \
+    .add("name", "string") \
+    .add("value", "double") \
+    .add("timestamp", "timestamp")
+
+file_stream = spark.readStream \
+    .schema(schema) \
+    .option("maxFilesPerTrigger", 1) \
+    .csv("/path/to/streaming/data")
+
+# Process and write to parquet
+processed = file_stream \
+    .withColumn("processed_time", current_timestamp()) \
+    .filter(col("value") > 0)
+
+file_query = processed.writeStream \
+    .outputMode("append") \
+    .format("parquet") \
+    .option("path", "/path/to/output") \
+    .option("checkpointLocation", "/path/to/checkpoint") \
+    .start()
+
+# Output modes:
+# - append: Only new rows (default for non-aggregation)
+# - complete: All rows (required for aggregations)
+# - update: Only changed rows
+
+# Trigger options
+query_with_trigger = word_counts.writeStream \
+    .outputMode("complete") \
+    .format("console") \
+    .trigger(processingTime="10 seconds") \
+    .start()
+
+# Available triggers:
+# .trigger(processingTime="10 seconds")  # Micro-batch every 10s
+# .trigger(once=True)                     # Single batch
+# .trigger(continuous="1 second")         # Continuous processing
+
+# Wait for termination
+# query.awaitTermination()
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="window" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import window, col, sum, avg, count
+from pyspark.sql.types import StructType, TimestampType, DoubleType, StringType
+
+spark = SparkSession.builder.appName("Windowed Streaming").getOrCreate()
+
+# Schema for event data
+schema = StructType() \
+    .add("event_time", TimestampType()) \
+    .add("device_id", StringType()) \
+    .add("temperature", DoubleType())
+
+# Read streaming data
+events = spark.readStream \
+    .schema(schema) \
+    .json("/path/to/events")
+
+# Tumbling window (non-overlapping)
+tumbling_window = events \
+    .groupBy(
+        window(col("event_time"), "10 minutes"),
+        col("device_id")
+    ) \
+    .agg(
+        avg("temperature").alias("avg_temp"),
+        count("*").alias("event_count")
+    )
+
+# Sliding window (overlapping)
+sliding_window = events \
+    .groupBy(
+        window(col("event_time"), "10 minutes", "5 minutes"),
+        col("device_id")
+    ) \
+    .agg(avg("temperature").alias("avg_temp"))
+
+# Session window (gap-based)
+# Available in Spark 3.2+
+session_window = events \
+    .groupBy(
+        session_window(col("event_time"), "10 minutes"),
+        col("device_id")
+    ) \
+    .agg(count("*").alias("session_events"))
+
+# Watermarking for late data handling
+watermarked = events \
+    .withWatermark("event_time", "10 minutes") \
+    .groupBy(
+        window(col("event_time"), "5 minutes"),
+        col("device_id")
+    ) \
+    .agg(avg("temperature").alias("avg_temp"))
+
+# Write windowed results
+query = watermarked.writeStream \
+    .outputMode("update") \
+    .format("console") \
+    .option("truncate", "false") \
+    .start()
+
+# query.awaitTermination()
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="kafka" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import from_json, col, to_json, struct
+from pyspark.sql.types import StructType, StringType, DoubleType, TimestampType
+
+spark = SparkSession.builder \
+    .appName("Kafka Streaming") \
+    .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.0") \
+    .getOrCreate()
+
+# Read from Kafka
+kafka_df = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("subscribe", "input-topic") \
+    .option("startingOffsets", "latest") \
+    .load()
+
+# Kafka message schema
+schema = StructType() \
+    .add("user_id", StringType()) \
+    .add("action", StringType()) \
+    .add("timestamp", TimestampType()) \
+    .add("value", DoubleType())
+
+# Parse JSON from Kafka value
+parsed = kafka_df \
+    .select(from_json(col("value").cast("string"), schema).alias("data")) \
+    .select("data.*")
+
+# Process the data
+processed = parsed \
+    .filter(col("action") == "purchase") \
+    .groupBy("user_id") \
+    .agg({"value": "sum"})
+
+# Write back to Kafka
+kafka_output = processed \
+    .select(
+        col("user_id").alias("key"),
+        to_json(struct("*")).alias("value")
+    ) \
+    .writeStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("topic", "output-topic") \
+    .option("checkpointLocation", "/path/to/checkpoint") \
+    .start()
+
+# Read from multiple topics
+multi_topic = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("subscribe", "topic1,topic2,topic3") \
+    .load()
+
+# Read with pattern
+pattern_topics = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("subscribePattern", "topic-*") \
+    .load()
+
+# Kafka options
+# startingOffsets: "earliest", "latest", or JSON
+# failOnDataLoss: true/false
+# maxOffsetsPerTrigger: limit rate
+
+# kafka_output.awaitTermination()
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../13_accumulators/index.html" style="color: var(--text-muted);">← Previous: Accumulators</a>
+                <a href="../15_performance_optimization/index.html" style="color: var(--accent-primary);">Next: Performance Optimization →</a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <p style="margin: 0; color: var(--text-muted);">PySpark & Data Engineering Learning Hub</p>
+        </div>
+    </footer>
+
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', {
+                backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? 0x1a1a2e : 0xf8f9fa,
+                cameraPosition: { x: 6, y: 4, z: 6 }
+            });
+            showStreamFlow();
+        });
+
+        function showStreamFlow() {
+            viz.clear();
+            
+            // Source
+            viz.createDataNode({ type: 'cylinder', size: 0.6, color: 0x4dabf7, position: { x: -3, y: 0.5, z: 0 } });
+            viz.createLabel('Source', { x: -3, y: 1.5, z: 0 });
+
+            // Stream of data
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.3, color: 0xe25a1c,
+                    position: { x: -1.5 + i * 1, y: 0.5, z: 0 },
+                    animate: (obj) => { obj.position.x += 0.01; if (obj.position.x > 3) obj.position.x = -1.5; }
+                });
+            }
+
+            // Processing
+            viz.createDataNode({ type: 'sphere', size: 0.6, color: 0x198754, position: { x: 1, y: 0.5, z: 0 } });
+            viz.createLabel('Process', { x: 1, y: 1.5, z: 0 });
+
+            // Sink
+            viz.createDataNode({ type: 'cylinder', size: 0.6, color: 0x8b5cf6, position: { x: 3, y: 0.5, z: 0 } });
+            viz.createLabel('Sink', { x: 3, y: 1.5, z: 0 });
+
+            viz.createArrow({ x: -2.5, y: 0.5, z: 0 }, { x: 0.5, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 1.5, y: 0.5, z: 0 }, { x: 2.5, y: 0.5, z: 0 }, { color: 0x888888 });
+
+            viz.createLabel('Continuous Stream Processing', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showMicroBatch() {
+            viz.clear();
+            
+            // Micro-batches
+            for (let b = 0; b < 3; b++) {
+                viz.createDataNode({
+                    type: 'cube', size: 0.8, color: b === 1 ? 0x198754 : 0x4dabf7,
+                    position: { x: -2 + b * 2, y: 0.5, z: 0 }
+                });
+                viz.createLabel(`Batch ${b + 1}`, { x: -2 + b * 2, y: 1.5, z: 0 });
+                
+                // Records in batch
+                for (let r = 0; r < 3; r++) {
+                    viz.createDataNode({
+                        type: 'cube', size: 0.15, color: 0xe25a1c,
+                        position: { x: -2.2 + b * 2 + r * 0.2, y: 0.5, z: 0.4 }
+                    });
+                }
+            }
+
+            viz.createArrow({ x: -1.2, y: 0.5, z: 0 }, { x: -0.2, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.8, y: 0.5, z: 0 }, { x: 1.8, y: 0.5, z: 0 }, { color: 0x888888 });
+
+            viz.createLabel('Micro-Batch Processing', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+
+        function showWatermark() {
+            viz.clear();
+            
+            // Time axis
+            viz.createArrow({ x: -3, y: 0, z: 0 }, { x: 3, y: 0, z: 0 }, { color: 0x888888 });
+            viz.createLabel('Event Time', { x: 3.5, y: 0, z: 0 });
+
+            // Events
+            const events = [
+                { x: -2, y: 0.8, late: false },
+                { x: -1, y: 1.2, late: false },
+                { x: 0, y: 0.6, late: false },
+                { x: 1, y: 1.0, late: false },
+                { x: -1.5, y: 0.4, late: true }
+            ];
+
+            events.forEach(e => {
+                viz.createDataNode({
+                    type: 'sphere', size: 0.25, color: e.late ? 0xffc107 : 0x198754,
+                    position: { x: e.x, y: e.y, z: 0 }
+                });
+            });
+
+            // Watermark line
+            viz.createDataNode({ type: 'cube', size: 0.05, color: 0xe25a1c, position: { x: -0.5, y: 0, z: 0 } });
+            viz.createDataNode({ type: 'cube', size: 0.05, color: 0xe25a1c, position: { x: -0.5, y: 0.5, z: 0 } });
+            viz.createDataNode({ type: 'cube', size: 0.05, color: 0xe25a1c, position: { x: -0.5, y: 1, z: 0 } });
+            viz.createDataNode({ type: 'cube', size: 0.05, color: 0xe25a1c, position: { x: -0.5, y: 1.5, z: 0 } });
+            viz.createLabel('Watermark', { x: -0.5, y: 2, z: 0 });
+
+            viz.createLabel('Watermarking - Handle late data', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

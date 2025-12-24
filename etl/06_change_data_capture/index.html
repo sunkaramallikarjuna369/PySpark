@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Change Data Capture (CDC) - ETL Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#etl" class="nav-link active">ETL</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Change Data Capture (CDC)</h1>
+            <p>CDC identifies and captures changes (inserts, updates, deletes) in source data. It enables efficient incremental data synchronization between systems.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showCDC()">CDC Flow</button>
+                <button class="viz-btn" onclick="showOperations()">Operations</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="concepts">CDC Concepts</button>
+                <button class="tab" data-tab="implementation">Implementation</button>
+                <button class="tab" data-tab="debezium">Debezium/Kafka</button>
+            </div>
+            <div class="tab-contents">
+                <div id="concepts" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Change Data Capture (CDC) Methods:
+
+1. Timestamp-based CDC
+   - Track changes using updated_at column
+   - Simple but misses deletes
+
+2. Trigger-based CDC
+   - Database triggers capture changes to audit table
+   - Real-time but adds overhead
+
+3. Log-based CDC
+   - Read database transaction logs (WAL, binlog)
+   - Most efficient, captures all changes
+   - Tools: Debezium, AWS DMS, Oracle GoldenGate
+
+4. Diff-based CDC
+   - Compare snapshots to find changes
+   - Works without source modifications
+   - Resource intensive for large tables
+"""
+
+# CDC Record Structure
+from pyspark.sql.types import StructType, StructField, StringType, TimestampType
+
+cdc_schema = StructType([
+    StructField("operation", StringType()),      # I=Insert, U=Update, D=Delete
+    StructField("timestamp", TimestampType()),   # When change occurred
+    StructField("before", StringType()),         # Previous state (JSON)
+    StructField("after", StringType()),          # New state (JSON)
+    StructField("source_table", StringType()),   # Source table name
+    StructField("primary_key", StringType())     # Record identifier
+])
+
+# CDC Operations
+# I (Insert): New record created
+# U (Update): Existing record modified
+# D (Delete): Record removed
+# R (Read/Snapshot): Initial load record</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="implementation" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, when, from_json, get_json_object
+from delta.tables import DeltaTable
+
+spark = SparkSession.builder.appName("CDC").getOrCreate()
+
+def apply_cdc_changes(cdc_df, target_path, key_columns):
+    """
+    Apply CDC changes to Delta Lake target
+    """
+    target = DeltaTable.forPath(spark, target_path)
+    
+    # Parse CDC records
+    parsed_df = cdc_df.select(
+        col("operation"),
+        from_json(col("after"), target_schema).alias("data"),
+        col("primary_key")
+    )
+    
+    # Separate by operation type
+    inserts = parsed_df.filter(col("operation") == "I").select("data.*")
+    updates = parsed_df.filter(col("operation") == "U").select("data.*")
+    deletes = parsed_df.filter(col("operation") == "D")
+    
+    # Apply inserts
+    if inserts.count() > 0:
+        inserts.write.format("delta").mode("append").save(target_path)
+    
+    # Apply updates (merge)
+    if updates.count() > 0:
+        merge_condition = " AND ".join([
+            f"target.{c} = updates.{c}" for c in key_columns
+        ])
+        target.alias("target").merge(
+            updates.alias("updates"),
+            merge_condition
+        ).whenMatchedUpdateAll().execute()
+    
+    # Apply deletes
+    if deletes.count() > 0:
+        for row in deletes.collect():
+            delete_condition = f"primary_key = '{row.primary_key}'"
+            target.delete(delete_condition)
+
+# Timestamp-based CDC
+def timestamp_cdc(source_df, last_sync_time):
+    """Simple timestamp-based change detection"""
+    return source_df.filter(col("updated_at") > last_sync_time)</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="debezium" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, from_json, get_json_object
+
+spark = SparkSession.builder.appName("DebeziumCDC").getOrCreate()
+
+# Read CDC events from Kafka (Debezium format)
+cdc_stream = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("subscribe", "dbserver1.inventory.customers") \
+    .option("startingOffsets", "earliest") \
+    .load()
+
+# Debezium message structure
+debezium_schema = """
+{
+    "before": {...},      // Previous record state
+    "after": {...},       // New record state
+    "source": {
+        "version": "1.0",
+        "connector": "postgresql",
+        "name": "dbserver1",
+        "ts_ms": 1234567890,
+        "db": "inventory",
+        "table": "customers"
+    },
+    "op": "c",            // c=create, u=update, d=delete, r=read
+    "ts_ms": 1234567890
+}
+"""
+
+# Parse Debezium events
+parsed_cdc = cdc_stream.select(
+    get_json_object(col("value").cast("string"), "$.op").alias("operation"),
+    get_json_object(col("value").cast("string"), "$.before").alias("before"),
+    get_json_object(col("value").cast("string"), "$.after").alias("after"),
+    get_json_object(col("value").cast("string"), "$.source.table").alias("table")
+)
+
+# Process CDC stream
+query = parsed_cdc.writeStream \
+    .foreachBatch(process_cdc_batch) \
+    .option("checkpointLocation", "/checkpoint/cdc") \
+    .start()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showCDC();
+        });
+        function showCDC() {
+            viz.clear();
+            viz.createDataNode({ type: 'cylinder', size: 0.5, color: 0x4dabf7, position: { x: -2, y: 0.5, z: 0 } });
+            viz.createLabel('Source DB', { x: -2, y: 1.3, z: 0 });
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0xe25a1c, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('CDC', { x: 0, y: 1.3, z: 0 });
+            viz.createDataNode({ type: 'cylinder', size: 0.5, color: 0x198754, position: { x: 2, y: 0.5, z: 0 } });
+            viz.createLabel('Target', { x: 2, y: 1.3, z: 0 });
+            viz.createArrow({ x: -1.3, y: 0.5, z: 0 }, { x: -0.5, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.5, y: 0.5, z: 0 }, { x: 1.3, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createLabel('CDC - Capture changes in real-time', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showOperations() {
+            viz.clear();
+            const ops = [
+                { label: 'INSERT', color: 0x198754 },
+                { label: 'UPDATE', color: 0xffc107 },
+                { label: 'DELETE', color: 0xe25a1c }
+            ];
+            ops.forEach((op, i) => {
+                viz.createDataNode({ type: 'cube', size: 0.5, color: op.color, position: { x: -1.5 + i * 1.5, y: 0.5, z: 0 } });
+                viz.createLabel(op.label, { x: -1.5 + i * 1.5, y: 1.3, z: 0 });
+            });
+            viz.createLabel('CDC Operations', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

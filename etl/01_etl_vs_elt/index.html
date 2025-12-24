@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETL vs ELT - ETL Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#etl" class="nav-link active">ETL</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>ETL vs ELT</h1>
+            <p>ETL (Extract, Transform, Load) and ELT (Extract, Load, Transform) are two approaches to data integration. The key difference is where transformation occurs.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showETL()">ETL</button>
+                <button class="viz-btn" onclick="showELT()">ELT</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="etl">ETL Approach</button>
+                <button class="tab" data-tab="elt">ELT Approach</button>
+                <button class="tab" data-tab="comparison">Comparison</button>
+            </div>
+            <div class="tab-contents">
+                <div id="etl" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, upper, when
+
+spark = SparkSession.builder.appName("ETL_Example").getOrCreate()
+
+# ETL: Extract -> Transform -> Load
+
+# 1. EXTRACT: Read from source
+raw_data = spark.read.csv("source_data.csv", header=True)
+
+# 2. TRANSFORM: Apply business logic BEFORE loading
+transformed_data = (raw_data
+    # Clean data
+    .filter(col("status") == "active")
+    # Standardize
+    .withColumn("name", upper(col("name")))
+    # Derive new columns
+    .withColumn("category", 
+        when(col("amount") > 1000, "high")
+        .when(col("amount") > 100, "medium")
+        .otherwise("low"))
+    # Remove duplicates
+    .dropDuplicates(["id"])
+    # Select final columns
+    .select("id", "name", "amount", "category")
+)
+
+# 3. LOAD: Write to destination (already transformed)
+transformed_data.write.mode("overwrite").parquet("data_warehouse/")
+
+# Benefits of ETL:
+# - Data is clean before entering warehouse
+# - Less storage needed (only transformed data)
+# - Better for sensitive data (transform/mask before load)
+# - Traditional approach, well-established tools</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="elt" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("ELT_Example").getOrCreate()
+
+# ELT: Extract -> Load -> Transform
+
+# 1. EXTRACT: Read from source
+raw_data = spark.read.csv("source_data.csv", header=True)
+
+# 2. LOAD: Write raw data to data lake/warehouse
+raw_data.write.mode("overwrite").parquet("data_lake/raw/")
+
+# 3. TRANSFORM: Transform within the warehouse
+# Read from raw layer
+raw_df = spark.read.parquet("data_lake/raw/")
+
+# Transform using warehouse compute power
+transformed_df = spark.sql("""
+    SELECT 
+        id,
+        UPPER(name) as name,
+        amount,
+        CASE 
+            WHEN amount > 1000 THEN 'high'
+            WHEN amount > 100 THEN 'medium'
+            ELSE 'low'
+        END as category
+    FROM raw_data
+    WHERE status = 'active'
+""")
+
+# Write to curated layer
+transformed_df.write.mode("overwrite").parquet("data_lake/curated/")
+
+# Benefits of ELT:
+# - Faster initial load (no transformation delay)
+# - Raw data preserved for future transformations
+# - Leverage powerful cloud warehouse compute
+# - More flexible - transform as needed
+# - Better for big data and cloud environments</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="comparison" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Text</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>ETL vs ELT Comparison:
+
+| Aspect              | ETL                      | ELT                        |
+|---------------------|--------------------------|----------------------------|
+| Transform Location  | Staging server           | Target warehouse           |
+| Data Volume         | Small to medium          | Large (Big Data)           |
+| Speed               | Slower (transform first) | Faster (load first)        |
+| Storage             | Less (only transformed)  | More (raw + transformed)   |
+| Flexibility         | Less (predefined)        | More (transform on demand) |
+| Cost                | Higher compute costs     | Higher storage costs       |
+| Data Lake           | Not ideal                | Perfect fit                |
+| Cloud Native        | Traditional              | Modern cloud approach      |
+| Tools               | Informatica, SSIS        | Spark, Snowflake, BigQuery |
+
+When to use ETL:
+- On-premises data warehouses
+- Strict data quality requirements
+- Sensitive data needing transformation before storage
+- Smaller data volumes
+- Well-defined, stable transformations
+
+When to use ELT:
+- Cloud data warehouses (Snowflake, BigQuery, Redshift)
+- Data lakes (Delta Lake, Iceberg)
+- Big data volumes
+- Need for data exploration and ad-hoc analysis
+- Rapidly changing transformation requirements</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showETL();
+        });
+        function showETL() {
+            viz.clear();
+            viz.createDataNode({ type: 'cylinder', size: 0.5, color: 0x4dabf7, position: { x: -2.5, y: 0.5, z: 0 } });
+            viz.createLabel('Extract', { x: -2.5, y: 1.3, z: 0 });
+            viz.createArrow({ x: -1.8, y: 0.5, z: 0 }, { x: -1, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0xe25a1c, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('Transform', { x: 0, y: 1.4, z: 0 });
+            viz.createArrow({ x: 0.8, y: 0.5, z: 0 }, { x: 1.6, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createDataNode({ type: 'cylinder', size: 0.5, color: 0x198754, position: { x: 2.5, y: 0.5, z: 0 } });
+            viz.createLabel('Load', { x: 2.5, y: 1.3, z: 0 });
+            viz.createLabel('ETL - Transform before loading', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showELT() {
+            viz.clear();
+            viz.createDataNode({ type: 'cylinder', size: 0.5, color: 0x4dabf7, position: { x: -2.5, y: 0.5, z: 0 } });
+            viz.createLabel('Extract', { x: -2.5, y: 1.3, z: 0 });
+            viz.createArrow({ x: -1.8, y: 0.5, z: 0 }, { x: -1, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createDataNode({ type: 'cylinder', size: 0.5, color: 0x198754, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('Load', { x: 0, y: 1.3, z: 0 });
+            viz.createArrow({ x: 0.8, y: 0.5, z: 0 }, { x: 1.6, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0xe25a1c, position: { x: 2.5, y: 0.5, z: 0 } });
+            viz.createLabel('Transform', { x: 2.5, y: 1.4, z: 0 });
+            viz.createLabel('ELT - Transform after loading', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

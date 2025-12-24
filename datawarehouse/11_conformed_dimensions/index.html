@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conformed Dimensions - DW Learning Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#datawarehouse" class="nav-link active">Data Warehouse</a><button class="theme-toggle">🌙</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Conformed Dimensions</h1>
+            <p>Conformed dimensions are dimensions shared across multiple fact tables and data marts, ensuring consistent analysis across the enterprise.</p>
+            <div id="visualization" class="visualization-container"></div>
+            <div class="visualization-controls">
+                <button class="viz-btn" onclick="showConformed()">Conformed</button>
+                <button class="viz-btn" onclick="showBusMatrix()">Bus Matrix</button>
+            </div>
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="concepts">Concepts</button>
+                <button class="tab" data-tab="implementation">Implementation</button>
+                <button class="tab" data-tab="busmatrix">Bus Matrix</button>
+            </div>
+            <div class="tab-contents">
+                <div id="concepts" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Text</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>Conformed Dimensions:
+
+DEFINITION:
+- Dimensions shared identically across multiple fact tables
+- Same keys, attributes, and values
+- Enables drill-across queries (combining facts)
+
+WHY CONFORMED DIMENSIONS:
+
+1. CONSISTENCY
+   - Same customer definition everywhere
+   - Same date attributes across all reports
+   - No conflicting definitions
+
+2. DRILL-ACROSS QUERIES
+   - Combine metrics from different fact tables
+   - "Sales and Support tickets by customer"
+   - Only possible with shared dimensions
+
+3. REDUCED REDUNDANCY
+   - Single source of truth for dimensions
+   - Maintain once, use everywhere
+   - Consistent updates
+
+COMMON CONFORMED DIMENSIONS:
+- dim_date: Universal across all facts
+- dim_customer: Sales, Support, Marketing
+- dim_product: Sales, Inventory, Returns
+- dim_employee: HR, Sales, Projects
+- dim_geography: All location-based analysis
+
+CONFORMANCE LEVELS:
+1. Identical: Exact same dimension
+2. Subset: Smaller version with same keys
+3. Rollup: Aggregated version (month vs day)
+
+NON-CONFORMED (Anti-pattern):
+- Sales has "customer_region" = "North"
+- Support has "customer_region" = "Northern"
+- Cannot join or compare!</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="implementation" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, sum as spark_sum
+
+spark = SparkSession.builder.appName("ConformedDimensions").getOrCreate()
+
+# CONFORMED DATE DIMENSION
+# Used by: fact_sales, fact_inventory, fact_support
+dim_date = spark.createDataFrame([
+    (20240115, "2024-01-15", "Monday", 1, "January", 2024),
+    (20240116, "2024-01-16", "Tuesday", 1, "January", 2024)
+], ["date_key", "full_date", "day_name", "quarter", "month_name", "year"])
+
+# CONFORMED CUSTOMER DIMENSION
+# Used by: fact_sales, fact_support, fact_marketing
+dim_customer = spark.createDataFrame([
+    (1, "C001", "Alice Smith", "Enterprise", "North"),
+    (2, "C002", "Bob Johnson", "SMB", "South")
+], ["customer_key", "customer_id", "customer_name", "segment", "region"])
+
+# FACT TABLES using conformed dimensions
+fact_sales = spark.createDataFrame([
+    (20240115, 1, 1000.00),
+    (20240115, 2, 500.00)
+], ["date_key", "customer_key", "sales_amount"])
+
+fact_support = spark.createDataFrame([
+    (20240115, 1, 2),
+    (20240116, 2, 1)
+], ["date_key", "customer_key", "ticket_count"])
+
+# DRILL-ACROSS QUERY
+# Combine sales and support metrics by customer
+# Only possible because dimensions are conformed!
+sales_by_customer = fact_sales.groupBy("customer_key") \
+    .agg(spark_sum("sales_amount").alias("total_sales"))
+
+support_by_customer = fact_support.groupBy("customer_key") \
+    .agg(spark_sum("ticket_count").alias("total_tickets"))
+
+drill_across = sales_by_customer.join(support_by_customer, "customer_key") \
+    .join(dim_customer, "customer_key") \
+    .select("customer_name", "segment", "total_sales", "total_tickets")
+
+drill_across.show()</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="busmatrix" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Text</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>Enterprise Bus Matrix:
+
+Documents which dimensions apply to which business processes/facts.
+Key tool for planning conformed dimensions.
+
+                    | Date | Customer | Product | Employee | Store | Promotion |
+--------------------|------|----------|---------|----------|-------|-----------|
+Sales               |  X   |    X     |    X    |    X     |   X   |     X     |
+Inventory           |  X   |          |    X    |          |   X   |           |
+Customer Support    |  X   |    X     |    X    |    X     |       |           |
+Marketing Campaign  |  X   |    X     |         |          |       |     X     |
+HR/Payroll          |  X   |          |         |    X     |   X   |           |
+Returns             |  X   |    X     |    X    |    X     |   X   |           |
+
+Reading the Matrix:
+- Rows = Business processes (fact tables)
+- Columns = Dimensions
+- X = Dimension applies to that process
+
+Benefits:
+1. Visual overview of enterprise data
+2. Identifies shared dimensions
+3. Guides development priorities
+4. Documents scope of each mart
+5. Enables incremental development
+
+Building Order (Kimball):
+1. Start with most shared dimensions (Date, Customer)
+2. Build fact tables that use those dimensions
+3. Add new dimensions as needed
+4. Ensure conformance as you grow</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 3, z: 5 } });
+            showConformed();
+        });
+        function showConformed() {
+            viz.clear();
+            // Conformed dimension in center
+            viz.createDataNode({ type: 'cylinder', size: 0.6, color: 0x198754, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('dim_customer', { x: 0, y: 1.4, z: 0 });
+            // Multiple fact tables using it
+            const facts = [
+                { name: 'Sales', angle: 0 },
+                { name: 'Support', angle: 2 * Math.PI / 3 },
+                { name: 'Marketing', angle: 4 * Math.PI / 3 }
+            ];
+            facts.forEach(f => {
+                const x = Math.cos(f.angle) * 1.8;
+                const z = Math.sin(f.angle) * 1.8;
+                viz.createDataNode({ type: 'cube', size: 0.4, color: 0x4dabf7, position: { x, y: 0.5, z } });
+                viz.createLabel(f.name, { x: x * 1.3, y: 1, z: z * 1.3 });
+                viz.createArrow({ x: x * 0.7, y: 0.5, z: z * 0.7 }, { x: x * 0.3, y: 0.5, z: z * 0.3 }, { color: 0x888888 });
+            });
+            viz.createLabel('Conformed Dimension - Shared across facts', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+        function showBusMatrix() {
+            viz.clear();
+            // Grid representation
+            const dims = ['Date', 'Cust', 'Prod'];
+            const facts = ['Sales', 'Inv', 'Supp'];
+            dims.forEach((d, i) => {
+                viz.createLabel(d, { x: -0.5 + i * 0.8, y: 1.5, z: 0 });
+            });
+            facts.forEach((f, j) => {
+                viz.createLabel(f, { x: -1.5, y: 1 - j * 0.6, z: 0 });
+                dims.forEach((d, i) => {
+                    const hasRelation = !((f === 'Inv' && d === 'Cust') || (f === 'Supp' && d === 'Prod'));
+                    if (hasRelation) {
+                        viz.createDataNode({ type: 'cube', size: 0.2, color: 0x198754, position: { x: -0.5 + i * 0.8, y: 1 - j * 0.6, z: 0 } });
+                    }
+                });
+            });
+            viz.createLabel('Bus Matrix - Dimension/Fact relationships', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+store_id,store_name,address,city,state,country,region,store_type,open_date,manager_name
+S001,Downtown Flagship,123 Main Street,New York,NY,USA,Northeast,Flagship,2018-01-15,John Smith
+S002,West Coast Hub,456 Ocean Boulevard,Los Angeles,CA,USA,West,Regional,2019-03-20,Sarah Johnson
+S003,Texas Center,789 Lone Star Drive,Houston,TX,USA,South,Regional,2020-06-10,Mike Williams
+S004,Midwest Mall,321 Prairie Avenue,Chicago,IL,USA,Midwest,Standard,2021-02-28,Emily Davis
+S005,Southeast Plaza,654 Sunshine Way,Miami,FL,USA,Southeast,Standard,2021-09-15,David Brown
