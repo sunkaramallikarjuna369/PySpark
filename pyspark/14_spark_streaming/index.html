@@ -62,6 +62,9 @@
                 <button class="tab active" data-tab="basic">Basic Streaming</button>
                 <button class="tab" data-tab="window">Windowing</button>
                 <button class="tab" data-tab="kafka">Kafka Integration</button>
+                <button class="tab" data-tab="joins">Stream Joins</button>
+                <button class="tab" data-tab="foreach">ForeachBatch</button>
+                <button class="tab" data-tab="checkpoint">Checkpointing</button>
             </div>
 
             <div class="tab-contents">
@@ -297,6 +300,265 @@ pattern_topics = spark.readStream \
 
 # kafka_output.awaitTermination()
 
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="joins" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import expr, col, broadcast
+
+spark = SparkSession.builder.appName("Stream Joins").getOrCreate()
+
+# ============================================
+# STREAM-TO-STATIC JOIN
+# ============================================
+# Load static dimension table (broadcast for efficiency)
+customers = spark.read.csv("../../data/customers.csv", header=True)
+products = spark.read.csv("../../data/products.csv", header=True)
+
+# Stream of transactions
+transactions = spark.readStream \
+    .schema(transaction_schema) \
+    .csv("/path/to/transactions/")
+
+# Join stream with static data
+enriched = transactions.join(
+    broadcast(customers),
+    transactions.customer_id == customers.customer_id,
+    "left"
+).join(
+    broadcast(products),
+    transactions.product_id == products.product_id,
+    "left"
+)
+
+# Write enriched stream
+query = enriched.writeStream \
+    .outputMode("append") \
+    .format("parquet") \
+    .option("path", "/output/enriched/") \
+    .option("checkpointLocation", "/checkpoint/enriched/") \
+    .start()
+
+# ============================================
+# STREAM-TO-STREAM JOIN
+# ============================================
+# Two streams: impressions and clicks
+impressions = spark.readStream \
+    .format("kafka") \
+    .option("subscribe", "impressions") \
+    .load()
+
+clicks = spark.readStream \
+    .format("kafka") \
+    .option("subscribe", "clicks") \
+    .load()
+
+# Add watermarks (REQUIRED for stream-stream joins)
+impressions_wm = impressions \
+    .withWatermark("impression_time", "2 hours")
+
+clicks_wm = clicks \
+    .withWatermark("click_time", "3 hours")
+
+# Inner join with time constraint
+joined = impressions_wm.join(
+    clicks_wm,
+    expr("""
+        impressions_wm.ad_id = clicks_wm.ad_id AND
+        click_time >= impression_time AND
+        click_time <= impression_time + interval 1 hour
+    """),
+    "inner"
+)
+
+# Supported join types:
+# Stream-Static: Inner, Left Outer, Left Semi
+# Stream-Stream: Inner (both watermarks), Left/Right Outer
+
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="foreach" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, sum as spark_sum
+
+spark = SparkSession.builder.appName("ForeachBatch").getOrCreate()
+
+# ============================================
+# FOREACHBATCH - Process Each Micro-Batch
+# ============================================
+def process_batch(batch_df, batch_id):
+    """Process each micro-batch with custom logic."""
+    print(f"Processing batch {batch_id} with {batch_df.count()} records")
+    
+    # 1. Write to data lake (Parquet)
+    batch_df.write \
+        .mode("append") \
+        .parquet(f"/data/lake/batch_{batch_id}")
+    
+    # 2. Write aggregates to database
+    aggregates = batch_df.groupBy("category").agg(
+        spark_sum("amount").alias("total")
+    )
+    aggregates.write \
+        .format("jdbc") \
+        .option("url", "jdbc:postgresql://host/db") \
+        .option("dbtable", "aggregates") \
+        .mode("append") \
+        .save()
+    
+    # 3. Send alerts for high-value transactions
+    alerts = batch_df.filter(col("amount") > 10000)
+    if alerts.count() > 0:
+        # Custom alert logic
+        for row in alerts.collect():
+            print(f"ALERT: High value transaction {row.id}")
+
+# Apply foreachBatch to streaming query
+stream = spark.readStream \
+    .schema(schema) \
+    .csv("/path/to/data/")
+
+query = stream.writeStream \
+    .foreachBatch(process_batch) \
+    .option("checkpointLocation", "/checkpoint/foreach/") \
+    .start()
+
+# ============================================
+# FOREACH - Row-by-Row Processing
+# ============================================
+class DatabaseWriter:
+    """Custom writer for each row."""
+    def open(self, partition_id, epoch_id):
+        # Called once per partition
+        self.connection = create_db_connection()
+        return True
+    
+    def process(self, row):
+        # Called for each row
+        self.connection.execute(
+            "INSERT INTO events VALUES (?, ?, ?)",
+            (row.id, row.value, row.timestamp)
+        )
+    
+    def close(self, error):
+        # Called at end of partition
+        if error:
+            self.connection.rollback()
+        else:
+            self.connection.commit()
+        self.connection.close()
+
+# Use foreach for row-level processing
+query = stream.writeStream \
+    .foreach(DatabaseWriter()) \
+    .start()
+
+# query.awaitTermination()
+spark.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="checkpoint" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span class="code-language">Python</span>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import window, col, count
+
+spark = SparkSession.builder \
+    .appName("Checkpointing") \
+    .config("spark.sql.streaming.checkpointLocation", "/default/checkpoint/") \
+    .getOrCreate()
+
+# ============================================
+# CHECKPOINTING FOR FAULT TOLERANCE
+# ============================================
+# Checkpointing enables:
+# 1. Fault tolerance - recover from failures
+# 2. Exactly-once semantics
+# 3. State management for aggregations
+# 4. Progress tracking
+
+stream = spark.readStream \
+    .schema(schema) \
+    .csv("/path/to/data/")
+
+# Stateful aggregation with windowing
+windowed = stream \
+    .withWatermark("timestamp", "10 minutes") \
+    .groupBy(window("timestamp", "5 minutes")) \
+    .count()
+
+# Write with checkpoint location (REQUIRED for production)
+query = windowed.writeStream \
+    .outputMode("update") \
+    .format("parquet") \
+    .option("path", "/output/data/") \
+    .option("checkpointLocation", "/checkpoint/query1/") \
+    .trigger(processingTime="1 minute") \
+    .start()
+
+# Checkpoint directory structure:
+# /checkpoint/query1/
+#   ├── commits/      # Completed batch info
+#   ├── offsets/      # Source offsets per batch
+#   ├── state/        # Aggregation state (if any)
+#   └── metadata      # Query metadata
+
+# ============================================
+# STATE STORE CONFIGURATION
+# ============================================
+# Default HDFS-backed state store
+spark.conf.set(
+    "spark.sql.streaming.stateStore.providerClass",
+    "org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider"
+)
+
+# RocksDB state store (Spark 3.2+) - better for large state
+spark.conf.set(
+    "spark.sql.streaming.stateStore.providerClass",
+    "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider"
+)
+
+# State cleanup configuration
+spark.conf.set("spark.sql.streaming.stateStore.minDeltasForSnapshot", "10")
+spark.conf.set("spark.sql.streaming.stateStore.maintenanceInterval", "30s")
+
+# ============================================
+# RECOVERY BEHAVIOR
+# ============================================
+# On restart:
+# 1. Spark reads last committed batch from checkpoint
+# 2. Reprocesses any uncommitted batches
+# 3. Continues from where it left off
+# 4. State is restored for stateful operations
+
+# Important: Use reliable storage (HDFS, S3, Azure Blob)
+# for checkpoint location in production!
+
+# query.awaitTermination()
 spark.stop()</pre>
                         </div>
                     </div>
