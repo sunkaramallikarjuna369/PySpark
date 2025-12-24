@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACID Transactions - Delta Lake</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#deltalake" class="nav-link active">Delta Lake</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>ACID Transactions in Delta Lake</h1>
+            <p>Delta Lake provides full ACID (Atomicity, Consistency, Isolation, Durability) transaction support, ensuring data integrity even with concurrent reads and writes.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Transaction Concepts</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="acid">ACID Properties</button>
+                <button class="tab" data-tab="isolation">Isolation Levels</button>
+                <button class="tab" data-tab="concurrent">Concurrent Writes</button>
+                <button class="tab" data-tab="conflicts">Conflict Resolution</button>
+            </div>
+            <div class="tab-contents">
+                <div id="acid" class="tab-content active">
+                    <h3>ACID Properties Explained</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
+from pyspark.sql.functions import col, lit
+
+spark = SparkSession.builder \
+    .appName("ACIDTransactions") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# ATOMICITY: All operations in a transaction succeed or none do
+# If a write fails midway, no partial data is written
+
+def atomic_write_example():
+    """Demonstrates atomicity - write either fully succeeds or fully fails"""
+    data = [(1, "Alice", 100), (2, "Bob", 200)]
+    df = spark.createDataFrame(data, ["id", "name", "balance"])
+    
+    try:
+        # This write is atomic - either all rows are written or none
+        df.write.format("delta").mode("append").save("/data/delta/accounts")
+        print("Write succeeded - all data committed")
+    except Exception as e:
+        print(f"Write failed - no data committed: {e}")
+
+# CONSISTENCY: Data always moves from one valid state to another
+# Schema enforcement prevents invalid data
+
+def consistency_example():
+    """Demonstrates consistency through schema enforcement"""
+    # Create table with schema
+    spark.sql("""
+        CREATE TABLE IF NOT EXISTS accounts (
+            id INT NOT NULL,
+            name STRING,
+            balance DOUBLE
+        ) USING DELTA
+    """)
+    
+    # This will fail due to schema mismatch (consistency enforced)
+    try:
+        bad_data = [("invalid_id", "Charlie", "not_a_number")]
+        df_bad = spark.createDataFrame(bad_data, ["id", "name", "balance"])
+        df_bad.write.format("delta").mode("append").saveAsTable("accounts")
+    except Exception as e:
+        print(f"Schema violation prevented: {e}")
+
+# ISOLATION: Concurrent transactions don't interfere with each other
+# Delta Lake uses optimistic concurrency control
+
+def isolation_example():
+    """Demonstrates isolation - readers see consistent snapshots"""
+    delta_table = DeltaTable.forPath(spark, "/data/delta/accounts")
+    
+    # Reader 1 starts reading (gets snapshot at version N)
+    df_snapshot = spark.read.format("delta").load("/data/delta/accounts")
+    
+    # Writer updates data (creates version N+1)
+    delta_table.update(
+        condition=col("id") == 1,
+        set={"balance": lit(150)}
+    )
+    
+    # Reader 1 still sees version N (isolation maintained)
+    # New readers will see version N+1
+    print("Reader sees consistent snapshot regardless of concurrent writes")
+
+# DURABILITY: Committed transactions are permanent
+# Data is persisted to storage before commit is acknowledged
+
+def durability_example():
+    """Demonstrates durability through transaction log"""
+    delta_table = DeltaTable.forPath(spark, "/data/delta/accounts")
+    
+    # View transaction history - all commits are durable
+    history = delta_table.history()
+    history.select("version", "timestamp", "operation", "operationParameters").show(truncate=False)
+    
+    # Even after system failure, data can be recovered from transaction log
+    print("All committed transactions are recorded in _delta_log/")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="isolation" class="tab-content">
+                    <h3>Isolation Levels</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
+from pyspark.sql.functions import col
+
+spark = SparkSession.builder \
+    .appName("IsolationLevels") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Delta Lake provides Serializable isolation level by default
+# This is the strongest isolation level
+
+# SNAPSHOT ISOLATION for reads
+# Each query sees a consistent snapshot of the table
+
+def snapshot_isolation_demo():
+    """Readers always see a consistent snapshot"""
+    
+    # Start a long-running read
+    df = spark.read.format("delta").load("/data/delta/transactions")
+    
+    # Even if other writers modify the table during this read,
+    # this DataFrame will see the same consistent snapshot
+    
+    # Process data (may take a long time)
+    result = df.groupBy("category").sum("amount")
+    
+    # Result is based on the snapshot taken when read started
+    result.show()
+
+# WRITE SERIALIZATION
+# Concurrent writes are serialized through optimistic concurrency
+
+def write_serialization_demo():
+    """Writes are serialized to prevent conflicts"""
+    
+    delta_table = DeltaTable.forPath(spark, "/data/delta/inventory")
+    
+    # Two concurrent updates to the same row
+    # Delta Lake will serialize these operations
+    
+    # Update 1: Decrease quantity
+    delta_table.update(
+        condition=col("product_id") == "P001",
+        set={"quantity": col("quantity") - 10}
+    )
+    
+    # Update 2: If run concurrently, will be serialized after Update 1
+    delta_table.update(
+        condition=col("product_id") == "P001",
+        set={"quantity": col("quantity") - 5}
+    )
+
+# Configure isolation behavior
+spark.conf.set("spark.databricks.delta.isolationLevel", "Serializable")
+
+# For write-heavy workloads, you can use WriteSerializable
+# (slightly weaker but better performance)
+spark.conf.set("spark.databricks.delta.isolationLevel", "WriteSerializable")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="concurrent" class="tab-content">
+                    <h3>Handling Concurrent Writes</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
+from pyspark.sql.functions import col, lit
+import time
+
+spark = SparkSession.builder \
+    .appName("ConcurrentWrites") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Delta Lake uses Optimistic Concurrency Control (OCC)
+# Writers assume no conflicts and validate at commit time
+
+def concurrent_append_example():
+    """Multiple jobs can append to the same table concurrently"""
+    
+    # Job 1: Append sales data
+    sales_data = [(1, "2024-01-01", 100.0)]
+    df_sales = spark.createDataFrame(sales_data, ["id", "date", "amount"])
+    df_sales.write.format("delta").mode("append").save("/data/delta/sales")
+    
+    # Job 2: Can run concurrently - appends don't conflict
+    more_sales = [(2, "2024-01-01", 200.0)]
+    df_more = spark.createDataFrame(more_sales, ["id", "date", "amount"])
+    df_more.write.format("delta").mode("append").save("/data/delta/sales")
+    
+    # Both appends succeed because they don't modify the same data
+
+def concurrent_update_example():
+    """Updates to different rows can run concurrently"""
+    
+    delta_table = DeltaTable.forPath(spark, "/data/delta/accounts")
+    
+    # Job 1: Update account 1
+    delta_table.update(
+        condition=col("account_id") == 1,
+        set={"balance": lit(1000)}
+    )
+    
+    # Job 2: Update account 2 (can run concurrently)
+    delta_table.update(
+        condition=col("account_id") == 2,
+        set={"balance": lit(2000)}
+    )
+    
+    # Both succeed if they don't touch the same files
+
+def partition_concurrent_writes():
+    """Writes to different partitions can run concurrently"""
+    
+    # Job 1: Write to partition date=2024-01-01
+    df1 = spark.createDataFrame([(1, "2024-01-01", 100)], ["id", "date", "value"])
+    df1.write.format("delta") \
+        .mode("overwrite") \
+        .option("replaceWhere", "date = '2024-01-01'") \
+        .save("/data/delta/events")
+    
+    # Job 2: Write to partition date=2024-01-02 (concurrent)
+    df2 = spark.createDataFrame([(2, "2024-01-02", 200)], ["id", "date", "value"])
+    df2.write.format("delta") \
+        .mode("overwrite") \
+        .option("replaceWhere", "date = '2024-01-02'") \
+        .save("/data/delta/events")
+    
+    # Both succeed because they write to different partitions
+
+# Retry logic for concurrent write conflicts
+def write_with_retry(df, path, max_retries=3):
+    """Retry writes on conflict"""
+    for attempt in range(max_retries):
+        try:
+            df.write.format("delta").mode("append").save(path)
+            print(f"Write succeeded on attempt {attempt + 1}")
+            return True
+        except Exception as e:
+            if "ConcurrentModificationException" in str(e):
+                print(f"Conflict detected, retrying... (attempt {attempt + 1})")
+                time.sleep(1)  # Wait before retry
+            else:
+                raise e
+    return False</code></pre>
+                    </div>
+                </div>
+                
+                <div id="conflicts" class="tab-content">
+                    <h3>Conflict Resolution</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
+from pyspark.sql.functions import col, when
+
+spark = SparkSession.builder \
+    .appName("ConflictResolution") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Conflict types and how Delta Lake handles them:
+# 1. Append-Append: No conflict (both succeed)
+# 2. Append-Delete: May conflict if deleting appended data
+# 3. Update-Update: Conflicts if same rows modified
+# 4. Delete-Delete: Conflicts if same rows deleted
+
+# CONFLICT SCENARIO 1: Concurrent updates to same rows
+def handle_update_conflict():
+    """Handle conflicts when updating same rows"""
+    
+    delta_table = DeltaTable.forPath(spark, "/data/delta/inventory")
+    
+    # Use MERGE for safer concurrent updates
+    # MERGE handles conflicts more gracefully than UPDATE
+    
+    updates = spark.createDataFrame([
+        ("P001", -10),  # Decrease by 10
+        ("P002", -5)    # Decrease by 5
+    ], ["product_id", "quantity_change"])
+    
+    delta_table.alias("target").merge(
+        updates.alias("source"),
+        "target.product_id = source.product_id"
+    ).whenMatchedUpdate(set={
+        "quantity": col("target.quantity") + col("source.quantity_change")
+    }).execute()
+
+# CONFLICT SCENARIO 2: Schema conflicts
+def handle_schema_conflict():
+    """Handle schema evolution conflicts"""
+    
+    # Enable auto-merge for schema evolution
+    spark.conf.set("spark.databricks.delta.schema.autoMerge.enabled", "true")
+    
+    # New data with additional column
+    new_data = [(1, "Alice", 100, "premium")]
+    df_new = spark.createDataFrame(new_data, ["id", "name", "balance", "tier"])
+    
+    # This will add the new column automatically
+    df_new.write.format("delta") \
+        .mode("append") \
+        .option("mergeSchema", "true") \
+        .save("/data/delta/accounts")
+
+# CONFLICT SCENARIO 3: Partition overwrite conflicts
+def handle_partition_conflict():
+    """Handle conflicts when overwriting partitions"""
+    
+    # Use replaceWhere for safe partition overwrites
+    df = spark.createDataFrame([
+        (1, "2024-01-15", 100),
+        (2, "2024-01-15", 200)
+    ], ["id", "date", "amount"])
+    
+    # This only conflicts with other writes to the same partition
+    df.write.format("delta") \
+        .mode("overwrite") \
+        .option("replaceWhere", "date = '2024-01-15'") \
+        .save("/data/delta/daily_sales")
+
+# CONFLICT RESOLUTION STRATEGIES
+def conflict_resolution_strategies():
+    """Different strategies for handling conflicts"""
+    
+    # Strategy 1: Retry with exponential backoff
+    import time
+    import random
+    
+    def retry_with_backoff(operation, max_retries=5):
+        for i in range(max_retries):
+            try:
+                return operation()
+            except Exception as e:
+                if "Conflict" in str(e) and i < max_retries - 1:
+                    wait_time = (2 ** i) + random.random()
+                    time.sleep(wait_time)
+                else:
+                    raise
+    
+    # Strategy 2: Use idempotent writes
+    df = spark.createDataFrame([(1, 100)], ["id", "value"])
+    df.write.format("delta") \
+        .mode("append") \
+        .option("txnAppId", "job-123") \
+        .option("txnVersion", "1") \
+        .save("/data/delta/idempotent_table")
+    
+    # Strategy 3: Partition data to reduce conflicts
+    # Write to separate partitions to avoid conflicts
+    
+    # Strategy 4: Use MERGE instead of UPDATE/DELETE
+    # MERGE operations are more conflict-resistant</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../01_introduction/index.html" style="color: var(--text-muted);">&larr; Previous: Introduction</a>
+                <a href="../03_time_travel/index.html" style="color: var(--accent-primary);">Next: Time Travel &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showACIDVisualization();
+        });
+        
+        function showACIDVisualization() {
+            viz.clear();
+            
+            // ACID letters
+            const colors = [0xff6b6b, 0x4dabf7, 0x51cf66, 0xffd43b];
+            const labels = ['Atomicity', 'Consistency', 'Isolation', 'Durability'];
+            
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.5, color: colors[i], position: { x: -1.5 + i * 1, y: 0.4, z: 0 } });
+                viz.createLabel(labels[i], { x: -1.5 + i * 1, y: 1.2, z: 0 });
+            }
+            
+            viz.createGrid(6, 6);
+        }
+    </script>
+</body>
+</html>

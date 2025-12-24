@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Best Practices - Delta Lake</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#deltalake" class="nav-link active">Delta Lake</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Delta Lake Best Practices</h1>
+            <p>Production-ready patterns and recommendations for building reliable, performant Delta Lake pipelines.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Best Practices</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="design">Table Design</button>
+                <button class="tab" data-tab="write">Write Patterns</button>
+                <button class="tab" data-tab="read">Read Patterns</button>
+                <button class="tab" data-tab="maintenance">Maintenance</button>
+            </div>
+            <div class="tab-contents">
+                <div id="design" class="tab-content active">
+                    <h3>Table Design Best Practices</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("TableDesign") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# 1. PARTITIONING: Use low-cardinality columns
+# Good: date, region, status (< 10,000 distinct values)
+# Bad: user_id, transaction_id (millions of values)
+
+spark.sql("""
+    CREATE TABLE events (
+        event_id BIGINT,
+        user_id STRING,
+        event_type STRING,
+        event_time TIMESTAMP,
+        event_date DATE GENERATED ALWAYS AS (CAST(event_time AS DATE))
+    )
+    USING DELTA
+    PARTITIONED BY (event_date)
+""")
+
+# 2. Z-ORDER: Use high-cardinality columns frequently in filters
+# Complement partitioning with Z-ORDER
+spark.sql("OPTIMIZE events ZORDER BY (user_id, event_type)")
+
+# 3. FILE SIZE: Target 128MB - 1GB per file
+spark.conf.set("spark.databricks.delta.optimize.maxFileSize", "134217728")
+
+# 4. SCHEMA DESIGN: Use appropriate types
+# - Use DATE instead of STRING for dates
+# - Use TIMESTAMP for timestamps
+# - Use appropriate numeric types (INT vs BIGINT)
+# - Avoid deeply nested structures
+
+# 5. CONSTRAINTS: Enforce data quality at table level
+spark.sql("""
+    ALTER TABLE events
+    ADD CONSTRAINT valid_event CHECK (
+        event_id IS NOT NULL AND
+        event_type IN ('click', 'view', 'purchase')
+    )
+""")
+
+# 6. TABLE PROPERTIES: Configure for your workload
+spark.sql("""
+    ALTER TABLE events SET TBLPROPERTIES (
+        'delta.autoOptimize.optimizeWrite' = 'true',
+        'delta.autoOptimize.autoCompact' = 'true',
+        'delta.enableChangeDataFeed' = 'true',
+        'delta.logRetentionDuration' = '30 days',
+        'delta.deletedFileRetentionDuration' = '7 days'
+    )
+""")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="write" class="tab-content">
+                    <h3>Write Pattern Best Practices</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
+
+spark = SparkSession.builder \
+    .appName("WritePatterns") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# 1. USE MERGE FOR UPSERTS (not delete + insert)
+from delta.tables import DeltaTable
+
+delta_table = DeltaTable.forPath(spark, "/data/delta/events")
+delta_table.alias("target").merge(
+    source_df.alias("source"),
+    "target.event_id = source.event_id"
+).whenMatchedUpdateAll() \
+ .whenNotMatchedInsertAll() \
+ .execute()
+
+# 2. PARTITION OVERWRITE for full partition replacement
+df.write.format("delta") \
+    .mode("overwrite") \
+    .option("replaceWhere", "event_date = '2024-01-15'") \
+    .save("/data/delta/events")
+
+# 3. ENABLE OPTIMIZED WRITES for streaming/frequent writes
+spark.conf.set("spark.databricks.delta.optimizeWrite.enabled", "true")
+
+# 4. USE IDEMPOTENT WRITES for exactly-once semantics
+df.write.format("delta") \
+    .mode("append") \
+    .option("txnAppId", "my-etl-job") \
+    .option("txnVersion", "12345") \
+    .save("/data/delta/events")
+
+# 5. BATCH SMALL WRITES to avoid small files
+# Instead of writing every minute, batch to every 5-10 minutes
+
+# 6. COALESCE/REPARTITION before writing
+df.coalesce(10).write.format("delta").mode("append").save("/data/delta/events")
+
+# 7. USE SCHEMA EVOLUTION carefully
+df.write.format("delta") \
+    .mode("append") \
+    .option("mergeSchema", "true") \
+    .save("/data/delta/events")
+
+# 8. VALIDATE DATA before writing
+def validate_and_write(df, path):
+    # Check for nulls in required columns
+    null_count = df.filter(col("event_id").isNull()).count()
+    if null_count > 0:
+        raise ValueError(f"Found {null_count} null event_ids")
+    
+    df.write.format("delta").mode("append").save(path)</code></pre>
+                    </div>
+                </div>
+                
+                <div id="read" class="tab-content">
+                    <h3>Read Pattern Best Practices</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
+
+spark = SparkSession.builder \
+    .appName("ReadPatterns") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# 1. FILTER ON PARTITION COLUMNS first
+# Good: Partition pruning happens
+df = spark.read.format("delta").load("/data/delta/events") \
+    .filter("event_date = '2024-01-15'") \
+    .filter("user_id = 'U12345'")
+
+# 2. SELECT ONLY NEEDED COLUMNS
+df = spark.read.format("delta").load("/data/delta/events") \
+    .select("event_id", "user_id", "event_type")
+
+# 3. USE PREDICATE PUSHDOWN
+# Delta Lake pushes filters to file level for data skipping
+df = spark.read.format("delta").load("/data/delta/events") \
+    .filter(col("event_type") == "purchase")
+
+# 4. LEVERAGE DATA SKIPPING with Z-ORDER columns
+# After Z-ORDER BY (user_id), queries on user_id skip files
+df = spark.read.format("delta").load("/data/delta/events") \
+    .filter("user_id = 'U12345'")
+
+# 5. USE TIME TRAVEL for reproducibility
+df = spark.read.format("delta") \
+    .option("versionAsOf", 100) \
+    .load("/data/delta/events")
+
+# 6. CACHE strategically for repeated access
+df = spark.read.format("delta").load("/data/delta/events")
+df.cache()
+# Use df multiple times
+df.unpersist()
+
+# 7. USE BROADCAST for small dimension tables
+from pyspark.sql.functions import broadcast
+
+small_dim = spark.read.format("delta").load("/data/delta/dim_product")
+large_fact = spark.read.format("delta").load("/data/delta/fact_sales")
+
+result = large_fact.join(broadcast(small_dim), "product_id")
+
+# 8. MONITOR QUERY PERFORMANCE
+df.explain(True)  # Check for partition pruning, data skipping</code></pre>
+                    </div>
+                </div>
+                
+                <div id="maintenance" class="tab-content">
+                    <h3>Maintenance Best Practices</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
+
+spark = SparkSession.builder \
+    .appName("Maintenance") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# 1. SCHEDULE REGULAR OPTIMIZE
+# Daily or weekly depending on write frequency
+spark.sql("""
+    OPTIMIZE delta.`/data/delta/events`
+    WHERE event_date >= current_date() - INTERVAL 7 DAYS
+    ZORDER BY (user_id)
+""")
+
+# 2. SCHEDULE REGULAR VACUUM
+# Weekly, respecting retention period
+spark.sql("VACUUM delta.`/data/delta/events` RETAIN 168 HOURS")
+
+# 3. MONITOR TABLE HEALTH
+def check_table_health(table_path):
+    detail = spark.sql(f"DESCRIBE DETAIL delta.`{table_path}`")
+    
+    num_files = detail.select("numFiles").collect()[0][0]
+    size_bytes = detail.select("sizeInBytes").collect()[0][0]
+    avg_file_size = size_bytes / num_files if num_files > 0 else 0
+    
+    print(f"Files: {num_files}")
+    print(f"Total size: {size_bytes / 1e9:.2f} GB")
+    print(f"Avg file size: {avg_file_size / 1e6:.2f} MB")
+    
+    # Alert if too many small files
+    if avg_file_size < 50 * 1e6:  # < 50MB
+        print("WARNING: Small files detected, run OPTIMIZE")
+
+check_table_health("/data/delta/events")
+
+# 4. SET APPROPRIATE RETENTION
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/events` SET TBLPROPERTIES (
+        'delta.logRetentionDuration' = '30 days',
+        'delta.deletedFileRetentionDuration' = '7 days'
+    )
+""")
+
+# 5. MONITOR TRANSACTION LOG SIZE
+history = DeltaTable.forPath(spark, "/data/delta/events").history()
+print(f"Transaction log entries: {history.count()}")
+
+# 6. CREATE MAINTENANCE JOBS
+def daily_maintenance(table_path):
+    """Run daily maintenance tasks"""
+    # Optimize recent partitions
+    spark.sql(f"""
+        OPTIMIZE delta.`{table_path}`
+        WHERE event_date = current_date() - INTERVAL 1 DAY
+        ZORDER BY (user_id)
+    """)
+
+def weekly_maintenance(table_path):
+    """Run weekly maintenance tasks"""
+    # Vacuum old files
+    spark.sql(f"VACUUM delta.`{table_path}` RETAIN 168 HOURS")
+    
+    # Check table health
+    check_table_health(table_path)
+
+# 7. BACKUP CRITICAL TABLES
+spark.sql("""
+    CREATE TABLE backup.events
+    DEEP CLONE prod.events
+    LOCATION 's3://backup-bucket/events'
+""")</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../11_clone_tables/index.html" style="color: var(--text-muted);">&larr; Previous: Clone Tables</a>
+                <a href="../../index.html#deltalake" style="color: var(--accent-primary);">Back to Delta Lake &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 4, z: 5 } });
+            showBestPracticesVisualization();
+        });
+        
+        function showBestPracticesVisualization() {
+            viz.clear();
+            
+            // Best practices pillars
+            const colors = [0x51cf66, 0x4dabf7, 0xffd43b, 0xff6b6b];
+            const labels = ['Design', 'Write', 'Read', 'Maintain'];
+            
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({ type: 'cylinder', size: 0.35, color: colors[i], position: { x: -1.5 + i * 1, y: 0.4, z: 0 } });
+                viz.createLabel(labels[i], { x: -1.5 + i * 1, y: 1, z: 0 });
+            }
+            
+            viz.createGrid(5, 5);
+        }
+    </script>
+</body>
+</html>

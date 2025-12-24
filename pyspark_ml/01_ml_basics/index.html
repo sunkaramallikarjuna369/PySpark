@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ML Basics - PySpark ML</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pyspark_ml" class="nav-link active">PySpark ML</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>PySpark ML Basics</h1>
+            <p>Introduction to machine learning with PySpark MLlib - the scalable machine learning library built on Apache Spark.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>ML Fundamentals</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="overview">Overview</button>
+                <button class="tab" data-tab="dataframes">ML DataFrames</button>
+                <button class="tab" data-tab="transformers">Transformers</button>
+                <button class="tab" data-tab="estimators">Estimators</button>
+            </div>
+            <div class="tab-contents">
+                <div id="overview" class="tab-content active">
+                    <h3>PySpark MLlib Overview</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler, StringIndexer, StandardScaler
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml import Pipeline
+
+spark = SparkSession.builder \
+    .appName("MLBasics") \
+    .getOrCreate()
+
+# PySpark MLlib provides:
+# 1. ML Algorithms: Classification, Regression, Clustering, Recommendation
+# 2. Feature Engineering: Extraction, Transformation, Selection
+# 3. Pipelines: Chaining multiple steps
+# 4. Model Persistence: Save and load models
+# 5. Utilities: Linear algebra, statistics
+
+# Key concepts:
+# - DataFrame: Primary data structure for ML
+# - Transformer: Transforms one DataFrame to another (e.g., model.transform())
+# - Estimator: Fits on data to produce a Transformer (e.g., model.fit())
+# - Pipeline: Chains Transformers and Estimators
+# - Parameter: Named parameters for algorithms
+
+# Simple ML workflow example
+data = [
+    (0, 1.0, 0.5, 0),
+    (1, 2.0, 1.0, 0),
+    (2, 3.0, 1.5, 1),
+    (3, 4.0, 2.0, 1)
+]
+df = spark.createDataFrame(data, ["id", "feature1", "feature2", "label"])
+
+# Assemble features into a vector
+assembler = VectorAssembler(
+    inputCols=["feature1", "feature2"],
+    outputCol="features"
+)
+
+# Create and train a model
+lr = LogisticRegression(featuresCol="features", labelCol="label")
+
+# Build pipeline
+pipeline = Pipeline(stages=[assembler, lr])
+
+# Fit the pipeline
+model = pipeline.fit(df)
+
+# Make predictions
+predictions = model.transform(df)
+predictions.select("id", "features", "label", "prediction", "probability").show()</code></pre>
+                    </div>
+                </div>
+                
+                <div id="dataframes" class="tab-content">
+                    <h3>ML DataFrames</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, DoubleType, StringType
+from pyspark.ml.linalg import Vectors, VectorUDT
+
+spark = SparkSession.builder.appName("MLDataFrames").getOrCreate()
+
+# ML DataFrames use special vector types for features
+# DenseVector: For dense data (most values non-zero)
+# SparseVector: For sparse data (most values zero)
+
+# Create DataFrame with features
+from pyspark.ml.linalg import Vectors
+
+data = [
+    (0, Vectors.dense([1.0, 2.0, 3.0]), 1.0),
+    (1, Vectors.dense([4.0, 5.0, 6.0]), 0.0),
+    (2, Vectors.sparse(3, [0, 2], [1.0, 3.0]), 1.0)  # Sparse: indices and values
+]
+
+schema = StructType([
+    StructField("id", DoubleType()),
+    StructField("features", VectorUDT()),
+    StructField("label", DoubleType())
+])
+
+df = spark.createDataFrame(data, schema)
+df.show()
+df.printSchema()
+
+# Load data from CSV and prepare for ML
+raw_data = spark.read.csv("data/sample_data.csv", header=True, inferSchema=True)
+
+# Common data preparation steps
+from pyspark.ml.feature import VectorAssembler, StringIndexer
+
+# Index categorical columns
+indexer = StringIndexer(inputCol="category", outputCol="category_index")
+
+# Assemble numeric features
+assembler = VectorAssembler(
+    inputCols=["numeric_col1", "numeric_col2", "category_index"],
+    outputCol="features"
+)
+
+# Split data into train/test
+train_data, test_data = df.randomSplit([0.8, 0.2], seed=42)
+print(f"Training samples: {train_data.count()}")
+print(f"Test samples: {test_data.count()}")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="transformers" class="tab-content">
+                    <h3>Transformers</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import (
+    VectorAssembler, StandardScaler, MinMaxScaler,
+    StringIndexer, OneHotEncoder, Tokenizer,
+    HashingTF, IDF, Normalizer, Binarizer
+)
+
+spark = SparkSession.builder.appName("Transformers").getOrCreate()
+
+# Transformers convert one DataFrame to another
+# They implement transform() method
+
+data = spark.createDataFrame([
+    (0, "cat", 1.0, 2.0, "hello world"),
+    (1, "dog", 3.0, 4.0, "spark ml"),
+    (2, "cat", 5.0, 6.0, "machine learning")
+], ["id", "category", "val1", "val2", "text"])
+
+# 1. VectorAssembler - Combine columns into feature vector
+assembler = VectorAssembler(inputCols=["val1", "val2"], outputCol="features")
+assembled = assembler.transform(data)
+
+# 2. StandardScaler - Standardize features (mean=0, std=1)
+scaler = StandardScaler(inputCol="features", outputCol="scaled_features")
+scaler_model = scaler.fit(assembled)
+scaled = scaler_model.transform(assembled)
+
+# 3. MinMaxScaler - Scale to [0, 1] range
+minmax = MinMaxScaler(inputCol="features", outputCol="minmax_features")
+minmax_model = minmax.fit(assembled)
+minmax_scaled = minmax_model.transform(assembled)
+
+# 4. StringIndexer - Convert strings to numeric indices
+indexer = StringIndexer(inputCol="category", outputCol="category_index")
+indexed = indexer.fit(data).transform(data)
+
+# 5. OneHotEncoder - One-hot encode categorical variables
+encoder = OneHotEncoder(inputCol="category_index", outputCol="category_vec")
+encoded = encoder.fit(indexed).transform(indexed)
+
+# 6. Tokenizer - Split text into words
+tokenizer = Tokenizer(inputCol="text", outputCol="words")
+tokenized = tokenizer.transform(data)
+
+# 7. HashingTF + IDF - Text feature extraction
+hashingTF = HashingTF(inputCol="words", outputCol="raw_features", numFeatures=100)
+tf = hashingTF.transform(tokenized)
+
+idf = IDF(inputCol="raw_features", outputCol="tfidf_features")
+idf_model = idf.fit(tf)
+tfidf = idf_model.transform(tf)
+
+# 8. Binarizer - Threshold continuous features
+binarizer = Binarizer(threshold=3.0, inputCol="val1", outputCol="val1_binary")
+binarized = binarizer.transform(data)
+
+binarized.show()</code></pre>
+                    </div>
+                </div>
+                
+                <div id="estimators" class="tab-content">
+                    <h3>Estimators</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.classification import (
+    LogisticRegression, DecisionTreeClassifier,
+    RandomForestClassifier, GBTClassifier
+)
+from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor
+from pyspark.ml.clustering import KMeans
+
+spark = SparkSession.builder.appName("Estimators").getOrCreate()
+
+# Estimators learn from data and produce a Model (Transformer)
+# They implement fit() method
+
+# Sample data
+data = spark.createDataFrame([
+    (1.0, 2.0, 0),
+    (2.0, 3.0, 0),
+    (3.0, 4.0, 1),
+    (4.0, 5.0, 1),
+    (5.0, 6.0, 1)
+], ["feature1", "feature2", "label"])
+
+assembler = VectorAssembler(inputCols=["feature1", "feature2"], outputCol="features")
+data = assembler.transform(data)
+
+# 1. LogisticRegression - Binary/Multiclass classification
+lr = LogisticRegression(
+    featuresCol="features",
+    labelCol="label",
+    maxIter=100,
+    regParam=0.01
+)
+lr_model = lr.fit(data)
+print(f"LR Coefficients: {lr_model.coefficients}")
+print(f"LR Intercept: {lr_model.intercept}")
+
+# 2. DecisionTreeClassifier
+dt = DecisionTreeClassifier(
+    featuresCol="features",
+    labelCol="label",
+    maxDepth=5
+)
+dt_model = dt.fit(data)
+print(f"DT Feature Importances: {dt_model.featureImportances}")
+
+# 3. RandomForestClassifier
+rf = RandomForestClassifier(
+    featuresCol="features",
+    labelCol="label",
+    numTrees=10,
+    maxDepth=5
+)
+rf_model = rf.fit(data)
+
+# 4. GBTClassifier (Gradient Boosted Trees)
+gbt = GBTClassifier(
+    featuresCol="features",
+    labelCol="label",
+    maxIter=10
+)
+gbt_model = gbt.fit(data)
+
+# 5. LinearRegression
+lr_reg = LinearRegression(
+    featuresCol="features",
+    labelCol="label",
+    maxIter=100,
+    regParam=0.01
+)
+lr_reg_model = lr_reg.fit(data)
+print(f"Linear Regression R2: {lr_reg_model.summary.r2}")
+
+# 6. KMeans Clustering
+kmeans = KMeans(
+    featuresCol="features",
+    k=2,
+    seed=42
+)
+kmeans_model = kmeans.fit(data)
+print(f"Cluster Centers: {kmeans_model.clusterCenters()}")
+
+# Make predictions with any model
+predictions = lr_model.transform(data)
+predictions.select("features", "label", "prediction", "probability").show()</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../../index.html#pyspark_ml" style="color: var(--text-muted);">&larr; Back to PySpark ML</a>
+                <a href="../02_feature_engineering/index.html" style="color: var(--accent-primary);">Next: Feature Engineering &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showMLBasicsVisualization();
+        });
+        
+        function showMLBasicsVisualization() {
+            viz.clear();
+            
+            // ML Pipeline flow
+            viz.createDataNode({ type: 'cube', size: 0.4, color: 0x4dabf7, position: { x: -2, y: 0.3, z: 0 } });
+            viz.createLabel('Data', { x: -2, y: 0.9, z: 0 });
+            
+            viz.createArrow({ x: -1.4, y: 0.3, z: 0 }, { x: -0.6, y: 0.3, z: 0 }, { color: 0x888888 });
+            
+            viz.createDataNode({ type: 'cylinder', size: 0.35, color: 0x51cf66, position: { x: 0, y: 0.35, z: 0 } });
+            viz.createLabel('Transform', { x: 0, y: 1, z: 0 });
+            
+            viz.createArrow({ x: 0.6, y: 0.35, z: 0 }, { x: 1.4, y: 0.35, z: 0 }, { color: 0x888888 });
+            
+            viz.createDataNode({ type: 'sphere', size: 0.35, color: 0xff6b6b, position: { x: 2, y: 0.35, z: 0 } });
+            viz.createLabel('Model', { x: 2, y: 1, z: 0 });
+            
+            viz.createGrid(6, 6);
+        }
+    </script>
+</body>
+</html>

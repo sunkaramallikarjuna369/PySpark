@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Streaming with Delta Lake</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#deltalake" class="nav-link active">Delta Lake</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Streaming with Delta Lake</h1>
+            <p>Delta Lake provides unified batch and streaming support, enabling real-time data pipelines with exactly-once semantics and ACID guarantees.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Streaming Operations</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="sink">Delta as Sink</button>
+                <button class="tab" data-tab="source">Delta as Source</button>
+                <button class="tab" data-tab="patterns">Stream Patterns</button>
+                <button class="tab" data-tab="production">Production Tips</button>
+            </div>
+            <div class="tab-contents">
+                <div id="sink" class="tab-content active">
+                    <h3>Delta Lake as Streaming Sink</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, from_json, current_timestamp
+from pyspark.sql.types import StructType, StructField, StringType, LongType
+
+spark = SparkSession.builder \
+    .appName("DeltaStreamingSink") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Read from Kafka
+kafka_stream = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("subscribe", "events") \
+    .option("startingOffsets", "earliest") \
+    .load()
+
+# Parse JSON messages
+schema = StructType([
+    StructField("id", LongType()),
+    StructField("event_type", StringType()),
+    StructField("user_id", StringType()),
+    StructField("timestamp", StringType())
+])
+
+events = kafka_stream.select(
+    from_json(col("value").cast("string"), schema).alias("data")
+).select("data.*")
+
+# Write to Delta Lake (append mode)
+query = events.writeStream \
+    .format("delta") \
+    .outputMode("append") \
+    .option("checkpointLocation", "/checkpoints/events_stream") \
+    .start("/data/delta/events")
+
+# Write with partitioning
+events.writeStream \
+    .format("delta") \
+    .partitionBy("event_date") \
+    .option("checkpointLocation", "/checkpoints/events_partitioned") \
+    .start("/data/delta/events_partitioned")
+
+# Write with optimizations
+events.writeStream \
+    .format("delta") \
+    .option("checkpointLocation", "/checkpoints/events_optimized") \
+    .option("optimizeWrite", "true") \
+    .option("autoCompact", "true") \
+    .trigger(processingTime="1 minute") \
+    .start("/data/delta/events_optimized")
+
+# Idempotent writes (exactly-once)
+events.writeStream \
+    .format("delta") \
+    .option("checkpointLocation", "/checkpoints/events_idempotent") \
+    .option("txnAppId", "events-ingestion") \
+    .option("txnVersion", "1") \
+    .start("/data/delta/events")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="source" class="tab-content">
+                    <h3>Delta Lake as Streaming Source</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("DeltaStreamingSource") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Read Delta table as stream
+events_stream = spark.readStream \
+    .format("delta") \
+    .load("/data/delta/events")
+
+# Process and write to another Delta table
+events_stream.writeStream \
+    .format("delta") \
+    .option("checkpointLocation", "/checkpoints/processed_events") \
+    .start("/data/delta/processed_events")
+
+# Read with rate limiting
+events_stream = spark.readStream \
+    .format("delta") \
+    .option("maxFilesPerTrigger", 100) \
+    .option("maxBytesPerTrigger", "10g") \
+    .load("/data/delta/events")
+
+# Read starting from specific version
+events_stream = spark.readStream \
+    .format("delta") \
+    .option("startingVersion", 100) \
+    .load("/data/delta/events")
+
+# Read starting from timestamp
+events_stream = spark.readStream \
+    .format("delta") \
+    .option("startingTimestamp", "2024-01-15 00:00:00") \
+    .load("/data/delta/events")
+
+# Ignore updates and deletes (append-only mode)
+events_stream = spark.readStream \
+    .format("delta") \
+    .option("ignoreChanges", "true") \
+    .load("/data/delta/events")
+
+# Read with Change Data Feed
+cdf_stream = spark.readStream \
+    .format("delta") \
+    .option("readChangeFeed", "true") \
+    .option("startingVersion", 0) \
+    .load("/data/delta/events")
+
+# Process CDF stream
+cdf_stream.writeStream \
+    .foreachBatch(lambda df, id: process_changes(df, id)) \
+    .option("checkpointLocation", "/checkpoints/cdf_processor") \
+    .start()</code></pre>
+                    </div>
+                </div>
+                
+                <div id="patterns" class="tab-content">
+                    <h3>Streaming Patterns</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
+from pyspark.sql.functions import col, window, count, sum as spark_sum
+
+spark = SparkSession.builder \
+    .appName("StreamingPatterns") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Pattern 1: Stream-to-Delta with MERGE (upsert)
+def upsert_to_delta(batch_df, batch_id):
+    """Upsert streaming batch to Delta table"""
+    delta_table = DeltaTable.forPath(spark, "/data/delta/users")
+    
+    delta_table.alias("target").merge(
+        batch_df.alias("source"),
+        "target.user_id = source.user_id"
+    ).whenMatchedUpdateAll() \
+     .whenNotMatchedInsertAll() \
+     .execute()
+
+users_stream = spark.readStream.format("delta").load("/data/delta/user_updates")
+users_stream.writeStream \
+    .foreachBatch(upsert_to_delta) \
+    .option("checkpointLocation", "/checkpoints/user_upsert") \
+    .start()
+
+# Pattern 2: Windowed aggregations to Delta
+events_stream = spark.readStream.format("delta").load("/data/delta/events")
+
+windowed_counts = events_stream \
+    .withWatermark("event_time", "10 minutes") \
+    .groupBy(
+        window("event_time", "5 minutes"),
+        "event_type"
+    ).agg(count("*").alias("event_count"))
+
+windowed_counts.writeStream \
+    .format("delta") \
+    .outputMode("append") \
+    .option("checkpointLocation", "/checkpoints/windowed_counts") \
+    .start("/data/delta/event_counts")
+
+# Pattern 3: Multi-hop architecture (Bronze -> Silver -> Gold)
+# Bronze: Raw data ingestion
+bronze_stream = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("subscribe", "raw-events") \
+    .load()
+
+bronze_stream.writeStream \
+    .format("delta") \
+    .option("checkpointLocation", "/checkpoints/bronze") \
+    .start("/data/delta/bronze/events")
+
+# Silver: Cleaned and validated
+silver_stream = spark.readStream \
+    .format("delta") \
+    .load("/data/delta/bronze/events")
+
+cleaned = silver_stream.filter(col("data").isNotNull())
+
+cleaned.writeStream \
+    .format("delta") \
+    .option("checkpointLocation", "/checkpoints/silver") \
+    .start("/data/delta/silver/events")
+
+# Gold: Aggregated for analytics
+gold_stream = spark.readStream \
+    .format("delta") \
+    .load("/data/delta/silver/events")
+
+aggregated = gold_stream.groupBy("event_type").count()
+
+aggregated.writeStream \
+    .format("delta") \
+    .outputMode("complete") \
+    .option("checkpointLocation", "/checkpoints/gold") \
+    .start("/data/delta/gold/event_summary")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="production" class="tab-content">
+                    <h3>Production Best Practices</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.streaming import StreamingQueryListener
+
+spark = SparkSession.builder \
+    .appName("ProductionStreaming") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# 1. Configure checkpointing for fault tolerance
+stream = spark.readStream.format("delta").load("/data/delta/events")
+stream.writeStream \
+    .format("delta") \
+    .option("checkpointLocation", "/checkpoints/production_stream") \
+    .start("/data/delta/output")
+
+# 2. Set appropriate trigger intervals
+# Micro-batch (default)
+stream.writeStream.trigger(processingTime="10 seconds").start()
+
+# Once trigger (for batch-like processing)
+stream.writeStream.trigger(once=True).start()
+
+# Available now trigger (process all available data)
+stream.writeStream.trigger(availableNow=True).start()
+
+# 3. Enable auto-optimization for streaming writes
+spark.conf.set("spark.databricks.delta.optimizeWrite.enabled", "true")
+spark.conf.set("spark.databricks.delta.autoCompact.enabled", "true")
+
+# 4. Monitor streaming queries
+class QueryListener(StreamingQueryListener):
+    def onQueryStarted(self, event):
+        print(f"Query started: {event.id}")
+    
+    def onQueryProgress(self, event):
+        print(f"Progress: {event.progress.numInputRows} rows processed")
+    
+    def onQueryTerminated(self, event):
+        print(f"Query terminated: {event.id}")
+
+spark.streams.addListener(QueryListener())
+
+# 5. Handle late data with watermarks
+events = spark.readStream.format("delta").load("/data/delta/events")
+events.withWatermark("event_time", "1 hour") \
+    .groupBy(window("event_time", "10 minutes")) \
+    .count()
+
+# 6. Graceful shutdown
+query = stream.writeStream.start()
+# In shutdown hook:
+query.stop()
+
+# 7. Recovery from failures
+# Delta Lake automatically recovers from checkpoint
+# Just restart the same query with same checkpoint location
+
+# 8. Schema evolution in streaming
+stream.writeStream \
+    .format("delta") \
+    .option("mergeSchema", "true") \
+    .option("checkpointLocation", "/checkpoints/schema_evolution") \
+    .start("/data/delta/output")
+
+# 9. Monitoring metrics
+for query in spark.streams.active:
+    print(f"Query: {query.name}")
+    print(f"Status: {query.status}")
+    print(f"Recent progress: {query.recentProgress}")</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../08_change_data_feed/index.html" style="color: var(--text-muted);">&larr; Previous: Change Data Feed</a>
+                <a href="../10_constraints/index.html" style="color: var(--accent-primary);">Next: Constraints &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showStreamingVisualization();
+        });
+        
+        function showStreamingVisualization() {
+            viz.clear();
+            
+            // Stream flow
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({ type: 'sphere', size: 0.2, color: 0x4dabf7, position: { x: -2 + i * 0.8, y: 0.3, z: 0 } });
+            }
+            
+            // Delta table
+            viz.createDataNode({ type: 'cylinder', size: 0.5, color: 0x51cf66, position: { x: 2, y: 0.4, z: 0 } });
+            viz.createLabel('Delta Table', { x: 2, y: 1.1, z: 0 });
+            
+            // Arrow
+            viz.createArrow({ x: 1, y: 0.3, z: 0 }, { x: 1.5, y: 0.4, z: 0 }, { color: 0xff6b6b });
+            
+            viz.createGrid(6, 6);
+        }
+    </script>
+</body>
+</html>

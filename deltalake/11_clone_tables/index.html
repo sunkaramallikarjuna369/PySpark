@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clone Tables - Delta Lake</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#deltalake" class="nav-link active">Delta Lake</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Clone Tables in Delta Lake</h1>
+            <p>Delta Lake supports SHALLOW CLONE and DEEP CLONE operations for creating copies of tables for testing, development, or disaster recovery.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Clone Operations</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="shallow">Shallow Clone</button>
+                <button class="tab" data-tab="deep">Deep Clone</button>
+                <button class="tab" data-tab="usecases">Use Cases</button>
+            </div>
+            <div class="tab-contents">
+                <div id="shallow" class="tab-content active">
+                    <h3>Shallow Clone</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("ShallowClone") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Shallow clone - copies metadata only, references original data files
+# Fast and storage-efficient, but depends on source table
+
+# Create shallow clone using SQL
+spark.sql("""
+    CREATE TABLE events_clone
+    SHALLOW CLONE delta.`/data/delta/events`
+""")
+
+# Clone to specific location
+spark.sql("""
+    CREATE TABLE events_dev
+    SHALLOW CLONE delta.`/data/delta/events`
+    LOCATION '/data/delta/events_dev'
+""")
+
+# Clone specific version (time travel)
+spark.sql("""
+    CREATE TABLE events_snapshot
+    SHALLOW CLONE delta.`/data/delta/events` VERSION AS OF 10
+""")
+
+# Clone as of timestamp
+spark.sql("""
+    CREATE TABLE events_backup
+    SHALLOW CLONE delta.`/data/delta/events`
+    TIMESTAMP AS OF '2024-01-15 00:00:00'
+""")
+
+# Shallow clone characteristics:
+# - Only copies transaction log (metadata)
+# - Data files are referenced, not copied
+# - Very fast (seconds even for TB tables)
+# - Minimal storage overhead
+# - Clone becomes independent after first write
+# - Source table must exist for reads until clone is modified
+
+# Check clone metadata
+spark.sql("DESCRIBE DETAIL events_clone").show(truncate=False)</code></pre>
+                    </div>
+                </div>
+                
+                <div id="deep" class="tab-content">
+                    <h3>Deep Clone</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("DeepClone") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Deep clone - copies both metadata AND data files
+# Completely independent copy, but takes longer and uses more storage
+
+# Create deep clone
+spark.sql("""
+    CREATE TABLE events_archive
+    DEEP CLONE delta.`/data/delta/events`
+""")
+
+# Deep clone to specific location
+spark.sql("""
+    CREATE TABLE events_dr
+    DEEP CLONE delta.`/data/delta/events`
+    LOCATION '/data/delta/disaster_recovery/events'
+""")
+
+# Deep clone specific version
+spark.sql("""
+    CREATE TABLE events_v10_archive
+    DEEP CLONE delta.`/data/delta/events` VERSION AS OF 10
+""")
+
+# Incremental deep clone (update existing clone)
+spark.sql("""
+    CREATE OR REPLACE TABLE events_archive
+    DEEP CLONE delta.`/data/delta/events`
+""")
+
+# Deep clone characteristics:
+# - Copies all data files (full copy)
+# - Completely independent of source
+# - Takes longer (proportional to data size)
+# - Uses same storage as source
+# - Good for disaster recovery, archival
+# - Can be used after source is deleted
+
+# Compare storage usage
+source_detail = spark.sql("DESCRIBE DETAIL delta.`/data/delta/events`")
+clone_detail = spark.sql("DESCRIBE DETAIL events_archive")
+
+print("Source size:", source_detail.select("sizeInBytes").collect()[0][0])
+print("Clone size:", clone_detail.select("sizeInBytes").collect()[0][0])</code></pre>
+                    </div>
+                </div>
+                
+                <div id="usecases" class="tab-content">
+                    <h3>Clone Use Cases</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("CloneUseCases") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Use Case 1: Development/Testing Environment
+# Create shallow clone for dev testing (fast, low storage)
+spark.sql("""
+    CREATE TABLE dev.events
+    SHALLOW CLONE prod.events
+""")
+
+# Developers can modify without affecting production
+spark.sql("INSERT INTO dev.events VALUES (999, 'test', 'dev_user')")
+
+# Use Case 2: Data Science Experimentation
+# Clone specific version for reproducible experiments
+spark.sql("""
+    CREATE TABLE ml.training_data_v1
+    SHALLOW CLONE delta.`/data/delta/features` VERSION AS OF 100
+""")
+
+# Use Case 3: Disaster Recovery
+# Deep clone to different storage for DR
+spark.sql("""
+    CREATE TABLE dr.events
+    DEEP CLONE prod.events
+    LOCATION 's3://dr-bucket/events'
+""")
+
+# Use Case 4: Schema Migration Testing
+# Clone to test schema changes safely
+spark.sql("CREATE TABLE staging.events SHALLOW CLONE prod.events")
+spark.sql("ALTER TABLE staging.events ADD COLUMNS (new_field STRING)")
+# Test queries, then apply to production if successful
+
+# Use Case 5: Point-in-Time Reporting
+# Clone for end-of-month reporting snapshot
+spark.sql("""
+    CREATE TABLE reports.events_jan_2024
+    SHALLOW CLONE prod.events
+    TIMESTAMP AS OF '2024-01-31 23:59:59'
+""")
+
+# Use Case 6: A/B Testing Data
+# Create isolated copies for A/B test groups
+spark.sql("CREATE TABLE ab_test.group_a SHALLOW CLONE prod.users")
+spark.sql("CREATE TABLE ab_test.group_b SHALLOW CLONE prod.users")
+
+# Use Case 7: Data Archival
+# Archive old data before deletion
+spark.sql("""
+    CREATE TABLE archive.events_2023
+    DEEP CLONE prod.events
+    WHERE year = 2023
+""")
+# Then delete from production
+spark.sql("DELETE FROM prod.events WHERE year = 2023")</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../10_constraints/index.html" style="color: var(--text-muted);">&larr; Previous: Constraints</a>
+                <a href="../12_best_practices/index.html" style="color: var(--accent-primary);">Next: Best Practices &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showCloneVisualization();
+        });
+        
+        function showCloneVisualization() {
+            viz.clear();
+            
+            // Source table
+            viz.createDataNode({ type: 'cylinder', size: 0.5, color: 0x4dabf7, position: { x: -1.5, y: 0.4, z: 0 } });
+            viz.createLabel('Source', { x: -1.5, y: 1.1, z: 0 });
+            
+            // Clone
+            viz.createDataNode({ type: 'cylinder', size: 0.5, color: 0x51cf66, position: { x: 1.5, y: 0.4, z: 0 } });
+            viz.createLabel('Clone', { x: 1.5, y: 1.1, z: 0 });
+            
+            // Arrow
+            viz.createArrow({ x: -0.8, y: 0.4, z: 0 }, { x: 0.8, y: 0.4, z: 0 }, { color: 0xffd43b });
+            
+            viz.createGrid(6, 6);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hyperparameter Tuning - PySpark ML</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pyspark_ml" class="nav-link active">PySpark ML</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Hyperparameter Tuning</h1>
+            <p>Optimize model performance by systematically searching for the best hyperparameters using PySpark ML's tuning utilities.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Tuning Methods</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="grid">Grid Search</button>
+                <button class="tab" data-tab="trainval">Train-Validation Split</button>
+                <button class="tab" data-tab="advanced">Advanced Tuning</button>
+            </div>
+            <div class="tab-contents">
+                <div id="grid" class="tab-content active">
+                    <h3>Grid Search with Cross-Validation</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml import Pipeline
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.classification import RandomForestClassifier
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
+
+spark = SparkSession.builder.appName("GridSearch").getOrCreate()
+
+# Sample data
+data = spark.createDataFrame([
+    (1.0, 2.0, 3.0, 0), (2.0, 3.0, 4.0, 0), (3.0, 4.0, 5.0, 0),
+    (4.0, 5.0, 6.0, 1), (5.0, 6.0, 7.0, 1), (6.0, 7.0, 8.0, 1),
+    (7.0, 8.0, 9.0, 1), (8.0, 9.0, 10.0, 1)
+], ["f1", "f2", "f3", "label"])
+
+assembler = VectorAssembler(inputCols=["f1", "f2", "f3"], outputCol="features")
+rf = RandomForestClassifier(featuresCol="features", labelCol="label")
+pipeline = Pipeline(stages=[assembler, rf])
+
+# Build parameter grid
+paramGrid = ParamGridBuilder() \
+    .addGrid(rf.numTrees, [10, 50, 100]) \
+    .addGrid(rf.maxDepth, [3, 5, 10]) \
+    .addGrid(rf.minInstancesPerNode, [1, 2, 5]) \
+    .build()
+
+print(f"Total parameter combinations: {len(paramGrid)}")
+
+# Evaluator
+evaluator = MulticlassClassificationEvaluator(
+    labelCol="label",
+    predictionCol="prediction",
+    metricName="accuracy"
+)
+
+# Cross-Validator
+crossval = CrossValidator(
+    estimator=pipeline,
+    estimatorParamMaps=paramGrid,
+    evaluator=evaluator,
+    numFolds=3,
+    parallelism=4,  # Parallel model training
+    seed=42
+)
+
+# Fit
+cv_model = crossval.fit(data)
+
+# Best model and parameters
+best_model = cv_model.bestModel
+best_rf = best_model.stages[-1]
+
+print(f"\nBest Parameters:")
+print(f"  numTrees: {best_rf.getNumTrees}")
+print(f"  maxDepth: {best_rf.getMaxDepth()}")
+print(f"  minInstancesPerNode: {best_rf.getMinInstancesPerNode()}")
+
+# All results
+print(f"\nAll Results (sorted by metric):")
+results = list(zip(paramGrid, cv_model.avgMetrics))
+results.sort(key=lambda x: x[1], reverse=True)
+for params, metric in results[:5]:
+    print(f"  Metric: {metric:.4f} - {params}")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="trainval" class="tab-content">
+                    <h3>Train-Validation Split</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml import Pipeline
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.regression import GBTRegressor
+from pyspark.ml.evaluation import RegressionEvaluator
+from pyspark.ml.tuning import TrainValidationSplit, ParamGridBuilder
+
+spark = SparkSession.builder.appName("TrainValidationSplit").getOrCreate()
+
+# Sample data
+data = spark.createDataFrame([
+    (1.0, 2.0, 5.0), (2.0, 3.0, 8.0), (3.0, 4.0, 11.0),
+    (4.0, 5.0, 14.0), (5.0, 6.0, 17.0), (6.0, 7.0, 20.0),
+    (7.0, 8.0, 23.0), (8.0, 9.0, 26.0)
+], ["f1", "f2", "label"])
+
+assembler = VectorAssembler(inputCols=["f1", "f2"], outputCol="features")
+gbt = GBTRegressor(featuresCol="features", labelCol="label")
+pipeline = Pipeline(stages=[assembler, gbt])
+
+# Parameter grid
+paramGrid = ParamGridBuilder() \
+    .addGrid(gbt.maxIter, [10, 20, 50]) \
+    .addGrid(gbt.maxDepth, [3, 5, 7]) \
+    .addGrid(gbt.stepSize, [0.05, 0.1, 0.2]) \
+    .build()
+
+# Evaluator
+evaluator = RegressionEvaluator(
+    labelCol="label",
+    predictionCol="prediction",
+    metricName="rmse"
+)
+
+# Train-Validation Split (faster than CV)
+tvs = TrainValidationSplit(
+    estimator=pipeline,
+    estimatorParamMaps=paramGrid,
+    evaluator=evaluator,
+    trainRatio=0.8,  # 80% train, 20% validation
+    parallelism=4,
+    seed=42
+)
+
+# Fit
+tvs_model = tvs.fit(data)
+
+# Best model
+best_model = tvs_model.bestModel
+best_gbt = best_model.stages[-1]
+
+print(f"Best Parameters:")
+print(f"  maxIter: {best_gbt.getMaxIter()}")
+print(f"  maxDepth: {best_gbt.getMaxDepth()}")
+print(f"  stepSize: {best_gbt.getStepSize()}")
+
+# Validation metrics
+print(f"\nValidation Metrics:")
+for params, metric in zip(paramGrid, tvs_model.validationMetrics):
+    print(f"  RMSE: {metric:.4f}")
+
+# Best metric
+print(f"\nBest RMSE: {min(tvs_model.validationMetrics):.4f}")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="advanced" class="tab-content">
+                    <h3>Advanced Tuning Strategies</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml import Pipeline
+from pyspark.ml.feature import VectorAssembler, StandardScaler
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.evaluation import BinaryClassificationEvaluator
+from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
+
+spark = SparkSession.builder.appName("AdvancedTuning").getOrCreate()
+
+# Sample data
+data = spark.createDataFrame([
+    (1.0, 2.0, 0), (2.0, 3.0, 0), (3.0, 4.0, 0), (4.0, 5.0, 0),
+    (5.0, 6.0, 1), (6.0, 7.0, 1), (7.0, 8.0, 1), (8.0, 9.0, 1)
+], ["f1", "f2", "label"])
+
+# Strategy 1: Tune multiple stages in pipeline
+assembler = VectorAssembler(inputCols=["f1", "f2"], outputCol="raw_features")
+scaler = StandardScaler(inputCol="raw_features", outputCol="features")
+lr = LogisticRegression(featuresCol="features", labelCol="label")
+
+pipeline = Pipeline(stages=[assembler, scaler, lr])
+
+# Tune both scaler and classifier
+paramGrid = ParamGridBuilder() \
+    .addGrid(scaler.withMean, [True, False]) \
+    .addGrid(scaler.withStd, [True, False]) \
+    .addGrid(lr.regParam, [0.01, 0.1, 1.0]) \
+    .addGrid(lr.elasticNetParam, [0.0, 0.5, 1.0]) \
+    .build()
+
+evaluator = BinaryClassificationEvaluator(labelCol="label")
+crossval = CrossValidator(
+    estimator=pipeline,
+    estimatorParamMaps=paramGrid,
+    evaluator=evaluator,
+    numFolds=3
+)
+
+cv_model = crossval.fit(data)
+
+# Strategy 2: Coarse-to-fine search
+# First: Coarse search
+coarse_grid = ParamGridBuilder() \
+    .addGrid(lr.regParam, [0.001, 0.01, 0.1, 1.0, 10.0]) \
+    .build()
+
+coarse_cv = CrossValidator(
+    estimator=pipeline,
+    estimatorParamMaps=coarse_grid,
+    evaluator=evaluator,
+    numFolds=3
+)
+coarse_model = coarse_cv.fit(data)
+
+# Find best coarse parameter
+best_idx = coarse_cv.avgMetrics.index(max(coarse_cv.avgMetrics))
+best_coarse_reg = coarse_grid[best_idx][lr.regParam]
+print(f"Best coarse regParam: {best_coarse_reg}")
+
+# Second: Fine search around best
+fine_grid = ParamGridBuilder() \
+    .addGrid(lr.regParam, [best_coarse_reg * 0.5, best_coarse_reg, best_coarse_reg * 2]) \
+    .addGrid(lr.elasticNetParam, [0.0, 0.25, 0.5, 0.75, 1.0]) \
+    .build()
+
+fine_cv = CrossValidator(
+    estimator=pipeline,
+    estimatorParamMaps=fine_grid,
+    evaluator=evaluator,
+    numFolds=5  # More folds for fine tuning
+)
+fine_model = fine_cv.fit(data)
+
+# Strategy 3: Early stopping simulation
+def tune_with_early_stopping(data, pipeline, param_grid, evaluator, patience=3):
+    """Stop if no improvement for 'patience' iterations"""
+    best_metric = float('-inf')
+    no_improvement = 0
+    best_params = None
+    
+    for params in param_grid:
+        cv = CrossValidator(
+            estimator=pipeline,
+            estimatorParamMaps=[params],
+            evaluator=evaluator,
+            numFolds=3
+        )
+        model = cv.fit(data)
+        metric = cv.avgMetrics[0]
+        
+        if metric > best_metric:
+            best_metric = metric
+            best_params = params
+            no_improvement = 0
+        else:
+            no_improvement += 1
+        
+        if no_improvement >= patience:
+            print(f"Early stopping at iteration {param_grid.index(params)}")
+            break
+    
+    return best_params, best_metric</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../07_model_evaluation/index.html" style="color: var(--text-muted);">&larr; Previous: Model Evaluation</a>
+                <a href="../09_recommendation/index.html" style="color: var(--accent-primary);">Next: Recommendation Systems &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showTuningVisualization();
+        });
+        
+        function showTuningVisualization() {
+            viz.clear();
+            
+            // Grid of parameter combinations
+            for (let i = 0; i < 3; i++) {
+                for (let j = 0; j < 3; j++) {
+                    const color = (i === 1 && j === 1) ? 0x51cf66 : 0x4dabf7;
+                    viz.createDataNode({ type: 'cube', size: 0.25, color: color, position: { x: -1 + i * 1, y: 0.2, z: -1 + j * 1 } });
+                }
+            }
+            
+            viz.createLabel('Best', { x: 0, y: 0.7, z: 0 });
+            viz.createGrid(5, 5);
+        }
+    </script>
+</body>
+</html>

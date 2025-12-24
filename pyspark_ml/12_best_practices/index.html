@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ML Best Practices - PySpark ML</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pyspark_ml" class="nav-link active">PySpark ML</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>PySpark ML Best Practices</h1>
+            <p>Production-ready patterns and recommendations for building reliable, scalable machine learning systems with PySpark.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Best Practices</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="data">Data Preparation</button>
+                <button class="tab" data-tab="training">Training</button>
+                <button class="tab" data-tab="production">Production</button>
+                <button class="tab" data-tab="monitoring">Monitoring</button>
+            </div>
+            <div class="tab-contents">
+                <div id="data" class="tab-content active">
+                    <h3>Data Preparation Best Practices</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, when, isnan, isnull, count, mean
+from pyspark.ml.feature import Imputer, VectorAssembler, StandardScaler
+
+spark = SparkSession.builder.appName("DataPrepBestPractices").getOrCreate()
+
+# 1. DATA QUALITY CHECKS
+def check_data_quality(df):
+    """Comprehensive data quality checks"""
+    print("=== Data Quality Report ===")
+    print(f"Total rows: {df.count()}")
+    print(f"Total columns: {len(df.columns)}")
+    
+    # Check for nulls
+    null_counts = df.select([
+        count(when(isnull(c) | isnan(c), c)).alias(c) 
+        for c in df.columns
+    ])
+    print("\nNull counts per column:")
+    null_counts.show()
+    
+    # Check for duplicates
+    dup_count = df.count() - df.dropDuplicates().count()
+    print(f"Duplicate rows: {dup_count}")
+    
+    return null_counts
+
+# 2. HANDLE MISSING VALUES PROPERLY
+def handle_missing_values(df, numeric_cols, categorical_cols):
+    """Handle missing values with appropriate strategies"""
+    
+    # Impute numeric columns with median
+    imputer = Imputer(
+        inputCols=numeric_cols,
+        outputCols=[f"{c}_imputed" for c in numeric_cols],
+        strategy="median"
+    )
+    df = imputer.fit(df).transform(df)
+    
+    # Fill categorical with mode or "unknown"
+    for col_name in categorical_cols:
+        mode = df.groupBy(col_name).count().orderBy(col("count").desc()).first()
+        mode_value = mode[col_name] if mode else "unknown"
+        df = df.fillna({col_name: mode_value})
+    
+    return df
+
+# 3. FEATURE ENGINEERING PIPELINE
+def create_feature_pipeline(numeric_cols, categorical_cols):
+    """Create reusable feature engineering pipeline"""
+    from pyspark.ml import Pipeline
+    from pyspark.ml.feature import StringIndexer, OneHotEncoder
+    
+    stages = []
+    
+    # Index categorical columns
+    for col_name in categorical_cols:
+        indexer = StringIndexer(
+            inputCol=col_name,
+            outputCol=f"{col_name}_index",
+            handleInvalid="keep"  # Handle unseen categories
+        )
+        stages.append(indexer)
+    
+    # One-hot encode
+    encoder = OneHotEncoder(
+        inputCols=[f"{c}_index" for c in categorical_cols],
+        outputCols=[f"{c}_vec" for c in categorical_cols]
+    )
+    stages.append(encoder)
+    
+    # Assemble all features
+    feature_cols = numeric_cols + [f"{c}_vec" for c in categorical_cols]
+    assembler = VectorAssembler(inputCols=feature_cols, outputCol="raw_features")
+    stages.append(assembler)
+    
+    # Scale features
+    scaler = StandardScaler(inputCol="raw_features", outputCol="features")
+    stages.append(scaler)
+    
+    return Pipeline(stages=stages)
+
+# 4. STRATIFIED SAMPLING
+def stratified_split(df, label_col, train_ratio=0.8, seed=42):
+    """Stratified train/test split"""
+    fractions = df.select(label_col).distinct().rdd.flatMap(lambda x: x).collect()
+    fractions = {label: train_ratio for label in fractions}
+    
+    train = df.sampleBy(label_col, fractions, seed)
+    test = df.subtract(train)
+    
+    return train, test
+
+# 5. CACHE STRATEGICALLY
+def prepare_data_with_caching(df, feature_pipeline):
+    """Cache data at appropriate points"""
+    # Cache after expensive transformations
+    df_transformed = feature_pipeline.fit(df).transform(df)
+    df_transformed.cache()
+    
+    # Force materialization
+    df_transformed.count()
+    
+    return df_transformed</code></pre>
+                    </div>
+                </div>
+                
+                <div id="training" class="tab-content">
+                    <h3>Training Best Practices</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml import Pipeline
+from pyspark.ml.classification import RandomForestClassifier
+from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+
+spark = SparkSession.builder.appName("TrainingBestPractices").getOrCreate()
+
+# 1. USE PIPELINES FOR REPRODUCIBILITY
+def create_training_pipeline(feature_cols, label_col):
+    """Create reproducible training pipeline"""
+    from pyspark.ml.feature import VectorAssembler
+    
+    assembler = VectorAssembler(inputCols=feature_cols, outputCol="features")
+    rf = RandomForestClassifier(
+        featuresCol="features",
+        labelCol=label_col,
+        seed=42  # Always set seed for reproducibility
+    )
+    
+    return Pipeline(stages=[assembler, rf])
+
+# 2. PROPER CROSS-VALIDATION
+def train_with_cv(pipeline, data, param_grid, num_folds=5):
+    """Train with proper cross-validation"""
+    evaluator = MulticlassClassificationEvaluator(
+        labelCol="label",
+        predictionCol="prediction",
+        metricName="f1"
+    )
+    
+    cv = CrossValidator(
+        estimator=pipeline,
+        estimatorParamMaps=param_grid,
+        evaluator=evaluator,
+        numFolds=num_folds,
+        parallelism=4,  # Parallel model training
+        seed=42
+    )
+    
+    return cv.fit(data)
+
+# 3. AVOID DATA LEAKAGE
+def safe_feature_engineering(train_df, test_df, feature_pipeline):
+    """Fit on train, transform both"""
+    # Fit ONLY on training data
+    fitted_pipeline = feature_pipeline.fit(train_df)
+    
+    # Transform both
+    train_transformed = fitted_pipeline.transform(train_df)
+    test_transformed = fitted_pipeline.transform(test_df)
+    
+    return train_transformed, test_transformed, fitted_pipeline
+
+# 4. HANDLE CLASS IMBALANCE
+def handle_imbalance(df, label_col, strategy="oversample"):
+    """Handle class imbalance"""
+    from pyspark.sql.functions import col
+    
+    # Get class distribution
+    class_counts = df.groupBy(label_col).count().collect()
+    max_count = max([row["count"] for row in class_counts])
+    
+    if strategy == "oversample":
+        # Oversample minority classes
+        balanced_dfs = []
+        for row in class_counts:
+            class_df = df.filter(col(label_col) == row[label_col])
+            ratio = max_count / row["count"]
+            if ratio > 1:
+                class_df = class_df.sample(withReplacement=True, fraction=ratio, seed=42)
+            balanced_dfs.append(class_df)
+        
+        return balanced_dfs[0].union(balanced_dfs[1]) if len(balanced_dfs) > 1 else balanced_dfs[0]
+    
+    elif strategy == "weight":
+        # Return weights for weighted training
+        total = sum([row["count"] for row in class_counts])
+        weights = {row[label_col]: total / (len(class_counts) * row["count"]) for row in class_counts}
+        return weights
+
+# 5. EFFICIENT HYPERPARAMETER TUNING
+def efficient_tuning(pipeline, data, rf_stage):
+    """Efficient hyperparameter tuning strategy"""
+    # Start with coarse grid
+    coarse_grid = ParamGridBuilder() \
+        .addGrid(rf_stage.numTrees, [10, 50, 100]) \
+        .addGrid(rf_stage.maxDepth, [5, 10, 15]) \
+        .build()
+    
+    evaluator = MulticlassClassificationEvaluator(labelCol="label", metricName="f1")
+    
+    # Quick validation split first
+    from pyspark.ml.tuning import TrainValidationSplit
+    tvs = TrainValidationSplit(
+        estimator=pipeline,
+        estimatorParamMaps=coarse_grid,
+        evaluator=evaluator,
+        trainRatio=0.8
+    )
+    
+    coarse_model = tvs.fit(data)
+    
+    # Fine-tune around best parameters
+    best_trees = coarse_model.bestModel.stages[-1].getNumTrees
+    best_depth = coarse_model.bestModel.stages[-1].getMaxDepth()
+    
+    fine_grid = ParamGridBuilder() \
+        .addGrid(rf_stage.numTrees, [best_trees - 10, best_trees, best_trees + 10]) \
+        .addGrid(rf_stage.maxDepth, [best_depth - 1, best_depth, best_depth + 1]) \
+        .build()
+    
+    # Full CV for final model
+    cv = CrossValidator(
+        estimator=pipeline,
+        estimatorParamMaps=fine_grid,
+        evaluator=evaluator,
+        numFolds=5
+    )
+    
+    return cv.fit(data)</code></pre>
+                    </div>
+                </div>
+                
+                <div id="production" class="tab-content">
+                    <h3>Production Deployment Best Practices</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml import PipelineModel
+from pyspark.sql.functions import col, current_timestamp, lit
+import json
+
+spark = SparkSession.builder.appName("ProductionBestPractices").getOrCreate()
+
+# 1. MODEL SERVING PATTERN
+class ModelServer:
+    """Production model serving"""
+    
+    def __init__(self, model_path):
+        self.model = PipelineModel.load(model_path)
+        self.model_path = model_path
+    
+    def predict(self, df):
+        """Make predictions with error handling"""
+        try:
+            predictions = self.model.transform(df)
+            return predictions.select("prediction", "probability")
+        except Exception as e:
+            print(f"Prediction error: {e}")
+            return None
+    
+    def predict_batch(self, df, batch_size=10000):
+        """Batch predictions for large datasets"""
+        total_rows = df.count()
+        results = []
+        
+        for offset in range(0, total_rows, batch_size):
+            batch = df.limit(batch_size).offset(offset)
+            batch_predictions = self.predict(batch)
+            results.append(batch_predictions)
+        
+        return results[0].union(*results[1:]) if len(results) > 1 else results[0]
+
+# 2. INPUT VALIDATION
+def validate_input(df, expected_schema):
+    """Validate input data before prediction"""
+    errors = []
+    
+    # Check columns exist
+    for col_name, col_type in expected_schema.items():
+        if col_name not in df.columns:
+            errors.append(f"Missing column: {col_name}")
+        elif str(df.schema[col_name].dataType) != col_type:
+            errors.append(f"Wrong type for {col_name}: expected {col_type}")
+    
+    # Check for nulls in required columns
+    null_counts = df.select([
+        count(when(col(c).isNull(), c)).alias(c) 
+        for c in expected_schema.keys()
+    ]).collect()[0]
+    
+    for col_name in expected_schema.keys():
+        if null_counts[col_name] > 0:
+            errors.append(f"Null values in {col_name}: {null_counts[col_name]}")
+    
+    if errors:
+        raise ValueError(f"Input validation failed: {errors}")
+    
+    return True
+
+# 3. PREDICTION LOGGING
+def log_predictions(predictions, model_version, output_path):
+    """Log predictions for monitoring"""
+    logged = predictions.withColumn("model_version", lit(model_version)) \
+        .withColumn("prediction_time", current_timestamp())
+    
+    logged.write.format("delta") \
+        .mode("append") \
+        .partitionBy("prediction_time") \
+        .save(output_path)
+
+# 4. A/B TESTING FRAMEWORK
+class ABTestFramework:
+    """A/B testing for models"""
+    
+    def __init__(self, model_a_path, model_b_path, traffic_split=0.5):
+        self.model_a = PipelineModel.load(model_a_path)
+        self.model_b = PipelineModel.load(model_b_path)
+        self.traffic_split = traffic_split
+    
+    def predict(self, df, user_id_col="user_id"):
+        """Route predictions based on user ID hash"""
+        from pyspark.sql.functions import hash, abs as spark_abs
+        
+        df_with_bucket = df.withColumn(
+            "bucket",
+            spark_abs(hash(col(user_id_col))) % 100
+        )
+        
+        # Split traffic
+        df_a = df_with_bucket.filter(col("bucket") < self.traffic_split * 100)
+        df_b = df_with_bucket.filter(col("bucket") >= self.traffic_split * 100)
+        
+        # Predict with respective models
+        pred_a = self.model_a.transform(df_a).withColumn("model", lit("A"))
+        pred_b = self.model_b.transform(df_b).withColumn("model", lit("B"))
+        
+        return pred_a.union(pred_b)
+
+# 5. GRACEFUL DEGRADATION
+def predict_with_fallback(primary_model, fallback_model, df):
+    """Fallback to simpler model on error"""
+    try:
+        return primary_model.transform(df)
+    except Exception as e:
+        print(f"Primary model failed: {e}, using fallback")
+        return fallback_model.transform(df)</code></pre>
+                    </div>
+                </div>
+                
+                <div id="monitoring" class="tab-content">
+                    <h3>Model Monitoring Best Practices</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, mean, stddev, count, when, abs as spark_abs
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+
+spark = SparkSession.builder.appName("ModelMonitoring").getOrCreate()
+
+# 1. DATA DRIFT DETECTION
+def detect_data_drift(baseline_df, current_df, feature_cols, threshold=0.1):
+    """Detect data drift using statistical tests"""
+    drift_report = {}
+    
+    for col_name in feature_cols:
+        baseline_stats = baseline_df.select(
+            mean(col_name).alias("mean"),
+            stddev(col_name).alias("std")
+        ).collect()[0]
+        
+        current_stats = current_df.select(
+            mean(col_name).alias("mean"),
+            stddev(col_name).alias("std")
+        ).collect()[0]
+        
+        # Calculate drift (simplified)
+        mean_drift = abs(current_stats["mean"] - baseline_stats["mean"]) / (baseline_stats["std"] + 1e-10)
+        
+        drift_report[col_name] = {
+            "baseline_mean": baseline_stats["mean"],
+            "current_mean": current_stats["mean"],
+            "drift_score": mean_drift,
+            "is_drifted": mean_drift > threshold
+        }
+    
+    return drift_report
+
+# 2. PREDICTION DRIFT MONITORING
+def monitor_prediction_drift(predictions_df, baseline_distribution):
+    """Monitor prediction distribution changes"""
+    current_dist = predictions_df.groupBy("prediction") \
+        .agg(count("*").alias("count")) \
+        .withColumn("ratio", col("count") / predictions_df.count())
+    
+    # Compare with baseline
+    drift_detected = False
+    for row in current_dist.collect():
+        pred_class = row["prediction"]
+        current_ratio = row["ratio"]
+        baseline_ratio = baseline_distribution.get(pred_class, 0)
+        
+        if abs(current_ratio - baseline_ratio) > 0.1:  # 10% threshold
+            print(f"Drift detected for class {pred_class}: {baseline_ratio:.2%} -> {current_ratio:.2%}")
+            drift_detected = True
+    
+    return drift_detected
+
+# 3. MODEL PERFORMANCE TRACKING
+class PerformanceTracker:
+    """Track model performance over time"""
+    
+    def __init__(self, metrics_path):
+        self.metrics_path = metrics_path
+    
+    def log_metrics(self, predictions, labels, model_version, timestamp):
+        """Log performance metrics"""
+        evaluator = MulticlassClassificationEvaluator(labelCol="label")
+        
+        metrics = {
+            "model_version": model_version,
+            "timestamp": timestamp,
+            "accuracy": evaluator.evaluate(predictions, {evaluator.metricName: "accuracy"}),
+            "f1": evaluator.evaluate(predictions, {evaluator.metricName: "f1"}),
+            "precision": evaluator.evaluate(predictions, {evaluator.metricName: "weightedPrecision"}),
+            "recall": evaluator.evaluate(predictions, {evaluator.metricName: "weightedRecall"})
+        }
+        
+        # Save to Delta Lake
+        metrics_df = spark.createDataFrame([metrics])
+        metrics_df.write.format("delta").mode("append").save(self.metrics_path)
+        
+        return metrics
+    
+    def check_degradation(self, current_metrics, threshold=0.05):
+        """Check if model performance has degraded"""
+        historical = spark.read.format("delta").load(self.metrics_path)
+        
+        baseline = historical.orderBy(col("timestamp").desc()).limit(10) \
+            .agg(mean("f1").alias("baseline_f1")).collect()[0]["baseline_f1"]
+        
+        if current_metrics["f1"] < baseline - threshold:
+            print(f"Performance degradation detected: {baseline:.4f} -> {current_metrics['f1']:.4f}")
+            return True
+        return False
+
+# 4. ALERTING
+def send_alert(message, severity="warning"):
+    """Send alert (integrate with your alerting system)"""
+    alert = {
+        "message": message,
+        "severity": severity,
+        "timestamp": datetime.now().isoformat()
+    }
+    print(f"ALERT [{severity.upper()}]: {message}")
+    # Integration with Slack, PagerDuty, etc.
+
+# 5. AUTOMATED RETRAINING TRIGGER
+def should_retrain(drift_report, performance_metrics, thresholds):
+    """Determine if model should be retrained"""
+    # Check data drift
+    drifted_features = sum(1 for f in drift_report.values() if f["is_drifted"])
+    if drifted_features > thresholds["max_drifted_features"]:
+        return True, "Data drift detected"
+    
+    # Check performance
+    if performance_metrics["f1"] < thresholds["min_f1"]:
+        return True, "Performance below threshold"
+    
+    return False, None</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../11_model_persistence/index.html" style="color: var(--text-muted);">&larr; Previous: Model Persistence</a>
+                <a href="../../index.html#pyspark_ml" style="color: var(--accent-primary);">Back to PySpark ML &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 4, z: 5 } });
+            showBestPracticesVisualization();
+        });
+        
+        function showBestPracticesVisualization() {
+            viz.clear();
+            
+            // Best practices pillars
+            const colors = [0x51cf66, 0x4dabf7, 0xffd43b, 0xff6b6b];
+            const labels = ['Data', 'Train', 'Deploy', 'Monitor'];
+            
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({ type: 'cylinder', size: 0.35, color: colors[i], position: { x: -1.5 + i * 1, y: 0.4, z: 0 } });
+                viz.createLabel(labels[i], { x: -1.5 + i * 1, y: 1, z: 0 });
+            }
+            
+            viz.createGrid(5, 5);
+        }
+    </script>
+</body>
+</html>

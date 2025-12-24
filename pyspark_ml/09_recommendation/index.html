@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recommendation Systems - PySpark ML</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pyspark_ml" class="nav-link active">PySpark ML</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Recommendation Systems</h1>
+            <p>Build collaborative filtering recommendation systems using PySpark ML's ALS (Alternating Least Squares) algorithm.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Recommendation Techniques</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="als">ALS Basics</button>
+                <button class="tab" data-tab="implicit">Implicit Feedback</button>
+                <button class="tab" data-tab="evaluation">Evaluation</button>
+                <button class="tab" data-tab="production">Production Tips</button>
+            </div>
+            <div class="tab-contents">
+                <div id="als" class="tab-content active">
+                    <h3>ALS Collaborative Filtering</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.recommendation import ALS
+from pyspark.ml.evaluation import RegressionEvaluator
+
+spark = SparkSession.builder.appName("ALSRecommendation").getOrCreate()
+
+# Sample ratings data (user, item, rating)
+ratings = spark.createDataFrame([
+    (0, 0, 4.0), (0, 1, 2.0), (0, 2, 3.0),
+    (1, 0, 4.0), (1, 1, 3.0), (1, 3, 5.0),
+    (2, 1, 4.0), (2, 2, 5.0), (2, 3, 3.0),
+    (3, 0, 3.0), (3, 2, 4.0), (3, 3, 4.0)
+], ["userId", "itemId", "rating"])
+
+# Split data
+train, test = ratings.randomSplit([0.8, 0.2], seed=42)
+
+# ALS Model
+als = ALS(
+    userCol="userId",
+    itemCol="itemId",
+    ratingCol="rating",
+    rank=10,                 # Number of latent factors
+    maxIter=10,
+    regParam=0.1,            # Regularization
+    coldStartStrategy="drop", # Handle unknown users/items
+    nonnegative=True,        # Non-negative constraints
+    seed=42
+)
+
+# Train model
+model = als.fit(train)
+
+# Predictions
+predictions = model.transform(test)
+predictions.show()
+
+# Evaluate
+evaluator = RegressionEvaluator(
+    metricName="rmse",
+    labelCol="rating",
+    predictionCol="prediction"
+)
+rmse = evaluator.evaluate(predictions)
+print(f"RMSE: {rmse}")
+
+# Generate recommendations
+# Top 5 items for each user
+user_recs = model.recommendForAllUsers(5)
+user_recs.show(truncate=False)
+
+# Top 5 users for each item
+item_recs = model.recommendForAllItems(5)
+item_recs.show(truncate=False)
+
+# Recommendations for specific users
+user_subset = ratings.select("userId").distinct().limit(2)
+user_recs_subset = model.recommendForUserSubset(user_subset, 5)
+user_recs_subset.show(truncate=False)
+
+# Recommendations for specific items
+item_subset = ratings.select("itemId").distinct().limit(2)
+item_recs_subset = model.recommendForItemSubset(item_subset, 5)
+item_recs_subset.show(truncate=False)</code></pre>
+                    </div>
+                </div>
+                
+                <div id="implicit" class="tab-content">
+                    <h3>Implicit Feedback</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.recommendation import ALS
+from pyspark.sql.functions import col, count, when
+
+spark = SparkSession.builder.appName("ImplicitFeedback").getOrCreate()
+
+# Implicit feedback data (views, clicks, purchases)
+interactions = spark.createDataFrame([
+    (0, 0, 5), (0, 1, 2), (0, 2, 10),  # User 0 viewed items
+    (1, 0, 3), (1, 1, 8), (1, 3, 1),
+    (2, 1, 15), (2, 2, 7), (2, 3, 4),
+    (3, 0, 1), (3, 2, 12), (3, 3, 6)
+], ["userId", "itemId", "interactions"])
+
+# ALS for implicit feedback
+als_implicit = ALS(
+    userCol="userId",
+    itemCol="itemId",
+    ratingCol="interactions",
+    implicitPrefs=True,      # Enable implicit feedback mode
+    rank=10,
+    maxIter=10,
+    regParam=0.1,
+    alpha=1.0,               # Confidence scaling parameter
+    coldStartStrategy="drop",
+    seed=42
+)
+
+model = als_implicit.fit(interactions)
+
+# Generate recommendations
+user_recs = model.recommendForAllUsers(5)
+user_recs.show(truncate=False)
+
+# Convert explicit to implicit (binary)
+explicit_ratings = spark.createDataFrame([
+    (0, 0, 4.0), (0, 1, 2.0), (0, 2, 5.0),
+    (1, 0, 3.0), (1, 1, 4.0), (1, 3, 1.0)
+], ["userId", "itemId", "rating"])
+
+# Convert to binary (liked/not liked)
+implicit_data = explicit_ratings.withColumn(
+    "preference",
+    when(col("rating") >= 3.0, 1.0).otherwise(0.0)
+)
+
+# Weight by confidence
+implicit_weighted = explicit_ratings.withColumn(
+    "confidence",
+    col("rating")  # Use rating as confidence weight
+)
+
+# Train on weighted implicit data
+als_weighted = ALS(
+    userCol="userId",
+    itemCol="itemId",
+    ratingCol="confidence",
+    implicitPrefs=True,
+    rank=10,
+    alpha=40.0,  # Higher alpha for stronger confidence scaling
+    seed=42
+)
+
+model_weighted = als_weighted.fit(implicit_weighted)
+model_weighted.recommendForAllUsers(5).show(truncate=False)</code></pre>
+                    </div>
+                </div>
+                
+                <div id="evaluation" class="tab-content">
+                    <h3>Recommendation Evaluation</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.recommendation import ALS
+from pyspark.ml.evaluation import RegressionEvaluator
+from pyspark.sql.functions import col, explode, collect_list, array_contains
+
+spark = SparkSession.builder.appName("RecommendationEvaluation").getOrCreate()
+
+# Sample data
+ratings = spark.createDataFrame([
+    (0, 0, 4.0), (0, 1, 2.0), (0, 2, 3.0), (0, 3, 5.0),
+    (1, 0, 4.0), (1, 1, 3.0), (1, 2, 2.0), (1, 3, 5.0),
+    (2, 0, 3.0), (2, 1, 4.0), (2, 2, 5.0), (2, 3, 3.0)
+], ["userId", "itemId", "rating"])
+
+train, test = ratings.randomSplit([0.8, 0.2], seed=42)
+
+als = ALS(userCol="userId", itemCol="itemId", ratingCol="rating", 
+          coldStartStrategy="drop", seed=42)
+model = als.fit(train)
+predictions = model.transform(test)
+
+# 1. RMSE (Rating prediction accuracy)
+rmse_evaluator = RegressionEvaluator(
+    metricName="rmse", labelCol="rating", predictionCol="prediction"
+)
+rmse = rmse_evaluator.evaluate(predictions)
+print(f"RMSE: {rmse}")
+
+# 2. MAE
+mae_evaluator = RegressionEvaluator(
+    metricName="mae", labelCol="rating", predictionCol="prediction"
+)
+mae = mae_evaluator.evaluate(predictions)
+print(f"MAE: {mae}")
+
+# 3. Precision@K and Recall@K
+def precision_recall_at_k(model, test_data, k=5, threshold=3.5):
+    """Calculate Precision@K and Recall@K"""
+    # Get recommendations
+    user_recs = model.recommendForAllUsers(k)
+    
+    # Get actual relevant items (rating >= threshold)
+    relevant = test_data.filter(col("rating") >= threshold) \
+        .groupBy("userId") \
+        .agg(collect_list("itemId").alias("relevant_items"))
+    
+    # Explode recommendations
+    recs_exploded = user_recs.select(
+        "userId",
+        explode("recommendations").alias("rec")
+    ).select("userId", col("rec.itemId").alias("recItemId"))
+    
+    # Join with relevant items
+    joined = recs_exploded.join(relevant, "userId", "left")
+    
+    # Calculate hits
+    hits = joined.withColumn(
+        "hit",
+        array_contains(col("relevant_items"), col("recItemId"))
+    )
+    
+    # Precision@K = hits / k
+    precision = hits.groupBy("userId").agg(
+        (sum(col("hit").cast("int")) / k).alias("precision")
+    )
+    
+    avg_precision = precision.select(mean("precision")).collect()[0][0]
+    print(f"Precision@{k}: {avg_precision}")
+    
+    return avg_precision
+
+# 4. Coverage (% of items that can be recommended)
+def calculate_coverage(model, all_items, k=10):
+    """Calculate item coverage"""
+    user_recs = model.recommendForAllUsers(k)
+    
+    recommended_items = user_recs.select(
+        explode("recommendations.itemId").alias("itemId")
+    ).distinct()
+    
+    coverage = recommended_items.count() / all_items.count()
+    print(f"Coverage: {coverage:.2%}")
+    return coverage
+
+all_items = ratings.select("itemId").distinct()
+calculate_coverage(model, all_items)</code></pre>
+                    </div>
+                </div>
+                
+                <div id="production" class="tab-content">
+                    <h3>Production Recommendations</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.recommendation import ALS, ALSModel
+from pyspark.sql.functions import col, explode, lit
+
+spark = SparkSession.builder.appName("ProductionRecommendations").getOrCreate()
+
+# 1. Handle cold start users
+def recommend_for_new_user(model, user_ratings, n=10):
+    """Generate recommendations for a new user based on their ratings"""
+    # Find similar users based on item overlap
+    # Use content-based fallback or popular items
+    
+    # Fallback: Return most popular items
+    popular_items = spark.read.format("delta").load("/data/popular_items")
+    return popular_items.limit(n)
+
+# 2. Real-time recommendations with pre-computed factors
+# Save user and item factors
+model = als.fit(train)
+model.write().overwrite().save("/models/als_model")
+
+# Extract factors for real-time serving
+user_factors = model.userFactors
+item_factors = model.itemFactors
+
+user_factors.write.format("delta").mode("overwrite").save("/data/user_factors")
+item_factors.write.format("delta").mode("overwrite").save("/data/item_factors")
+
+# 3. Batch recommendation generation
+def generate_batch_recommendations(model, users, n=10):
+    """Generate recommendations for all users in batch"""
+    recommendations = model.recommendForUserSubset(users, n)
+    
+    # Flatten for storage
+    flat_recs = recommendations.select(
+        "userId",
+        explode("recommendations").alias("rec")
+    ).select(
+        "userId",
+        col("rec.itemId").alias("itemId"),
+        col("rec.rating").alias("score")
+    )
+    
+    # Save to Delta Lake
+    flat_recs.write.format("delta") \
+        .mode("overwrite") \
+        .partitionBy("userId") \
+        .save("/data/recommendations")
+    
+    return flat_recs
+
+# 4. Incremental model updates
+def incremental_update(existing_model_path, new_ratings, rank=10):
+    """Update model with new ratings"""
+    # Load existing model
+    existing_model = ALSModel.load(existing_model_path)
+    
+    # Combine old and new data
+    old_ratings = spark.read.format("delta").load("/data/ratings")
+    combined = old_ratings.union(new_ratings)
+    
+    # Retrain (or use online learning techniques)
+    als = ALS(userCol="userId", itemCol="itemId", ratingCol="rating",
+              rank=rank, coldStartStrategy="drop")
+    new_model = als.fit(combined)
+    
+    # Save new model
+    new_model.write().overwrite().save(existing_model_path)
+    
+    return new_model
+
+# 5. A/B testing recommendations
+def ab_test_recommendations(user_id, model_a, model_b, test_ratio=0.5):
+    """Route users to different models for A/B testing"""
+    import hashlib
+    
+    # Deterministic assignment based on user_id
+    hash_val = int(hashlib.md5(str(user_id).encode()).hexdigest(), 16)
+    
+    if (hash_val % 100) < (test_ratio * 100):
+        return model_b.recommendForUserSubset(
+            spark.createDataFrame([(user_id,)], ["userId"]), 10
+        )
+    else:
+        return model_a.recommendForUserSubset(
+            spark.createDataFrame([(user_id,)], ["userId"]), 10
+        )</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../08_hyperparameter_tuning/index.html" style="color: var(--text-muted);">&larr; Previous: Hyperparameter Tuning</a>
+                <a href="../10_nlp/index.html" style="color: var(--accent-primary);">Next: NLP &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showRecommendationVisualization();
+        });
+        
+        function showRecommendationVisualization() {
+            viz.clear();
+            
+            // Users
+            viz.createDataNode({ type: 'sphere', size: 0.25, color: 0x4dabf7, position: { x: -1.5, y: 0.3, z: -0.5 } });
+            viz.createDataNode({ type: 'sphere', size: 0.25, color: 0x4dabf7, position: { x: -1.5, y: 0.3, z: 0.5 } });
+            viz.createLabel('Users', { x: -1.5, y: 0.9, z: 0 });
+            
+            // Items
+            viz.createDataNode({ type: 'cube', size: 0.25, color: 0x51cf66, position: { x: 1.5, y: 0.25, z: -0.5 } });
+            viz.createDataNode({ type: 'cube', size: 0.25, color: 0x51cf66, position: { x: 1.5, y: 0.25, z: 0.5 } });
+            viz.createLabel('Items', { x: 1.5, y: 0.9, z: 0 });
+            
+            // Connections
+            viz.createArrow({ x: -1.2, y: 0.3, z: -0.5 }, { x: 1.2, y: 0.25, z: -0.5 }, { color: 0xff6b6b });
+            viz.createArrow({ x: -1.2, y: 0.3, z: 0.5 }, { x: 1.2, y: 0.25, z: 0.5 }, { color: 0xff6b6b });
+            
+            viz.createGrid(5, 5);
+        }
+    </script>
+</body>
+</html>

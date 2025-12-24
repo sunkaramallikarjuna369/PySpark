@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schema Evolution - Delta Lake</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#deltalake" class="nav-link active">Delta Lake</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Schema Evolution in Delta Lake</h1>
+            <p>Delta Lake supports schema evolution, allowing you to safely add, rename, or modify columns without breaking existing pipelines.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Schema Operations</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="enforcement">Schema Enforcement</button>
+                <button class="tab" data-tab="add">Add Columns</button>
+                <button class="tab" data-tab="rename">Rename/Drop Columns</button>
+                <button class="tab" data-tab="types">Change Types</button>
+                <button class="tab" data-tab="merge">Schema Merge</button>
+            </div>
+            <div class="tab-contents">
+                <div id="enforcement" class="tab-content active">
+                    <h3>Schema Enforcement</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType
+
+spark = SparkSession.builder \
+    .appName("SchemaEnforcement") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Create table with defined schema
+schema = StructType([
+    StructField("id", IntegerType(), False),
+    StructField("name", StringType(), True),
+    StructField("salary", DoubleType(), True)
+])
+
+data = [(1, "Alice", 75000.0), (2, "Bob", 65000.0)]
+df = spark.createDataFrame(data, schema)
+df.write.format("delta").mode("overwrite").save("/data/delta/employees")
+
+# Schema enforcement prevents incompatible writes
+# This will FAIL - missing column
+try:
+    bad_data = [(3, "Charlie")]  # Missing salary
+    df_bad = spark.createDataFrame(bad_data, ["id", "name"])
+    df_bad.write.format("delta").mode("append").save("/data/delta/employees")
+except Exception as e:
+    print(f"Schema enforcement error: {e}")
+
+# This will FAIL - wrong data type
+try:
+    bad_data = [(4, "Diana", "not_a_number")]  # salary should be double
+    df_bad = spark.createDataFrame(bad_data, ["id", "name", "salary"])
+    df_bad.write.format("delta").mode("append").save("/data/delta/employees")
+except Exception as e:
+    print(f"Type mismatch error: {e}")
+
+# This will FAIL - extra column (without mergeSchema)
+try:
+    bad_data = [(5, "Eve", 80000.0, "Engineering")]
+    df_bad = spark.createDataFrame(bad_data, ["id", "name", "salary", "department"])
+    df_bad.write.format("delta").mode("append").save("/data/delta/employees")
+except Exception as e:
+    print(f"Extra column error: {e}")
+
+# View current schema
+spark.read.format("delta").load("/data/delta/employees").printSchema()</code></pre>
+                    </div>
+                </div>
+                
+                <div id="add" class="tab-content">
+                    <h3>Adding New Columns</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import lit
+
+spark = SparkSession.builder \
+    .appName("AddColumns") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Method 1: Add column using ALTER TABLE
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    ADD COLUMNS (department STRING, hire_date DATE)
+""")
+
+# Method 2: Add column with comment
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    ADD COLUMNS (bonus DOUBLE COMMENT 'Annual bonus amount')
+""")
+
+# Method 3: Add nested column
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    ADD COLUMNS (address STRUCT<street: STRING, city: STRING, zip: STRING>)
+""")
+
+# Method 4: Add column using mergeSchema option
+new_data = [(6, "Frank", 70000.0, "Sales")]
+df_new = spark.createDataFrame(new_data, ["id", "name", "salary", "region"])
+
+df_new.write.format("delta") \
+    .mode("append") \
+    .option("mergeSchema", "true") \
+    .save("/data/delta/employees")
+
+# Method 5: Enable auto merge globally
+spark.conf.set("spark.databricks.delta.schema.autoMerge.enabled", "true")
+
+# Now new columns are added automatically
+more_data = [(7, "Grace", 72000.0, "Marketing", "Senior")]
+df_more = spark.createDataFrame(more_data, ["id", "name", "salary", "department", "level"])
+df_more.write.format("delta").mode("append").save("/data/delta/employees")
+
+# Method 6: Add column with default value
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    ADD COLUMNS (status STRING DEFAULT 'active')
+""")
+
+# Verify schema changes
+spark.read.format("delta").load("/data/delta/employees").printSchema()
+
+# Existing rows will have NULL for new columns (unless default specified)
+spark.read.format("delta").load("/data/delta/employees").show()</code></pre>
+                    </div>
+                </div>
+                
+                <div id="rename" class="tab-content">
+                    <h3>Rename and Drop Columns</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("RenameDropColumns") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Enable column mapping (required for rename/drop)
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    SET TBLPROPERTIES (
+        'delta.columnMapping.mode' = 'name',
+        'delta.minReaderVersion' = '2',
+        'delta.minWriterVersion' = '5'
+    )
+""")
+
+# Rename a column
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    RENAME COLUMN salary TO annual_salary
+""")
+
+# Rename nested column
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    RENAME COLUMN address.zip TO address.postal_code
+""")
+
+# Drop a column (requires column mapping)
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    DROP COLUMN bonus
+""")
+
+# Drop multiple columns
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    DROP COLUMNS (region, level)
+""")
+
+# Alternative: Create new table without unwanted columns
+df = spark.read.format("delta").load("/data/delta/employees")
+df_clean = df.drop("unwanted_column1", "unwanted_column2")
+df_clean.write.format("delta").mode("overwrite").save("/data/delta/employees_clean")
+
+# Verify changes
+spark.read.format("delta").load("/data/delta/employees").printSchema()
+
+# Note: Dropped columns still exist in historical versions
+# Time travel will still show the old schema
+df_old = spark.read.format("delta") \
+    .option("versionAsOf", 0) \
+    .load("/data/delta/employees")
+df_old.printSchema()  # Shows original schema</code></pre>
+                    </div>
+                </div>
+                
+                <div id="types" class="tab-content">
+                    <h3>Changing Column Types</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
+
+spark = SparkSession.builder \
+    .appName("ChangeColumnTypes") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Safe type changes (widening) - supported directly
+# INT -> BIGINT, FLOAT -> DOUBLE, etc.
+
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    ALTER COLUMN id TYPE BIGINT
+""")
+
+# Change column nullability
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    ALTER COLUMN name DROP NOT NULL
+""")
+
+# Add NOT NULL constraint
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    ALTER COLUMN id SET NOT NULL
+""")
+
+# Change column comment
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    ALTER COLUMN annual_salary COMMENT 'Employee annual salary in USD'
+""")
+
+# For incompatible type changes, use overwrite
+# Example: STRING to INT (not directly supported)
+df = spark.read.format("delta").load("/data/delta/employees")
+
+# Cast the column
+df_converted = df.withColumn("employee_code", col("employee_code").cast("integer"))
+
+# Overwrite with new schema
+df_converted.write.format("delta") \
+    .mode("overwrite") \
+    .option("overwriteSchema", "true") \
+    .save("/data/delta/employees")
+
+# Complex type changes
+# Change array element type
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/events`
+    ALTER COLUMN tags TYPE ARRAY<STRING>
+""")
+
+# Change map value type
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/config`
+    ALTER COLUMN settings TYPE MAP<STRING, STRING>
+""")
+
+# Verify type changes
+spark.read.format("delta").load("/data/delta/employees").printSchema()</code></pre>
+                    </div>
+                </div>
+                
+                <div id="merge" class="tab-content">
+                    <h3>Schema Merge Strategies</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType
+
+spark = SparkSession.builder \
+    .appName("SchemaMerge") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Strategy 1: Explicit mergeSchema option
+new_data = [(1, "Alice", 75000.0, "Engineering", "2020-01-15")]
+df_new = spark.createDataFrame(
+    new_data, 
+    ["id", "name", "salary", "department", "hire_date"]
+)
+
+df_new.write.format("delta") \
+    .mode("append") \
+    .option("mergeSchema", "true") \
+    .save("/data/delta/employees")
+
+# Strategy 2: Auto merge (global setting)
+spark.conf.set("spark.databricks.delta.schema.autoMerge.enabled", "true")
+
+# All writes will now auto-merge schemas
+df_new.write.format("delta").mode("append").save("/data/delta/employees")
+
+# Strategy 3: Overwrite schema completely
+df_new_schema = spark.createDataFrame(
+    [(1, "Alice", 75000.0)],
+    ["employee_id", "full_name", "compensation"]
+)
+
+df_new_schema.write.format("delta") \
+    .mode("overwrite") \
+    .option("overwriteSchema", "true") \
+    .save("/data/delta/employees")
+
+# Strategy 4: Merge with MERGE statement
+from delta.tables import DeltaTable
+
+delta_table = DeltaTable.forPath(spark, "/data/delta/employees")
+
+# Source data with new columns
+source_data = [(1, "Alice", 80000.0, "Senior")]
+df_source = spark.createDataFrame(
+    source_data, 
+    ["id", "name", "salary", "level"]
+)
+
+# MERGE with schema evolution
+delta_table.alias("target").merge(
+    df_source.alias("source"),
+    "target.id = source.id"
+).whenMatchedUpdateAll() \
+ .whenNotMatchedInsertAll() \
+ .execute()
+
+# Strategy 5: Handle schema drift in streaming
+df_stream = spark.readStream \
+    .format("delta") \
+    .load("/data/delta/source")
+
+df_stream.writeStream \
+    .format("delta") \
+    .option("mergeSchema", "true") \
+    .option("checkpointLocation", "/checkpoints/stream") \
+    .start("/data/delta/target")
+
+# Best practices for schema evolution
+# 1. Use mergeSchema for additive changes (new columns)
+# 2. Use overwriteSchema sparingly (breaks compatibility)
+# 3. Enable column mapping for rename/drop operations
+# 4. Test schema changes in non-production first
+# 5. Document schema changes in table properties</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../03_time_travel/index.html" style="color: var(--text-muted);">&larr; Previous: Time Travel</a>
+                <a href="../05_merge_upsert/index.html" style="color: var(--accent-primary);">Next: Merge & Upsert &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showSchemaEvolution();
+        });
+        
+        function showSchemaEvolution() {
+            viz.clear();
+            
+            // Old schema
+            viz.createDataNode({ type: 'cube', size: 0.4, color: 0x868e96, position: { x: -1.5, y: 0.3, z: 0 } });
+            viz.createLabel('Old Schema', { x: -1.5, y: 1, z: 0 });
+            
+            // Arrow
+            viz.createArrow({ x: -0.8, y: 0.3, z: 0 }, { x: 0.8, y: 0.3, z: 0 }, { color: 0x4dabf7 });
+            
+            // New schema (larger)
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x51cf66, position: { x: 1.5, y: 0.35, z: 0 } });
+            viz.createLabel('New Schema', { x: 1.5, y: 1.1, z: 0 });
+            
+            viz.createGrid(6, 6);
+        }
+    </script>
+</body>
+</html>

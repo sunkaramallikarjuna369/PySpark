@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Merge & Upsert - Delta Lake</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#deltalake" class="nav-link active">Delta Lake</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Merge & Upsert Operations</h1>
+            <p>Delta Lake's MERGE operation enables powerful upsert (update + insert) capabilities, essential for CDC, SCD, and incremental data processing.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Merge Operations</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="basic">Basic Merge</button>
+                <button class="tab" data-tab="upsert">Upsert Patterns</button>
+                <button class="tab" data-tab="scd">SCD Type 2</button>
+                <button class="tab" data-tab="conditional">Conditional Merge</button>
+                <button class="tab" data-tab="performance">Performance Tips</button>
+            </div>
+            <div class="tab-contents">
+                <div id="basic" class="tab-content active">
+                    <h3>Basic MERGE Syntax</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
+from pyspark.sql.functions import col, current_timestamp
+
+spark = SparkSession.builder \
+    .appName("BasicMerge") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Create target table
+target_data = [
+    (1, "Alice", "Engineering", 75000),
+    (2, "Bob", "Sales", 65000),
+    (3, "Charlie", "Marketing", 70000)
+]
+df_target = spark.createDataFrame(target_data, ["id", "name", "department", "salary"])
+df_target.write.format("delta").mode("overwrite").save("/data/delta/employees")
+
+# Source data (updates and new records)
+source_data = [
+    (1, "Alice", "Engineering", 80000),   # Update salary
+    (2, "Bob", "Engineering", 70000),     # Update department and salary
+    (4, "Diana", "Sales", 72000)          # New employee
+]
+df_source = spark.createDataFrame(source_data, ["id", "name", "department", "salary"])
+
+# Method 1: Python API
+delta_table = DeltaTable.forPath(spark, "/data/delta/employees")
+
+delta_table.alias("target").merge(
+    df_source.alias("source"),
+    "target.id = source.id"
+).whenMatchedUpdateAll() \
+ .whenNotMatchedInsertAll() \
+ .execute()
+
+# Method 2: SQL syntax
+df_source.createOrReplaceTempView("source_employees")
+
+spark.sql("""
+    MERGE INTO delta.`/data/delta/employees` AS target
+    USING source_employees AS source
+    ON target.id = source.id
+    WHEN MATCHED THEN
+        UPDATE SET *
+    WHEN NOT MATCHED THEN
+        INSERT *
+""")
+
+# Verify results
+spark.read.format("delta").load("/data/delta/employees").show()</code></pre>
+                    </div>
+                </div>
+                
+                <div id="upsert" class="tab-content">
+                    <h3>Upsert Patterns</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
+from pyspark.sql.functions import col, lit, current_timestamp, when
+
+spark = SparkSession.builder \
+    .appName("UpsertPatterns") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+delta_table = DeltaTable.forPath(spark, "/data/delta/employees")
+
+# Pattern 1: Update specific columns only
+source_updates = spark.createDataFrame([
+    (1, 85000),
+    (2, 72000)
+], ["id", "new_salary"])
+
+delta_table.alias("target").merge(
+    source_updates.alias("source"),
+    "target.id = source.id"
+).whenMatchedUpdate(set={
+    "salary": col("source.new_salary"),
+    "updated_at": current_timestamp()
+}).execute()
+
+# Pattern 2: Insert with defaults
+new_employees = spark.createDataFrame([
+    (5, "Eve", "Engineering")
+], ["id", "name", "department"])
+
+delta_table.alias("target").merge(
+    new_employees.alias("source"),
+    "target.id = source.id"
+).whenNotMatchedInsert(values={
+    "id": col("source.id"),
+    "name": col("source.name"),
+    "department": col("source.department"),
+    "salary": lit(60000),  # Default salary
+    "created_at": current_timestamp(),
+    "updated_at": current_timestamp()
+}).execute()
+
+# Pattern 3: Upsert with delete
+changes = spark.createDataFrame([
+    (1, "Alice", "Engineering", 85000, "UPDATE"),
+    (3, "Charlie", "Marketing", 70000, "DELETE"),
+    (6, "Frank", "Sales", 68000, "INSERT")
+], ["id", "name", "department", "salary", "operation"])
+
+delta_table.alias("target").merge(
+    changes.alias("source"),
+    "target.id = source.id"
+).whenMatchedUpdate(
+    condition="source.operation = 'UPDATE'",
+    set={"salary": col("source.salary"), "updated_at": current_timestamp()}
+).whenMatchedDelete(
+    condition="source.operation = 'DELETE'"
+).whenNotMatchedInsert(
+    condition="source.operation = 'INSERT'",
+    values={
+        "id": col("source.id"),
+        "name": col("source.name"),
+        "department": col("source.department"),
+        "salary": col("source.salary")
+    }
+).execute()
+
+# Pattern 4: Deduplicate on insert
+# Only insert if not already exists
+delta_table.alias("target").merge(
+    new_employees.alias("source"),
+    "target.id = source.id"
+).whenNotMatchedInsertAll().execute()  # No whenMatched = skip duplicates</code></pre>
+                    </div>
+                </div>
+                
+                <div id="scd" class="tab-content">
+                    <h3>SCD Type 2 Implementation</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
+from pyspark.sql.functions import col, lit, current_timestamp, when, coalesce
+
+spark = SparkSession.builder \
+    .appName("SCDType2") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Create SCD Type 2 dimension table
+dim_data = [
+    (1, "Alice", "Engineering", 75000, "2020-01-01", "9999-12-31", True),
+    (2, "Bob", "Sales", 65000, "2020-01-01", "9999-12-31", True)
+]
+schema = ["employee_id", "name", "department", "salary", "effective_date", "end_date", "is_current"]
+df_dim = spark.createDataFrame(dim_data, schema)
+df_dim.write.format("delta").mode("overwrite").save("/data/delta/dim_employee")
+
+# Incoming changes
+changes = spark.createDataFrame([
+    (1, "Alice", "Engineering", 85000),  # Salary change
+    (2, "Bob", "Engineering", 70000),    # Department and salary change
+    (3, "Charlie", "Marketing", 72000)   # New employee
+], ["employee_id", "name", "department", "salary"])
+
+# SCD Type 2 merge logic
+delta_table = DeltaTable.forPath(spark, "/data/delta/dim_employee")
+
+# Step 1: Identify changed records
+current_dim = spark.read.format("delta").load("/data/delta/dim_employee").filter("is_current = true")
+
+# Join to find changes
+joined = changes.alias("new").join(
+    current_dim.alias("old"),
+    col("new.employee_id") == col("old.employee_id"),
+    "left"
+)
+
+# Records that changed (need to close old and insert new)
+changed_records = joined.filter(
+    (col("old.employee_id").isNotNull()) & 
+    ((col("new.salary") != col("old.salary")) | 
+     (col("new.department") != col("old.department")))
+).select("new.*")
+
+# New records (no match in dimension)
+new_records = joined.filter(col("old.employee_id").isNull()).select("new.*")
+
+# Step 2: Close old records for changed employees
+delta_table.alias("target").merge(
+    changed_records.alias("source"),
+    "target.employee_id = source.employee_id AND target.is_current = true"
+).whenMatchedUpdate(set={
+    "end_date": current_timestamp().cast("date"),
+    "is_current": lit(False)
+}).execute()
+
+# Step 3: Insert new versions of changed records
+new_versions = changed_records.withColumn("effective_date", current_timestamp().cast("date")) \
+    .withColumn("end_date", lit("9999-12-31")) \
+    .withColumn("is_current", lit(True))
+
+new_versions.write.format("delta").mode("append").save("/data/delta/dim_employee")
+
+# Step 4: Insert completely new records
+new_employees = new_records.withColumn("effective_date", current_timestamp().cast("date")) \
+    .withColumn("end_date", lit("9999-12-31")) \
+    .withColumn("is_current", lit(True))
+
+new_employees.write.format("delta").mode("append").save("/data/delta/dim_employee")
+
+# Verify SCD Type 2 history
+spark.read.format("delta").load("/data/delta/dim_employee") \
+    .orderBy("employee_id", "effective_date").show()</code></pre>
+                    </div>
+                </div>
+                
+                <div id="conditional" class="tab-content">
+                    <h3>Conditional Merge Operations</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
+from pyspark.sql.functions import col, lit, current_timestamp
+
+spark = SparkSession.builder \
+    .appName("ConditionalMerge") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+delta_table = DeltaTable.forPath(spark, "/data/delta/employees")
+
+# Source with various conditions
+source = spark.createDataFrame([
+    (1, "Alice", "Engineering", 90000, "2024-01-15"),
+    (2, "Bob", "Sales", 60000, "2024-01-10"),
+    (5, "Eve", "Marketing", 75000, "2024-01-20")
+], ["id", "name", "department", "salary", "last_modified"])
+
+# Multiple WHEN MATCHED conditions
+delta_table.alias("target").merge(
+    source.alias("source"),
+    "target.id = source.id"
+).whenMatchedUpdate(
+    # Only update if source is newer
+    condition="source.last_modified > target.last_modified",
+    set={
+        "name": col("source.name"),
+        "department": col("source.department"),
+        "salary": col("source.salary"),
+        "last_modified": col("source.last_modified")
+    }
+).whenMatchedUpdate(
+    # If same date, only update if salary increased
+    condition="source.last_modified = target.last_modified AND source.salary > target.salary",
+    set={"salary": col("source.salary")}
+).whenNotMatchedInsert(
+    # Only insert if salary is above threshold
+    condition="source.salary >= 70000",
+    values={
+        "id": col("source.id"),
+        "name": col("source.name"),
+        "department": col("source.department"),
+        "salary": col("source.salary"),
+        "last_modified": col("source.last_modified")
+    }
+).execute()
+
+# SQL with multiple conditions
+spark.sql("""
+    MERGE INTO delta.`/data/delta/employees` AS target
+    USING source_data AS source
+    ON target.id = source.id
+    WHEN MATCHED AND source.operation = 'UPDATE' AND source.salary > target.salary THEN
+        UPDATE SET target.salary = source.salary
+    WHEN MATCHED AND source.operation = 'DELETE' THEN
+        DELETE
+    WHEN NOT MATCHED AND source.operation = 'INSERT' THEN
+        INSERT (id, name, department, salary) 
+        VALUES (source.id, source.name, source.department, source.salary)
+""")
+
+# Conditional delete with soft delete
+delta_table.alias("target").merge(
+    source.alias("source"),
+    "target.id = source.id"
+).whenMatchedUpdate(
+    condition="source.operation = 'DELETE'",
+    set={
+        "is_deleted": lit(True),
+        "deleted_at": current_timestamp()
+    }
+).execute()</code></pre>
+                    </div>
+                </div>
+                
+                <div id="performance" class="tab-content">
+                    <h3>Merge Performance Optimization</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
+from pyspark.sql.functions import col
+
+spark = SparkSession.builder \
+    .appName("MergePerformance") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Tip 1: Partition pruning - filter target table
+delta_table = DeltaTable.forPath(spark, "/data/delta/events")
+
+# Bad: Scans all partitions
+delta_table.alias("target").merge(
+    source.alias("source"),
+    "target.id = source.id"
+).whenMatchedUpdateAll().execute()
+
+# Good: Add partition filter to merge condition
+delta_table.alias("target").merge(
+    source.alias("source"),
+    "target.id = source.id AND target.event_date = source.event_date"
+).whenMatchedUpdateAll().execute()
+
+# Tip 2: Reduce source data size
+# Filter source before merge
+source_filtered = source.filter(col("is_valid") == True)
+
+delta_table.alias("target").merge(
+    source_filtered.alias("source"),
+    "target.id = source.id"
+).whenMatchedUpdateAll().execute()
+
+# Tip 3: Use broadcast for small source tables
+from pyspark.sql.functions import broadcast
+
+small_source = spark.read.parquet("/data/small_updates")  # < 10MB
+
+delta_table.alias("target").merge(
+    broadcast(small_source).alias("source"),
+    "target.id = source.id"
+).whenMatchedUpdateAll().execute()
+
+# Tip 4: Optimize target table before merge
+spark.sql("OPTIMIZE delta.`/data/delta/events` ZORDER BY (id)")
+
+# Tip 5: Use appropriate number of shuffle partitions
+spark.conf.set("spark.sql.shuffle.partitions", "200")
+
+# Tip 6: Enable optimized writes
+spark.conf.set("spark.databricks.delta.optimizeWrite.enabled", "true")
+
+# Tip 7: Batch large merges
+# Instead of one huge merge, split into batches
+source_df = spark.read.parquet("/data/large_source")
+batch_size = 1000000
+
+for i in range(0, source_df.count(), batch_size):
+    batch = source_df.limit(batch_size).offset(i)
+    delta_table.alias("target").merge(
+        batch.alias("source"),
+        "target.id = source.id"
+    ).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
+
+# Tip 8: Monitor merge metrics
+history = delta_table.history(1)
+history.select(
+    "operationMetrics.numTargetRowsInserted",
+    "operationMetrics.numTargetRowsUpdated",
+    "operationMetrics.numTargetRowsDeleted",
+    "operationMetrics.numSourceRows",
+    "operationMetrics.numTargetFilesAdded",
+    "operationMetrics.numTargetFilesRemoved"
+).show(truncate=False)</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../04_schema_evolution/index.html" style="color: var(--text-muted);">&larr; Previous: Schema Evolution</a>
+                <a href="../06_optimize_vacuum/index.html" style="color: var(--accent-primary);">Next: Optimize & Vacuum &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showMergeVisualization();
+        });
+        
+        function showMergeVisualization() {
+            viz.clear();
+            
+            // Source
+            viz.createDataNode({ type: 'cube', size: 0.4, color: 0x4dabf7, position: { x: -1.5, y: 0.3, z: -0.5 } });
+            viz.createLabel('Source', { x: -1.5, y: 1, z: -0.5 });
+            
+            // Target
+            viz.createDataNode({ type: 'cylinder', size: 0.5, color: 0x51cf66, position: { x: 1.5, y: 0.4, z: -0.5 } });
+            viz.createLabel('Target', { x: 1.5, y: 1.2, z: -0.5 });
+            
+            // Merge arrow
+            viz.createArrow({ x: -0.8, y: 0.3, z: -0.5 }, { x: 0.8, y: 0.4, z: -0.5 }, { color: 0xff6b6b });
+            viz.createLabel('MERGE', { x: 0, y: 0.8, z: -0.5 });
+            
+            viz.createGrid(6, 6);
+        }
+    </script>
+</body>
+</html>

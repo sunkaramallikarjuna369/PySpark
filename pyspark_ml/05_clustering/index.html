@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clustering - PySpark ML</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pyspark_ml" class="nav-link active">PySpark ML</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Clustering Algorithms</h1>
+            <p>Group similar data points together using unsupervised clustering algorithms in PySpark ML.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Clustering Models</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="kmeans">K-Means</button>
+                <button class="tab" data-tab="bisecting">Bisecting K-Means</button>
+                <button class="tab" data-tab="gmm">Gaussian Mixture</button>
+                <button class="tab" data-tab="evaluation">Evaluation</button>
+            </div>
+            <div class="tab-contents">
+                <div id="kmeans" class="tab-content active">
+                    <h3>K-Means Clustering</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.clustering import KMeans
+from pyspark.ml.evaluation import ClusteringEvaluator
+
+spark = SparkSession.builder.appName("KMeansClustering").getOrCreate()
+
+# Sample data
+data = spark.createDataFrame([
+    (1.0, 1.0), (1.5, 1.5), (2.0, 1.0),
+    (5.0, 5.0), (5.5, 5.5), (6.0, 5.0),
+    (1.0, 5.0), (1.5, 5.5), (2.0, 6.0)
+], ["f1", "f2"])
+
+assembler = VectorAssembler(inputCols=["f1", "f2"], outputCol="features")
+data = assembler.transform(data)
+
+# K-Means Clustering
+kmeans = KMeans(
+    featuresCol="features",
+    predictionCol="cluster",
+    k=3,                     # Number of clusters
+    maxIter=20,
+    initMode="k-means||",    # "k-means||" or "random"
+    initSteps=2,
+    tol=1e-4,
+    seed=42
+)
+
+model = kmeans.fit(data)
+
+# Cluster centers
+centers = model.clusterCenters()
+print("Cluster Centers:")
+for i, center in enumerate(centers):
+    print(f"  Cluster {i}: {center}")
+
+# Model metrics
+print(f"Training Cost (WSSSE): {model.summary.trainingCost}")
+
+# Predictions
+predictions = model.transform(data)
+predictions.select("features", "cluster").show()
+
+# Evaluate using Silhouette score
+evaluator = ClusteringEvaluator(
+    featuresCol="features",
+    predictionCol="cluster",
+    metricName="silhouette"
+)
+silhouette = evaluator.evaluate(predictions)
+print(f"Silhouette Score: {silhouette}")
+
+# Finding optimal K using Elbow method
+costs = []
+for k in range(2, 10):
+    kmeans = KMeans(featuresCol="features", k=k, seed=42)
+    model = kmeans.fit(data)
+    costs.append((k, model.summary.trainingCost))
+
+print("\nElbow Method Results:")
+for k, cost in costs:
+    print(f"  K={k}: Cost={cost:.2f}")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="bisecting" class="tab-content">
+                    <h3>Bisecting K-Means</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.clustering import BisectingKMeans
+from pyspark.ml.evaluation import ClusteringEvaluator
+
+spark = SparkSession.builder.appName("BisectingKMeans").getOrCreate()
+
+# Sample data
+data = spark.createDataFrame([
+    (1.0, 1.0), (1.5, 1.5), (2.0, 1.0),
+    (5.0, 5.0), (5.5, 5.5), (6.0, 5.0),
+    (1.0, 5.0), (1.5, 5.5), (2.0, 6.0),
+    (8.0, 8.0), (8.5, 8.5), (9.0, 8.0)
+], ["f1", "f2"])
+
+assembler = VectorAssembler(inputCols=["f1", "f2"], outputCol="features")
+data = assembler.transform(data)
+
+# Bisecting K-Means
+# Hierarchical clustering that recursively splits clusters
+bkm = BisectingKMeans(
+    featuresCol="features",
+    predictionCol="cluster",
+    k=4,                     # Number of clusters
+    maxIter=20,
+    minDivisibleClusterSize=1.0,  # Min points to split
+    seed=42
+)
+
+model = bkm.fit(data)
+
+# Cluster centers
+print("Cluster Centers:")
+for i, center in enumerate(model.clusterCenters()):
+    print(f"  Cluster {i}: {center}")
+
+# Training cost
+print(f"Training Cost: {model.summary.trainingCost}")
+
+# Predictions
+predictions = model.transform(data)
+predictions.select("features", "cluster").show()
+
+# Evaluate
+evaluator = ClusteringEvaluator(featuresCol="features", predictionCol="cluster")
+silhouette = evaluator.evaluate(predictions)
+print(f"Silhouette Score: {silhouette}")
+
+# Compare with regular K-Means
+from pyspark.ml.clustering import KMeans
+
+kmeans = KMeans(featuresCol="features", k=4, seed=42)
+kmeans_model = kmeans.fit(data)
+kmeans_predictions = kmeans_model.transform(data)
+
+kmeans_silhouette = evaluator.evaluate(kmeans_predictions)
+print(f"\nK-Means Silhouette: {kmeans_silhouette}")
+print(f"Bisecting K-Means Silhouette: {silhouette}")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="gmm" class="tab-content">
+                    <h3>Gaussian Mixture Model</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.clustering import GaussianMixture
+from pyspark.ml.evaluation import ClusteringEvaluator
+
+spark = SparkSession.builder.appName("GaussianMixture").getOrCreate()
+
+# Sample data
+data = spark.createDataFrame([
+    (1.0, 1.0), (1.2, 1.1), (1.1, 0.9),
+    (5.0, 5.0), (5.2, 5.1), (4.9, 5.2),
+    (1.0, 5.0), (1.1, 5.2), (0.9, 4.8)
+], ["f1", "f2"])
+
+assembler = VectorAssembler(inputCols=["f1", "f2"], outputCol="features")
+data = assembler.transform(data)
+
+# Gaussian Mixture Model
+# Soft clustering - assigns probability to each cluster
+gmm = GaussianMixture(
+    featuresCol="features",
+    predictionCol="cluster",
+    probabilityCol="probability",
+    k=3,                     # Number of Gaussians
+    maxIter=100,
+    tol=0.01,
+    seed=42
+)
+
+model = gmm.fit(data)
+
+# Model parameters
+print("Gaussian Mixture Model Parameters:")
+print(f"Weights: {model.weights}")
+
+for i, (mean, cov) in enumerate(zip(model.gaussiansDF.collect(), model.gaussiansDF.collect())):
+    print(f"\nGaussian {i}:")
+    print(f"  Mean: {mean['mean']}")
+    print(f"  Covariance: {mean['cov']}")
+
+# Predictions with probabilities
+predictions = model.transform(data)
+predictions.select("features", "cluster", "probability").show(truncate=False)
+
+# Summary statistics
+summary = model.summary
+print(f"\nLog Likelihood: {summary.logLikelihood}")
+print(f"Cluster Sizes: {summary.clusterSizes}")
+
+# Evaluate
+evaluator = ClusteringEvaluator(featuresCol="features", predictionCol="cluster")
+silhouette = evaluator.evaluate(predictions)
+print(f"Silhouette Score: {silhouette}")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="evaluation" class="tab-content">
+                    <h3>Clustering Evaluation</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.clustering import KMeans
+from pyspark.ml.evaluation import ClusteringEvaluator
+from pyspark.sql.functions import col, count
+
+spark = SparkSession.builder.appName("ClusteringEvaluation").getOrCreate()
+
+# Sample data
+data = spark.createDataFrame([
+    (1.0, 1.0), (1.5, 1.5), (2.0, 1.0),
+    (5.0, 5.0), (5.5, 5.5), (6.0, 5.0),
+    (1.0, 5.0), (1.5, 5.5), (2.0, 6.0)
+], ["f1", "f2"])
+
+assembler = VectorAssembler(inputCols=["f1", "f2"], outputCol="features")
+data = assembler.transform(data)
+
+# Train model
+kmeans = KMeans(featuresCol="features", k=3, seed=42)
+model = kmeans.fit(data)
+predictions = model.transform(data)
+
+# 1. Silhouette Score (-1 to 1, higher is better)
+evaluator = ClusteringEvaluator(
+    featuresCol="features",
+    predictionCol="cluster",
+    metricName="silhouette",
+    distanceMeasure="squaredEuclidean"
+)
+silhouette = evaluator.evaluate(predictions)
+print(f"Silhouette Score: {silhouette}")
+
+# 2. Within-Cluster Sum of Squares (WSSSE)
+wssse = model.summary.trainingCost
+print(f"WSSSE: {wssse}")
+
+# 3. Cluster Size Distribution
+cluster_sizes = predictions.groupBy("cluster").agg(count("*").alias("size"))
+cluster_sizes.show()
+
+# 4. Elbow Method for optimal K
+def find_optimal_k(data, k_range):
+    results = []
+    for k in k_range:
+        kmeans = KMeans(featuresCol="features", k=k, seed=42)
+        model = kmeans.fit(data)
+        predictions = model.transform(data)
+        
+        wssse = model.summary.trainingCost
+        silhouette = evaluator.evaluate(predictions)
+        
+        results.append({
+            "k": k,
+            "wssse": wssse,
+            "silhouette": silhouette
+        })
+    return results
+
+results = find_optimal_k(data, range(2, 6))
+print("\nOptimal K Analysis:")
+for r in results:
+    print(f"  K={r['k']}: WSSSE={r['wssse']:.2f}, Silhouette={r['silhouette']:.4f}")
+
+# 5. Cluster Profiling
+def profile_clusters(predictions, feature_cols):
+    """Analyze cluster characteristics"""
+    for cluster_id in range(predictions.select("cluster").distinct().count()):
+        cluster_data = predictions.filter(col("cluster") == cluster_id)
+        print(f"\nCluster {cluster_id} Profile:")
+        print(f"  Size: {cluster_data.count()}")
+        cluster_data.select(feature_cols).describe().show()</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../04_regression/index.html" style="color: var(--text-muted);">&larr; Previous: Regression</a>
+                <a href="../06_pipelines/index.html" style="color: var(--accent-primary);">Next: Pipelines &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showClusteringVisualization();
+        });
+        
+        function showClusteringVisualization() {
+            viz.clear();
+            
+            // Cluster 1
+            viz.createDataNode({ type: 'sphere', size: 0.15, color: 0x4dabf7, position: { x: -1.5, y: 0.2, z: -0.5 } });
+            viz.createDataNode({ type: 'sphere', size: 0.15, color: 0x4dabf7, position: { x: -1.2, y: 0.2, z: 0 } });
+            viz.createDataNode({ type: 'sphere', size: 0.15, color: 0x4dabf7, position: { x: -1.4, y: 0.2, z: 0.3 } });
+            
+            // Cluster 2
+            viz.createDataNode({ type: 'sphere', size: 0.15, color: 0x51cf66, position: { x: 1.5, y: 0.2, z: -0.5 } });
+            viz.createDataNode({ type: 'sphere', size: 0.15, color: 0x51cf66, position: { x: 1.2, y: 0.2, z: 0 } });
+            viz.createDataNode({ type: 'sphere', size: 0.15, color: 0x51cf66, position: { x: 1.4, y: 0.2, z: 0.3 } });
+            
+            // Cluster 3
+            viz.createDataNode({ type: 'sphere', size: 0.15, color: 0xff6b6b, position: { x: 0, y: 0.2, z: 1.5 } });
+            viz.createDataNode({ type: 'sphere', size: 0.15, color: 0xff6b6b, position: { x: 0.3, y: 0.2, z: 1.2 } });
+            viz.createDataNode({ type: 'sphere', size: 0.15, color: 0xff6b6b, position: { x: -0.2, y: 0.2, z: 1.3 } });
+            
+            viz.createGrid(5, 5);
+        }
+    </script>
+</body>
+</html>

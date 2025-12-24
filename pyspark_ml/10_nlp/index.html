@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NLP - PySpark ML</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pyspark_ml" class="nav-link active">PySpark ML</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Natural Language Processing</h1>
+            <p>Process and analyze text data using PySpark ML's NLP transformers and algorithms.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>NLP Techniques</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="preprocessing">Text Preprocessing</button>
+                <button class="tab" data-tab="features">Feature Extraction</button>
+                <button class="tab" data-tab="classification">Text Classification</button>
+                <button class="tab" data-tab="topics">Topic Modeling</button>
+            </div>
+            <div class="tab-contents">
+                <div id="preprocessing" class="tab-content active">
+                    <h3>Text Preprocessing</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import (
+    Tokenizer, RegexTokenizer, StopWordsRemover,
+    NGram, StringIndexer
+)
+from pyspark.sql.functions import lower, regexp_replace, trim
+
+spark = SparkSession.builder.appName("TextPreprocessing").getOrCreate()
+
+# Sample text data
+data = spark.createDataFrame([
+    (0, "Hello World! This is PySpark ML."),
+    (1, "Machine Learning with Apache Spark is AWESOME!"),
+    (2, "Natural Language Processing in Python..."),
+    (3, "Data Science & Big Data Analytics!!!")
+], ["id", "text"])
+
+# 1. Basic text cleaning
+cleaned = data.withColumn("text_clean", 
+    trim(lower(regexp_replace("text", "[^a-zA-Z\\s]", "")))
+)
+
+# 2. Tokenization
+tokenizer = Tokenizer(inputCol="text_clean", outputCol="words")
+tokenized = tokenizer.transform(cleaned)
+
+# 3. Regex Tokenization (more control)
+regex_tokenizer = RegexTokenizer(
+    inputCol="text_clean",
+    outputCol="words_regex",
+    pattern="\\W",  # Split on non-word characters
+    gaps=True,
+    minTokenLength=2  # Minimum token length
+)
+regex_tokenized = regex_tokenizer.transform(cleaned)
+
+# 4. Stop Words Removal
+remover = StopWordsRemover(inputCol="words", outputCol="filtered")
+filtered = remover.transform(tokenized)
+
+# Custom stop words
+custom_stopwords = ["is", "the", "a", "an", "in", "with", "this"]
+custom_remover = StopWordsRemover(
+    inputCol="words",
+    outputCol="custom_filtered",
+    stopWords=custom_stopwords
+)
+
+# 5. N-Grams
+bigram = NGram(n=2, inputCol="filtered", outputCol="bigrams")
+trigram = NGram(n=3, inputCol="filtered", outputCol="trigrams")
+
+bigrams = bigram.transform(filtered)
+trigrams = trigram.transform(filtered)
+
+# View results
+bigrams.select("text", "filtered", "bigrams").show(truncate=False)
+
+# 6. Complete preprocessing pipeline
+from pyspark.ml import Pipeline
+
+preprocessing_pipeline = Pipeline(stages=[
+    RegexTokenizer(inputCol="text", outputCol="tokens", pattern="\\W"),
+    StopWordsRemover(inputCol="tokens", outputCol="filtered_tokens"),
+    NGram(n=2, inputCol="filtered_tokens", outputCol="bigrams")
+])
+
+preprocessed = preprocessing_pipeline.fit(data).transform(data)
+preprocessed.show(truncate=False)</code></pre>
+                    </div>
+                </div>
+                
+                <div id="features" class="tab-content">
+                    <h3>Feature Extraction</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import (
+    Tokenizer, StopWordsRemover, HashingTF, IDF,
+    CountVectorizer, Word2Vec
+)
+from pyspark.ml import Pipeline
+
+spark = SparkSession.builder.appName("FeatureExtraction").getOrCreate()
+
+# Sample data
+data = spark.createDataFrame([
+    (0, "spark machine learning big data"),
+    (1, "deep learning neural networks ai"),
+    (2, "spark streaming real time processing"),
+    (3, "machine learning algorithms models")
+], ["id", "text"])
+
+# Tokenize
+tokenizer = Tokenizer(inputCol="text", outputCol="words")
+tokenized = tokenizer.transform(data)
+
+# 1. TF-IDF with HashingTF
+hashingTF = HashingTF(
+    inputCol="words",
+    outputCol="raw_features",
+    numFeatures=100
+)
+tf = hashingTF.transform(tokenized)
+
+idf = IDF(inputCol="raw_features", outputCol="tfidf_features")
+idf_model = idf.fit(tf)
+tfidf = idf_model.transform(tf)
+
+tfidf.select("text", "tfidf_features").show(truncate=False)
+
+# 2. CountVectorizer (Bag of Words)
+cv = CountVectorizer(
+    inputCol="words",
+    outputCol="cv_features",
+    vocabSize=100,
+    minDF=1.0,      # Minimum document frequency
+    minTF=1.0       # Minimum term frequency
+)
+cv_model = cv.fit(tokenized)
+cv_features = cv_model.transform(tokenized)
+
+print(f"Vocabulary: {cv_model.vocabulary}")
+cv_features.select("text", "cv_features").show(truncate=False)
+
+# 3. Word2Vec (Word Embeddings)
+word2vec = Word2Vec(
+    vectorSize=50,
+    minCount=1,
+    inputCol="words",
+    outputCol="word2vec_features",
+    maxIter=10,
+    seed=42
+)
+w2v_model = word2vec.fit(tokenized)
+w2v_features = w2v_model.transform(tokenized)
+
+# Find similar words
+synonyms = w2v_model.findSynonyms("spark", 3)
+print("Words similar to 'spark':")
+synonyms.show()
+
+# Get word vectors
+word_vectors = w2v_model.getVectors()
+word_vectors.show()
+
+# 4. Complete feature extraction pipeline
+feature_pipeline = Pipeline(stages=[
+    Tokenizer(inputCol="text", outputCol="words"),
+    StopWordsRemover(inputCol="words", outputCol="filtered"),
+    CountVectorizer(inputCol="filtered", outputCol="cv_features"),
+    IDF(inputCol="cv_features", outputCol="tfidf_features")
+])
+
+feature_model = feature_pipeline.fit(data)
+features = feature_model.transform(data)
+features.select("text", "tfidf_features").show(truncate=False)</code></pre>
+                    </div>
+                </div>
+                
+                <div id="classification" class="tab-content">
+                    <h3>Text Classification</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml import Pipeline
+from pyspark.ml.feature import (
+    Tokenizer, StopWordsRemover, HashingTF, IDF, StringIndexer
+)
+from pyspark.ml.classification import LogisticRegression, NaiveBayes
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+
+spark = SparkSession.builder.appName("TextClassification").getOrCreate()
+
+# Sample labeled text data
+data = spark.createDataFrame([
+    (0, "spark hadoop big data processing", "tech"),
+    (1, "machine learning deep neural networks", "tech"),
+    (2, "football basketball sports games", "sports"),
+    (3, "soccer world cup championship", "sports"),
+    (4, "python java programming code", "tech"),
+    (5, "tennis golf swimming athletics", "sports")
+], ["id", "text", "category"])
+
+# Index labels
+label_indexer = StringIndexer(inputCol="category", outputCol="label")
+
+# Text processing pipeline
+tokenizer = Tokenizer(inputCol="text", outputCol="words")
+remover = StopWordsRemover(inputCol="words", outputCol="filtered")
+hashingTF = HashingTF(inputCol="filtered", outputCol="raw_features", numFeatures=1000)
+idf = IDF(inputCol="raw_features", outputCol="features")
+
+# Classifier
+lr = LogisticRegression(featuresCol="features", labelCol="label", maxIter=100)
+
+# Complete pipeline
+pipeline = Pipeline(stages=[
+    label_indexer, tokenizer, remover, hashingTF, idf, lr
+])
+
+# Split data
+train, test = data.randomSplit([0.8, 0.2], seed=42)
+
+# Train
+model = pipeline.fit(train)
+
+# Predict
+predictions = model.transform(test)
+predictions.select("text", "category", "prediction", "probability").show(truncate=False)
+
+# Evaluate
+evaluator = MulticlassClassificationEvaluator(
+    labelCol="label", predictionCol="prediction", metricName="accuracy"
+)
+accuracy = evaluator.evaluate(predictions)
+print(f"Accuracy: {accuracy}")
+
+# Alternative: Naive Bayes (good for text)
+nb = NaiveBayes(featuresCol="features", labelCol="label", modelType="multinomial")
+nb_pipeline = Pipeline(stages=[
+    label_indexer, tokenizer, remover, hashingTF, idf, nb
+])
+nb_model = nb_pipeline.fit(train)
+nb_predictions = nb_model.transform(test)
+
+nb_accuracy = evaluator.evaluate(nb_predictions)
+print(f"Naive Bayes Accuracy: {nb_accuracy}")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="topics" class="tab-content">
+                    <h3>Topic Modeling with LDA</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import Tokenizer, StopWordsRemover, CountVectorizer
+from pyspark.ml.clustering import LDA
+from pyspark.ml import Pipeline
+
+spark = SparkSession.builder.appName("TopicModeling").getOrCreate()
+
+# Sample documents
+data = spark.createDataFrame([
+    (0, "spark hadoop big data distributed computing cluster"),
+    (1, "machine learning deep learning neural networks ai"),
+    (2, "python programming code software development"),
+    (3, "data science analytics statistics modeling"),
+    (4, "spark streaming real time data processing"),
+    (5, "tensorflow keras deep learning models training")
+], ["id", "text"])
+
+# Preprocessing
+tokenizer = Tokenizer(inputCol="text", outputCol="words")
+remover = StopWordsRemover(inputCol="words", outputCol="filtered")
+cv = CountVectorizer(inputCol="filtered", outputCol="features", vocabSize=100)
+
+preprocessing = Pipeline(stages=[tokenizer, remover, cv])
+prep_model = preprocessing.fit(data)
+preprocessed = prep_model.transform(data)
+
+# LDA Topic Model
+lda = LDA(
+    k=3,                     # Number of topics
+    maxIter=20,
+    featuresCol="features",
+    seed=42,
+    optimizer="online"       # "online" or "em"
+)
+
+lda_model = lda.fit(preprocessed)
+
+# Topic descriptions
+print("Topics:")
+topics = lda_model.describeTopics(maxTermsPerTopic=5)
+topics.show(truncate=False)
+
+# Get vocabulary for interpretation
+vocab = prep_model.stages[-1].vocabulary
+
+# Print topics with words
+topic_indices = topics.collect()
+for topic in topic_indices:
+    print(f"\nTopic {topic['topic']}:")
+    for idx, weight in zip(topic['termIndices'], topic['termWeights']):
+        print(f"  {vocab[idx]}: {weight:.4f}")
+
+# Document-topic distribution
+doc_topics = lda_model.transform(preprocessed)
+doc_topics.select("id", "text", "topicDistribution").show(truncate=False)
+
+# Model metrics
+print(f"\nLog Likelihood: {lda_model.logLikelihood(preprocessed)}")
+print(f"Log Perplexity: {lda_model.logPerplexity(preprocessed)}")</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../09_recommendation/index.html" style="color: var(--text-muted);">&larr; Previous: Recommendation Systems</a>
+                <a href="../11_model_persistence/index.html" style="color: var(--accent-primary);">Next: Model Persistence &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showNLPVisualization();
+        });
+        
+        function showNLPVisualization() {
+            viz.clear();
+            
+            // Text to features flow
+            viz.createDataNode({ type: 'cube', size: 0.4, color: 0x4dabf7, position: { x: -2, y: 0.3, z: 0 } });
+            viz.createLabel('Text', { x: -2, y: 0.9, z: 0 });
+            
+            viz.createArrow({ x: -1.4, y: 0.3, z: 0 }, { x: -0.6, y: 0.3, z: 0 }, { color: 0x888888 });
+            
+            viz.createDataNode({ type: 'cylinder', size: 0.35, color: 0x51cf66, position: { x: 0, y: 0.35, z: 0 } });
+            viz.createLabel('Tokens', { x: 0, y: 1, z: 0 });
+            
+            viz.createArrow({ x: 0.6, y: 0.35, z: 0 }, { x: 1.4, y: 0.35, z: 0 }, { color: 0x888888 });
+            
+            viz.createDataNode({ type: 'sphere', size: 0.35, color: 0xff6b6b, position: { x: 2, y: 0.35, z: 0 } });
+            viz.createLabel('Features', { x: 2, y: 1, z: 0 });
+            
+            viz.createGrid(6, 6);
+        }
+    </script>
+</body>
+</html>

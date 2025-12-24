@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Feature Engineering - PySpark ML</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pyspark_ml" class="nav-link active">PySpark ML</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Feature Engineering</h1>
+            <p>Transform raw data into meaningful features for machine learning models using PySpark's feature transformers.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Feature Transformations</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="numeric">Numeric Features</button>
+                <button class="tab" data-tab="categorical">Categorical Features</button>
+                <button class="tab" data-tab="text">Text Features</button>
+                <button class="tab" data-tab="selection">Feature Selection</button>
+            </div>
+            <div class="tab-contents">
+                <div id="numeric" class="tab-content active">
+                    <h3>Numeric Feature Transformations</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import (
+    VectorAssembler, StandardScaler, MinMaxScaler,
+    MaxAbsScaler, Normalizer, Bucketizer, QuantileDiscretizer,
+    PolynomialExpansion, Interaction, SQLTransformer
+)
+from pyspark.ml.linalg import Vectors
+
+spark = SparkSession.builder.appName("NumericFeatures").getOrCreate()
+
+data = spark.createDataFrame([
+    (0, 1.0, 100.0, 0.5),
+    (1, 2.0, 200.0, 1.0),
+    (2, 3.0, 300.0, 1.5),
+    (3, 4.0, 400.0, 2.0),
+    (4, 5.0, 500.0, 2.5)
+], ["id", "feature1", "feature2", "feature3"])
+
+# 1. VectorAssembler - Combine features into vector
+assembler = VectorAssembler(
+    inputCols=["feature1", "feature2", "feature3"],
+    outputCol="features"
+)
+assembled = assembler.transform(data)
+
+# 2. StandardScaler - Zero mean, unit variance
+scaler = StandardScaler(
+    inputCol="features",
+    outputCol="scaled_features",
+    withMean=True,
+    withStd=True
+)
+scaler_model = scaler.fit(assembled)
+scaled = scaler_model.transform(assembled)
+
+# 3. MinMaxScaler - Scale to [0, 1]
+minmax = MinMaxScaler(inputCol="features", outputCol="minmax_features")
+minmax_model = minmax.fit(assembled)
+
+# 4. MaxAbsScaler - Scale by max absolute value [-1, 1]
+maxabs = MaxAbsScaler(inputCol="features", outputCol="maxabs_features")
+
+# 5. Normalizer - Normalize to unit norm
+normalizer = Normalizer(inputCol="features", outputCol="norm_features", p=2.0)
+normalized = normalizer.transform(assembled)
+
+# 6. Bucketizer - Discretize continuous features
+bucketizer = Bucketizer(
+    splits=[0, 2, 4, float("inf")],
+    inputCol="feature1",
+    outputCol="feature1_bucket"
+)
+bucketed = bucketizer.transform(data)
+
+# 7. QuantileDiscretizer - Automatic bucket boundaries
+discretizer = QuantileDiscretizer(
+    numBuckets=3,
+    inputCol="feature2",
+    outputCol="feature2_quantile"
+)
+discretized = discretizer.fit(data).transform(data)
+
+# 8. PolynomialExpansion - Create polynomial features
+poly = PolynomialExpansion(degree=2, inputCol="features", outputCol="poly_features")
+poly_features = poly.transform(assembled)
+
+# 9. SQLTransformer - Custom SQL transformations
+sql_trans = SQLTransformer(
+    statement="SELECT *, (feature1 * feature2) as interaction FROM __THIS__"
+)
+sql_transformed = sql_trans.transform(data)
+
+sql_transformed.show()</code></pre>
+                    </div>
+                </div>
+                
+                <div id="categorical" class="tab-content">
+                    <h3>Categorical Feature Transformations</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import (
+    StringIndexer, IndexToString, OneHotEncoder,
+    VectorIndexer, FeatureHasher
+)
+
+spark = SparkSession.builder.appName("CategoricalFeatures").getOrCreate()
+
+data = spark.createDataFrame([
+    (0, "cat", "red", 1.0),
+    (1, "dog", "blue", 2.0),
+    (2, "cat", "green", 3.0),
+    (3, "bird", "red", 4.0),
+    (4, "dog", "blue", 5.0)
+], ["id", "animal", "color", "value"])
+
+# 1. StringIndexer - Convert strings to numeric indices
+animal_indexer = StringIndexer(inputCol="animal", outputCol="animal_index")
+animal_indexed = animal_indexer.fit(data).transform(data)
+
+# Handle unseen labels
+animal_indexer_skip = StringIndexer(
+    inputCol="animal",
+    outputCol="animal_index",
+    handleInvalid="skip"  # or "keep" to assign new index
+)
+
+# 2. IndexToString - Convert indices back to strings
+index_to_string = IndexToString(
+    inputCol="animal_index",
+    outputCol="animal_original",
+    labels=animal_indexer.fit(data).labels
+)
+
+# 3. OneHotEncoder - One-hot encode indexed features
+encoder = OneHotEncoder(
+    inputCols=["animal_index"],
+    outputCols=["animal_vec"],
+    dropLast=True  # Avoid multicollinearity
+)
+encoded = encoder.fit(animal_indexed).transform(animal_indexed)
+
+# Multiple columns at once
+color_indexer = StringIndexer(inputCol="color", outputCol="color_index")
+color_indexed = color_indexer.fit(animal_indexed).transform(animal_indexed)
+
+multi_encoder = OneHotEncoder(
+    inputCols=["animal_index", "color_index"],
+    outputCols=["animal_vec", "color_vec"]
+)
+multi_encoded = multi_encoder.fit(color_indexed).transform(color_indexed)
+
+# 4. FeatureHasher - Hash features to fixed-size vector
+hasher = FeatureHasher(
+    inputCols=["animal", "color", "value"],
+    outputCol="hashed_features",
+    numFeatures=10
+)
+hashed = hasher.transform(data)
+
+# 5. VectorIndexer - Index categorical features in vectors
+from pyspark.ml.feature import VectorAssembler
+
+assembler = VectorAssembler(
+    inputCols=["animal_index", "color_index", "value"],
+    outputCol="features"
+)
+assembled = assembler.transform(color_indexed)
+
+vector_indexer = VectorIndexer(
+    inputCol="features",
+    outputCol="indexed_features",
+    maxCategories=5  # Features with <= 5 values are categorical
+)
+vector_indexed = vector_indexer.fit(assembled).transform(assembled)
+
+vector_indexed.show()</code></pre>
+                    </div>
+                </div>
+                
+                <div id="text" class="tab-content">
+                    <h3>Text Feature Transformations</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import (
+    Tokenizer, RegexTokenizer, StopWordsRemover,
+    NGram, HashingTF, IDF, CountVectorizer,
+    Word2Vec
+)
+
+spark = SparkSession.builder.appName("TextFeatures").getOrCreate()
+
+data = spark.createDataFrame([
+    (0, "Hello world, this is PySpark ML"),
+    (1, "Machine learning with Spark is awesome"),
+    (2, "Feature engineering for text data"),
+    (3, "Natural language processing in Python")
+], ["id", "text"])
+
+# 1. Tokenizer - Split text into words
+tokenizer = Tokenizer(inputCol="text", outputCol="words")
+tokenized = tokenizer.transform(data)
+
+# 2. RegexTokenizer - Split with regex pattern
+regex_tokenizer = RegexTokenizer(
+    inputCol="text",
+    outputCol="words",
+    pattern="\\W"  # Split on non-word characters
+)
+
+# 3. StopWordsRemover - Remove common words
+remover = StopWordsRemover(inputCol="words", outputCol="filtered_words")
+filtered = remover.transform(tokenized)
+
+# Custom stop words
+custom_remover = StopWordsRemover(
+    inputCol="words",
+    outputCol="filtered_words",
+    stopWords=["is", "the", "a", "this"]
+)
+
+# 4. NGram - Create n-grams
+ngram = NGram(n=2, inputCol="filtered_words", outputCol="bigrams")
+ngrams = ngram.transform(filtered)
+
+# 5. HashingTF - Term frequency with hashing
+hashingTF = HashingTF(
+    inputCol="filtered_words",
+    outputCol="raw_features",
+    numFeatures=1000
+)
+tf = hashingTF.transform(filtered)
+
+# 6. IDF - Inverse document frequency
+idf = IDF(inputCol="raw_features", outputCol="tfidf_features")
+idf_model = idf.fit(tf)
+tfidf = idf_model.transform(tf)
+
+# 7. CountVectorizer - Bag of words with vocabulary
+cv = CountVectorizer(
+    inputCol="filtered_words",
+    outputCol="cv_features",
+    vocabSize=100,
+    minDF=1.0
+)
+cv_model = cv.fit(filtered)
+cv_features = cv_model.transform(filtered)
+print(f"Vocabulary: {cv_model.vocabulary}")
+
+# 8. Word2Vec - Word embeddings
+word2vec = Word2Vec(
+    vectorSize=50,
+    minCount=1,
+    inputCol="filtered_words",
+    outputCol="word2vec_features"
+)
+w2v_model = word2vec.fit(filtered)
+w2v_features = w2v_model.transform(filtered)
+
+# Find synonyms
+synonyms = w2v_model.findSynonyms("spark", 3)
+synonyms.show()
+
+tfidf.select("id", "text", "tfidf_features").show(truncate=False)</code></pre>
+                    </div>
+                </div>
+                
+                <div id="selection" class="tab-content">
+                    <h3>Feature Selection</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import (
+    VectorSlicer, ChiSqSelector, UnivariateFeatureSelector,
+    VarianceThresholdSelector, VectorAssembler
+)
+from pyspark.ml.linalg import Vectors
+
+spark = SparkSession.builder.appName("FeatureSelection").getOrCreate()
+
+# Create sample data with features
+data = spark.createDataFrame([
+    (0, Vectors.dense([1.0, 2.0, 3.0, 0.0, 5.0]), 1.0),
+    (1, Vectors.dense([2.0, 3.0, 4.0, 0.0, 6.0]), 0.0),
+    (2, Vectors.dense([3.0, 4.0, 5.0, 0.0, 7.0]), 1.0),
+    (3, Vectors.dense([4.0, 5.0, 6.0, 0.0, 8.0]), 0.0)
+], ["id", "features", "label"])
+
+# 1. VectorSlicer - Select specific feature indices
+slicer = VectorSlicer(
+    inputCol="features",
+    outputCol="selected_features",
+    indices=[0, 2, 4]  # Select features at indices 0, 2, 4
+)
+sliced = slicer.transform(data)
+
+# 2. ChiSqSelector - Select features based on chi-squared test
+chi_selector = ChiSqSelector(
+    numTopFeatures=3,
+    featuresCol="features",
+    labelCol="label",
+    outputCol="chi_selected"
+)
+chi_model = chi_selector.fit(data)
+chi_selected = chi_model.transform(data)
+print(f"Selected feature indices: {chi_model.selectedFeatures}")
+
+# 3. UnivariateFeatureSelector - General univariate selection
+ufs = UnivariateFeatureSelector(
+    featuresCol="features",
+    labelCol="label",
+    outputCol="ufs_selected",
+    featureType="continuous",
+    labelType="categorical",
+    selectionMode="numTopFeatures",
+    selectionThreshold=3
+)
+ufs_model = ufs.fit(data)
+ufs_selected = ufs_model.transform(data)
+
+# 4. VarianceThresholdSelector - Remove low variance features
+vts = VarianceThresholdSelector(
+    featuresCol="features",
+    outputCol="variance_selected",
+    varianceThreshold=0.1
+)
+vts_model = vts.fit(data)
+variance_selected = vts_model.transform(data)
+
+# Feature importance from models
+from pyspark.ml.classification import RandomForestClassifier
+
+rf = RandomForestClassifier(
+    featuresCol="features",
+    labelCol="label",
+    numTrees=10
+)
+rf_model = rf.fit(data)
+print(f"Feature importances: {rf_model.featureImportances}")
+
+# Select top features based on importance
+import numpy as np
+importances = rf_model.featureImportances.toArray()
+top_indices = np.argsort(importances)[-3:][::-1]  # Top 3
+print(f"Top feature indices: {top_indices}")
+
+variance_selected.show()</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../01_ml_basics/index.html" style="color: var(--text-muted);">&larr; Previous: ML Basics</a>
+                <a href="../03_classification/index.html" style="color: var(--accent-primary);">Next: Classification &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showFeatureEngVisualization();
+        });
+        
+        function showFeatureEngVisualization() {
+            viz.clear();
+            
+            // Raw features
+            for (let i = 0; i < 3; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.25, color: 0x868e96, position: { x: -2 + i * 0.5, y: 0.2, z: 0 } });
+            }
+            viz.createLabel('Raw', { x: -1.5, y: 0.8, z: 0 });
+            
+            // Arrow
+            viz.createArrow({ x: -0.5, y: 0.3, z: 0 }, { x: 0.5, y: 0.3, z: 0 }, { color: 0x4dabf7 });
+            
+            // Engineered features
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({ type: 'sphere', size: 0.2, color: 0x51cf66, position: { x: 1 + i * 0.4, y: 0.25, z: 0 } });
+            }
+            viz.createLabel('Engineered', { x: 1.6, y: 0.8, z: 0 });
+            
+            viz.createGrid(6, 6);
+        }
+    </script>
+</body>
+</html>

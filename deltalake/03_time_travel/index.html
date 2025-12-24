@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time Travel - Delta Lake</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#deltalake" class="nav-link active">Delta Lake</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Time Travel in Delta Lake</h1>
+            <p>Delta Lake's time travel feature allows you to query previous versions of your data, enabling auditing, rollbacks, and reproducing experiments.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Time Travel Operations</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="query">Query History</button>
+                <button class="tab" data-tab="version">Version Queries</button>
+                <button class="tab" data-tab="timestamp">Timestamp Queries</button>
+                <button class="tab" data-tab="restore">Restore Versions</button>
+                <button class="tab" data-tab="retention">Data Retention</button>
+            </div>
+            <div class="tab-contents">
+                <div id="query" class="tab-content active">
+                    <h3>Querying Table History</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
+
+spark = SparkSession.builder \
+    .appName("TimeTravelHistory") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Get Delta table reference
+delta_table = DeltaTable.forPath(spark, "/data/delta/employees")
+
+# View complete history
+history = delta_table.history()
+history.show(truncate=False)
+
+# View specific columns from history
+history.select(
+    "version",
+    "timestamp",
+    "operation",
+    "operationParameters",
+    "operationMetrics"
+).show(truncate=False)
+
+# Get last N operations
+delta_table.history(10).show()
+
+# Using SQL to view history
+spark.sql("DESCRIBE HISTORY delta.`/data/delta/employees`").show(truncate=False)
+
+# For managed tables
+spark.sql("DESCRIBE HISTORY employees_table").show(truncate=False)
+
+# Filter history for specific operations
+history.filter("operation = 'MERGE'").show()
+history.filter("operation = 'DELETE'").show()
+
+# Get metrics for each operation
+history.select(
+    "version",
+    "operation",
+    "operationMetrics.numOutputRows",
+    "operationMetrics.numTargetRowsInserted",
+    "operationMetrics.numTargetRowsUpdated",
+    "operationMetrics.numTargetRowsDeleted"
+).show()</code></pre>
+                    </div>
+                </div>
+                
+                <div id="version" class="tab-content">
+                    <h3>Query by Version Number</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("TimeTravelVersion") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Query specific version using DataFrame API
+df_v0 = spark.read.format("delta") \
+    .option("versionAsOf", 0) \
+    .load("/data/delta/employees")
+df_v0.show()
+
+# Query version 5
+df_v5 = spark.read.format("delta") \
+    .option("versionAsOf", 5) \
+    .load("/data/delta/employees")
+df_v5.show()
+
+# Using SQL with @ syntax
+spark.sql("SELECT * FROM delta.`/data/delta/employees`@v0").show()
+spark.sql("SELECT * FROM delta.`/data/delta/employees`@v5").show()
+
+# Using SQL with VERSION AS OF
+spark.sql("""
+    SELECT * FROM delta.`/data/delta/employees`
+    VERSION AS OF 5
+""").show()
+
+# For managed tables
+spark.sql("SELECT * FROM employees_table VERSION AS OF 3").show()
+
+# Compare two versions
+df_old = spark.read.format("delta").option("versionAsOf", 0).load("/data/delta/employees")
+df_new = spark.read.format("delta").option("versionAsOf", 5).load("/data/delta/employees")
+
+# Find new records
+new_records = df_new.subtract(df_old)
+print("New records added:")
+new_records.show()
+
+# Find deleted records
+deleted_records = df_old.subtract(df_new)
+print("Records deleted:")
+deleted_records.show()
+
+# Count changes between versions
+print(f"Version 0 count: {df_old.count()}")
+print(f"Version 5 count: {df_new.count()}")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="timestamp" class="tab-content">
+                    <h3>Query by Timestamp</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from datetime import datetime, timedelta
+
+spark = SparkSession.builder \
+    .appName("TimeTravelTimestamp") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Query as of specific timestamp using DataFrame API
+df_past = spark.read.format("delta") \
+    .option("timestampAsOf", "2024-01-15 10:30:00") \
+    .load("/data/delta/employees")
+df_past.show()
+
+# Using SQL with TIMESTAMP AS OF
+spark.sql("""
+    SELECT * FROM delta.`/data/delta/employees`
+    TIMESTAMP AS OF '2024-01-15 10:30:00'
+""").show()
+
+# Using SQL with @ syntax
+spark.sql("""
+    SELECT * FROM delta.`/data/delta/employees`@20240115103000000
+""").show()
+
+# Query data from yesterday
+yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+df_yesterday = spark.read.format("delta") \
+    .option("timestampAsOf", yesterday) \
+    .load("/data/delta/employees")
+
+# Query data from last week
+last_week = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+df_last_week = spark.read.format("delta") \
+    .option("timestampAsOf", last_week) \
+    .load("/data/delta/employees")
+
+# Audit: What did the data look like at end of last month?
+end_of_last_month = "2024-01-31 23:59:59"
+spark.sql(f"""
+    SELECT * FROM delta.`/data/delta/employees`
+    TIMESTAMP AS OF '{end_of_last_month}'
+""").show()
+
+# Compare data between two timestamps
+df_start = spark.read.format("delta") \
+    .option("timestampAsOf", "2024-01-01") \
+    .load("/data/delta/sales")
+
+df_end = spark.read.format("delta") \
+    .option("timestampAsOf", "2024-01-31") \
+    .load("/data/delta/sales")
+
+# Calculate changes
+print(f"Sales at start of month: {df_start.agg({'amount': 'sum'}).collect()[0][0]}")
+print(f"Sales at end of month: {df_end.agg({'amount': 'sum'}).collect()[0][0]}")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="restore" class="tab-content">
+                    <h3>Restore Previous Versions</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
+
+spark = SparkSession.builder \
+    .appName("TimeTravelRestore") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Method 1: RESTORE command (Delta Lake 1.2+)
+# Restore to specific version
+spark.sql("RESTORE TABLE delta.`/data/delta/employees` TO VERSION AS OF 5")
+
+# Restore to specific timestamp
+spark.sql("""
+    RESTORE TABLE delta.`/data/delta/employees` 
+    TO TIMESTAMP AS OF '2024-01-15 10:30:00'
+""")
+
+# For managed tables
+spark.sql("RESTORE TABLE employees_table TO VERSION AS OF 3")
+
+# Method 2: Manual restore by overwriting
+# Read old version
+df_old = spark.read.format("delta") \
+    .option("versionAsOf", 5) \
+    .load("/data/delta/employees")
+
+# Overwrite current table with old version
+df_old.write.format("delta") \
+    .mode("overwrite") \
+    .save("/data/delta/employees")
+
+# Method 3: Restore specific records only
+delta_table = DeltaTable.forPath(spark, "/data/delta/employees")
+
+# Get deleted records from old version
+df_current = spark.read.format("delta").load("/data/delta/employees")
+df_old = spark.read.format("delta").option("versionAsOf", 5).load("/data/delta/employees")
+
+deleted_records = df_old.subtract(df_current)
+
+# Re-insert deleted records
+deleted_records.write.format("delta").mode("append").save("/data/delta/employees")
+
+# Method 4: Clone and restore
+# Create a clone at specific version
+spark.sql("""
+    CREATE TABLE employees_backup
+    SHALLOW CLONE delta.`/data/delta/employees` VERSION AS OF 5
+""")
+
+# Verify restore
+delta_table = DeltaTable.forPath(spark, "/data/delta/employees")
+print("After restore:")
+delta_table.history(5).show()
+
+# Rollback accidental deletes
+def rollback_delete(table_path, before_delete_version):
+    """Rollback an accidental DELETE operation"""
+    spark.sql(f"RESTORE TABLE delta.`{table_path}` TO VERSION AS OF {before_delete_version}")
+    print(f"Restored to version {before_delete_version}")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="retention" class="tab-content">
+                    <h3>Data Retention Configuration</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
+
+spark = SparkSession.builder \
+    .appName("DataRetention") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Default retention: 30 days for data files, 7 days for log files
+
+# Check current retention settings
+spark.sql("""
+    SHOW TBLPROPERTIES delta.`/data/delta/employees`
+""").show(truncate=False)
+
+# Set log retention (how long to keep transaction log entries)
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    SET TBLPROPERTIES ('delta.logRetentionDuration' = '60 days')
+""")
+
+# Set deleted file retention (how long to keep deleted data files)
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    SET TBLPROPERTIES ('delta.deletedFileRetentionDuration' = '30 days')
+""")
+
+# Enable extended retention for compliance
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    SET TBLPROPERTIES (
+        'delta.logRetentionDuration' = '365 days',
+        'delta.deletedFileRetentionDuration' = '365 days'
+    )
+""")
+
+# VACUUM removes old data files (respects retention period)
+# This frees up storage but limits time travel
+
+# Dry run - see what would be deleted
+spark.sql("VACUUM delta.`/data/delta/employees` DRY RUN")
+
+# Actually vacuum (default 7 days retention)
+spark.sql("VACUUM delta.`/data/delta/employees`")
+
+# Vacuum with custom retention (DANGEROUS - reduces time travel capability)
+# Must disable safety check first
+spark.conf.set("spark.databricks.delta.retentionDurationCheck.enabled", "false")
+spark.sql("VACUUM delta.`/data/delta/employees` RETAIN 24 HOURS")
+
+# Using Python API
+delta_table = DeltaTable.forPath(spark, "/data/delta/employees")
+delta_table.vacuum(168)  # 168 hours = 7 days
+
+# Best practices for retention
+# 1. Keep at least 7 days for operational recovery
+# 2. Keep 30+ days for audit/compliance
+# 3. Balance storage costs vs time travel needs
+# 4. Run VACUUM regularly to manage storage
+
+# Check table size before and after vacuum
+spark.sql("DESCRIBE DETAIL delta.`/data/delta/employees`").select(
+    "numFiles", "sizeInBytes"
+).show()</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../02_acid_transactions/index.html" style="color: var(--text-muted);">&larr; Previous: ACID Transactions</a>
+                <a href="../04_schema_evolution/index.html" style="color: var(--accent-primary);">Next: Schema Evolution &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 8, y: 4, z: 8 } });
+            showTimeTravelVisualization();
+        });
+        
+        function showTimeTravelVisualization() {
+            viz.clear();
+            
+            // Version timeline
+            for (let i = 0; i < 5; i++) {
+                const color = i === 4 ? 0x51cf66 : 0x4dabf7;
+                viz.createDataNode({ type: 'cube', size: 0.4, color: color, position: { x: -2 + i * 1, y: 0.3, z: 0 } });
+                viz.createLabel(`v${i}`, { x: -2 + i * 1, y: 0.9, z: 0 });
+            }
+            
+            // Timeline arrow
+            viz.createArrow({ x: -2.5, y: 0.3, z: 0 }, { x: 2.5, y: 0.3, z: 0 }, { color: 0x888888 });
+            viz.createLabel('Time', { x: 0, y: -0.3, z: 0 });
+            
+            viz.createGrid(8, 8);
+        }
+    </script>
+</body>
+</html>

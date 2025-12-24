@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Optimize & Vacuum - Delta Lake</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#deltalake" class="nav-link active">Delta Lake</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Optimize & Vacuum Operations</h1>
+            <p>Delta Lake provides OPTIMIZE for compacting small files and VACUUM for cleaning up old data files, essential for maintaining table performance.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Table Maintenance</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="optimize">OPTIMIZE</button>
+                <button class="tab" data-tab="zorder">Z-ORDER</button>
+                <button class="tab" data-tab="vacuum">VACUUM</button>
+                <button class="tab" data-tab="auto">Auto Optimization</button>
+            </div>
+            <div class="tab-contents">
+                <div id="optimize" class="tab-content active">
+                    <h3>OPTIMIZE - File Compaction</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
+
+spark = SparkSession.builder \
+    .appName("OptimizeTable") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Check current file count and sizes
+spark.sql("""
+    DESCRIBE DETAIL delta.`/data/delta/events`
+""").select("numFiles", "sizeInBytes").show()
+
+# Basic OPTIMIZE - compacts small files
+spark.sql("OPTIMIZE delta.`/data/delta/events`")
+
+# OPTIMIZE specific partitions
+spark.sql("""
+    OPTIMIZE delta.`/data/delta/events`
+    WHERE event_date >= '2024-01-01' AND event_date < '2024-02-01'
+""")
+
+# OPTIMIZE with target file size
+spark.conf.set("spark.databricks.delta.optimize.maxFileSize", "134217728")  # 128MB
+
+# Using Python API
+delta_table = DeltaTable.forPath(spark, "/data/delta/events")
+delta_table.optimize().executeCompaction()
+
+# Optimize specific partitions with Python
+delta_table.optimize() \
+    .where("event_date >= '2024-01-01'") \
+    .executeCompaction()
+
+# Check results after optimization
+spark.sql("""
+    DESCRIBE DETAIL delta.`/data/delta/events`
+""").select("numFiles", "sizeInBytes").show()
+
+# View optimization history
+delta_table.history().filter("operation = 'OPTIMIZE'").show(truncate=False)</code></pre>
+                    </div>
+                </div>
+                
+                <div id="zorder" class="tab-content">
+                    <h3>Z-ORDER Clustering</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
+
+spark = SparkSession.builder \
+    .appName("ZOrderClustering") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Z-ORDER clusters data by specified columns for faster queries
+# Best for columns frequently used in WHERE clauses
+
+# OPTIMIZE with Z-ORDER on single column
+spark.sql("""
+    OPTIMIZE delta.`/data/delta/events`
+    ZORDER BY (user_id)
+""")
+
+# Z-ORDER on multiple columns (up to 4 recommended)
+spark.sql("""
+    OPTIMIZE delta.`/data/delta/events`
+    ZORDER BY (user_id, event_type)
+""")
+
+# Z-ORDER specific partitions
+spark.sql("""
+    OPTIMIZE delta.`/data/delta/events`
+    WHERE event_date = '2024-01-15'
+    ZORDER BY (user_id, event_type)
+""")
+
+# Using Python API
+delta_table = DeltaTable.forPath(spark, "/data/delta/events")
+delta_table.optimize() \
+    .where("event_date >= '2024-01-01'") \
+    .executeZOrderBy("user_id", "event_type")
+
+# When to use Z-ORDER:
+# - High cardinality columns (user_id, transaction_id)
+# - Columns frequently in WHERE/JOIN conditions
+# - NOT for partition columns (already clustered)
+
+# Z-ORDER vs Partitioning:
+# - Partitioning: Low cardinality (date, region)
+# - Z-ORDER: High cardinality (user_id, product_id)
+
+# Verify Z-ORDER effectiveness
+# Run query before and after, check data skipping stats
+spark.sql("""
+    SELECT * FROM delta.`/data/delta/events`
+    WHERE user_id = 'U12345'
+""").explain(True)  # Look for "files pruned" in plan</code></pre>
+                    </div>
+                </div>
+                
+                <div id="vacuum" class="tab-content">
+                    <h3>VACUUM - Clean Up Old Files</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
+
+spark = SparkSession.builder \
+    .appName("VacuumTable") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# VACUUM removes files no longer referenced by the transaction log
+# Default retention: 7 days (168 hours)
+
+# Dry run - see what would be deleted
+spark.sql("VACUUM delta.`/data/delta/events` DRY RUN")
+
+# Execute VACUUM with default retention (7 days)
+spark.sql("VACUUM delta.`/data/delta/events`")
+
+# VACUUM with custom retention period
+spark.sql("VACUUM delta.`/data/delta/events` RETAIN 720 HOURS")  # 30 days
+
+# VACUUM with shorter retention (DANGEROUS!)
+# Must disable safety check first
+spark.conf.set("spark.databricks.delta.retentionDurationCheck.enabled", "false")
+spark.sql("VACUUM delta.`/data/delta/events` RETAIN 24 HOURS")
+spark.conf.set("spark.databricks.delta.retentionDurationCheck.enabled", "true")
+
+# Using Python API
+delta_table = DeltaTable.forPath(spark, "/data/delta/events")
+delta_table.vacuum()  # Default 7 days
+delta_table.vacuum(168)  # 168 hours = 7 days
+
+# Check storage before and after VACUUM
+def check_storage(path):
+    detail = spark.sql(f"DESCRIBE DETAIL delta.`{path}`")
+    detail.select("numFiles", "sizeInBytes").show()
+
+check_storage("/data/delta/events")
+spark.sql("VACUUM delta.`/data/delta/events`")
+check_storage("/data/delta/events")
+
+# IMPORTANT: VACUUM affects time travel!
+# After VACUUM, you cannot query versions older than retention period
+
+# Set table-level retention properties
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/events`
+    SET TBLPROPERTIES (
+        'delta.deletedFileRetentionDuration' = 'interval 30 days',
+        'delta.logRetentionDuration' = 'interval 60 days'
+    )
+""")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="auto" class="tab-content">
+                    <h3>Auto Optimization</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("AutoOptimization") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Auto Optimize: Automatically compact small files on write
+# Two features: Optimized Writes and Auto Compaction
+
+# Enable at session level
+spark.conf.set("spark.databricks.delta.optimizeWrite.enabled", "true")
+spark.conf.set("spark.databricks.delta.autoCompact.enabled", "true")
+
+# Enable at table level
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/events`
+    SET TBLPROPERTIES (
+        'delta.autoOptimize.optimizeWrite' = 'true',
+        'delta.autoOptimize.autoCompact' = 'true'
+    )
+""")
+
+# Create table with auto-optimize enabled
+spark.sql("""
+    CREATE TABLE events_optimized (
+        id BIGINT,
+        event_type STRING,
+        event_date DATE,
+        payload STRING
+    )
+    USING DELTA
+    PARTITIONED BY (event_date)
+    TBLPROPERTIES (
+        'delta.autoOptimize.optimizeWrite' = 'true',
+        'delta.autoOptimize.autoCompact' = 'true'
+    )
+""")
+
+# Optimized Writes: Coalesces small files during write
+# - Reduces number of files written
+# - Slight increase in write latency
+# - Best for streaming and frequent small writes
+
+# Auto Compaction: Runs OPTIMIZE after writes
+# - Triggers when small files accumulate
+# - Runs asynchronously after commit
+# - Target file size: 128MB by default
+
+# Configure target file size
+spark.conf.set("spark.databricks.delta.autoCompact.minNumFiles", "50")
+spark.conf.set("spark.databricks.delta.optimize.maxFileSize", "134217728")
+
+# Write with auto-optimize
+df = spark.createDataFrame([(1, "click", "2024-01-15")], ["id", "event_type", "event_date"])
+df.write.format("delta") \
+    .mode("append") \
+    .option("optimizeWrite", "true") \
+    .save("/data/delta/events")
+
+# Check if auto-optimize is enabled
+spark.sql("""
+    SHOW TBLPROPERTIES delta.`/data/delta/events`
+""").filter("key LIKE '%autoOptimize%'").show()</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../05_merge_upsert/index.html" style="color: var(--text-muted);">&larr; Previous: Merge & Upsert</a>
+                <a href="../07_z_ordering/index.html" style="color: var(--accent-primary);">Next: Z-Ordering &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showOptimizeVisualization();
+        });
+        
+        function showOptimizeVisualization() {
+            viz.clear();
+            
+            // Small files (before)
+            for (let i = 0; i < 6; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.15, color: 0xff6b6b, position: { x: -2 + (i % 3) * 0.4, y: 0.15, z: -0.5 + Math.floor(i / 3) * 0.4 } });
+            }
+            viz.createLabel('Before', { x: -1.6, y: 0.8, z: 0 });
+            
+            // Arrow
+            viz.createArrow({ x: -0.5, y: 0.3, z: 0 }, { x: 0.5, y: 0.3, z: 0 }, { color: 0x4dabf7 });
+            
+            // Compacted file (after)
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x51cf66, position: { x: 1.5, y: 0.35, z: 0 } });
+            viz.createLabel('After', { x: 1.5, y: 1.1, z: 0 });
+            
+            viz.createGrid(6, 6);
+        }
+    </script>
+</body>
+</html>

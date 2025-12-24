@@ -27,6 +27,8 @@
                 <a href="#sql" class="nav-link">SQL</a>
                 <a href="#etl" class="nav-link">ETL</a>
                 <a href="#datawarehouse" class="nav-link">Data Warehouse</a>
+                <a href="#deltalake" class="nav-link">Delta Lake</a>
+                <a href="#pyspark_ml" class="nav-link">PySpark ML</a>
                 <a href="#shell" class="nav-link">Shell</a>
                 <a href="#projects" class="nav-link">Projects</a>
                 <a href="#performance" class="nav-link">Performance</a>
@@ -55,11 +57,11 @@
             <!-- Stats -->
             <div style="display: flex; justify-content: center; gap: 3rem; margin-top: 2rem;">
                 <div style="text-align: center;">
-                    <div style="font-size: 2.5rem; font-weight: 700; color: var(--accent-primary);">98</div>
+                    <div style="font-size: 2.5rem; font-weight: 700; color: var(--accent-primary);">122</div>
                     <div style="color: var(--text-muted);">Concepts</div>
                 </div>
                 <div style="text-align: center;">
-                    <div style="font-size: 2.5rem; font-weight: 700; color: var(--accent-primary);">10</div>
+                    <div style="font-size: 2.5rem; font-weight: 700; color: var(--accent-primary);">12</div>
                     <div style="color: var(--text-muted);">Categories</div>
                 </div>
                 <div style="text-align: center;">
@@ -780,6 +782,184 @@
                     <h3 class="card-title">Error Handling</h3>
                     <p class="card-description">Quarantine patterns, DLQ, and graceful degradation</p>
                     <div class="card-meta"><span>45 min</span><span>Advanced</span></div>
+                </a>
+            </div>
+        </section>
+
+        <!-- Delta Lake Section -->
+        <section id="deltalake" class="category-section section">
+            <div class="category-header">
+                <div class="category-icon deltalake" style="background: rgba(0, 150, 136, 0.1);">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                    </svg>
+                </div>
+                <div>
+                    <h2>Delta Lake</h2>
+                    <p style="margin: 0; color: var(--text-muted);">ACID Transactions, Time Travel, and Lakehouse Architecture</p>
+                </div>
+            </div>
+            <div class="card-grid">
+                <a href="deltalake/01_introduction/index.html" class="card deltalake">
+                    <div class="card-icon" style="background: rgba(0, 150, 136, 0.1); color: #009688;">📖</div>
+                    <h3 class="card-title">Introduction to Delta Lake</h3>
+                    <p class="card-description">Overview, create tables, read/write data, convert to Delta</p>
+                    <div class="card-meta"><span>30 min</span><span>Beginner</span></div>
+                </a>
+                <a href="deltalake/02_acid_transactions/index.html" class="card deltalake">
+                    <div class="card-icon" style="background: rgba(0, 150, 136, 0.1); color: #009688;">🔒</div>
+                    <h3 class="card-title">ACID Transactions</h3>
+                    <p class="card-description">ACID properties, isolation levels, concurrent writes</p>
+                    <div class="card-meta"><span>35 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="deltalake/03_time_travel/index.html" class="card deltalake">
+                    <div class="card-icon" style="background: rgba(0, 150, 136, 0.1); color: #009688;">⏰</div>
+                    <h3 class="card-title">Time Travel</h3>
+                    <p class="card-description">Query history, version queries, restore versions</p>
+                    <div class="card-meta"><span>30 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="deltalake/04_schema_evolution/index.html" class="card deltalake">
+                    <div class="card-icon" style="background: rgba(0, 150, 136, 0.1); color: #009688;">📐</div>
+                    <h3 class="card-title">Schema Evolution</h3>
+                    <p class="card-description">Add columns, change types, schema merge strategies</p>
+                    <div class="card-meta"><span>35 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="deltalake/05_merge_upsert/index.html" class="card deltalake">
+                    <div class="card-icon" style="background: rgba(0, 150, 136, 0.1); color: #009688;">🔄</div>
+                    <h3 class="card-title">Merge & Upsert</h3>
+                    <p class="card-description">MERGE operations, upsert patterns, SCD Type 2</p>
+                    <div class="card-meta"><span>40 min</span><span>Advanced</span></div>
+                </a>
+                <a href="deltalake/06_optimize_vacuum/index.html" class="card deltalake">
+                    <div class="card-icon" style="background: rgba(0, 150, 136, 0.1); color: #009688;">🧹</div>
+                    <h3 class="card-title">Optimize & Vacuum</h3>
+                    <p class="card-description">File compaction, VACUUM cleanup, auto optimization</p>
+                    <div class="card-meta"><span>30 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="deltalake/07_z_ordering/index.html" class="card deltalake">
+                    <div class="card-icon" style="background: rgba(0, 150, 136, 0.1); color: #009688;">📊</div>
+                    <h3 class="card-title">Z-Ordering</h3>
+                    <p class="card-description">Data clustering, column selection, data skipping</p>
+                    <div class="card-meta"><span>35 min</span><span>Advanced</span></div>
+                </a>
+                <a href="deltalake/08_change_data_feed/index.html" class="card deltalake">
+                    <div class="card-icon" style="background: rgba(0, 150, 136, 0.1); color: #009688;">📡</div>
+                    <h3 class="card-title">Change Data Feed</h3>
+                    <p class="card-description">Enable CDF, read changes, streaming CDC patterns</p>
+                    <div class="card-meta"><span>40 min</span><span>Advanced</span></div>
+                </a>
+                <a href="deltalake/09_streaming/index.html" class="card deltalake">
+                    <div class="card-icon" style="background: rgba(0, 150, 136, 0.1); color: #009688;">🌊</div>
+                    <h3 class="card-title">Streaming with Delta</h3>
+                    <p class="card-description">Delta as sink/source, multi-hop architecture</p>
+                    <div class="card-meta"><span>45 min</span><span>Advanced</span></div>
+                </a>
+                <a href="deltalake/10_constraints/index.html" class="card deltalake">
+                    <div class="card-icon" style="background: rgba(0, 150, 136, 0.1); color: #009688;">✓</div>
+                    <h3 class="card-title">Constraints</h3>
+                    <p class="card-description">CHECK constraints, NOT NULL, validation patterns</p>
+                    <div class="card-meta"><span>30 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="deltalake/11_clone_tables/index.html" class="card deltalake">
+                    <div class="card-icon" style="background: rgba(0, 150, 136, 0.1); color: #009688;">📋</div>
+                    <h3 class="card-title">Clone Tables</h3>
+                    <p class="card-description">Shallow clone, deep clone, use cases</p>
+                    <div class="card-meta"><span>25 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="deltalake/12_best_practices/index.html" class="card deltalake">
+                    <div class="card-icon" style="background: rgba(0, 150, 136, 0.1); color: #009688;">🏆</div>
+                    <h3 class="card-title">Best Practices</h3>
+                    <p class="card-description">Table design, write/read patterns, maintenance</p>
+                    <div class="card-meta"><span>45 min</span><span>Expert</span></div>
+                </a>
+            </div>
+        </section>
+
+        <!-- PySpark ML Section -->
+        <section id="pyspark_ml" class="category-section section">
+            <div class="category-header">
+                <div class="category-icon pyspark_ml" style="background: rgba(156, 39, 176, 0.1);">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h2>PySpark ML</h2>
+                    <p style="margin: 0; color: var(--text-muted);">Machine Learning at Scale with PySpark MLlib</p>
+                </div>
+            </div>
+            <div class="card-grid">
+                <a href="pyspark_ml/01_ml_basics/index.html" class="card pyspark_ml">
+                    <div class="card-icon" style="background: rgba(156, 39, 176, 0.1); color: #9c27b0;">📖</div>
+                    <h3 class="card-title">ML Basics</h3>
+                    <p class="card-description">MLlib overview, transformers, estimators, pipelines</p>
+                    <div class="card-meta"><span>30 min</span><span>Beginner</span></div>
+                </a>
+                <a href="pyspark_ml/02_feature_engineering/index.html" class="card pyspark_ml">
+                    <div class="card-icon" style="background: rgba(156, 39, 176, 0.1); color: #9c27b0;">🔧</div>
+                    <h3 class="card-title">Feature Engineering</h3>
+                    <p class="card-description">Numeric, categorical, text features, selection</p>
+                    <div class="card-meta"><span>40 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="pyspark_ml/03_classification/index.html" class="card pyspark_ml">
+                    <div class="card-icon" style="background: rgba(156, 39, 176, 0.1); color: #9c27b0;">🎯</div>
+                    <h3 class="card-title">Classification</h3>
+                    <p class="card-description">Logistic regression, decision trees, ensemble methods</p>
+                    <div class="card-meta"><span>45 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="pyspark_ml/04_regression/index.html" class="card pyspark_ml">
+                    <div class="card-icon" style="background: rgba(156, 39, 176, 0.1); color: #9c27b0;">📈</div>
+                    <h3 class="card-title">Regression</h3>
+                    <p class="card-description">Linear regression, tree regressors, evaluation</p>
+                    <div class="card-meta"><span>40 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="pyspark_ml/05_clustering/index.html" class="card pyspark_ml">
+                    <div class="card-icon" style="background: rgba(156, 39, 176, 0.1); color: #9c27b0;">🔮</div>
+                    <h3 class="card-title">Clustering</h3>
+                    <p class="card-description">K-Means, Bisecting K-Means, Gaussian Mixture</p>
+                    <div class="card-meta"><span>35 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="pyspark_ml/06_pipelines/index.html" class="card pyspark_ml">
+                    <div class="card-icon" style="background: rgba(156, 39, 176, 0.1); color: #9c27b0;">🔗</div>
+                    <h3 class="card-title">ML Pipelines</h3>
+                    <p class="card-description">Build pipelines, custom transformers, persistence</p>
+                    <div class="card-meta"><span>40 min</span><span>Advanced</span></div>
+                </a>
+                <a href="pyspark_ml/07_model_evaluation/index.html" class="card pyspark_ml">
+                    <div class="card-icon" style="background: rgba(156, 39, 176, 0.1); color: #9c27b0;">📊</div>
+                    <h3 class="card-title">Model Evaluation</h3>
+                    <p class="card-description">Metrics, cross-validation, binary/multiclass evaluation</p>
+                    <div class="card-meta"><span>35 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="pyspark_ml/08_hyperparameter_tuning/index.html" class="card pyspark_ml">
+                    <div class="card-icon" style="background: rgba(156, 39, 176, 0.1); color: #9c27b0;">⚙️</div>
+                    <h3 class="card-title">Hyperparameter Tuning</h3>
+                    <p class="card-description">Grid search, train-validation split, advanced tuning</p>
+                    <div class="card-meta"><span>40 min</span><span>Advanced</span></div>
+                </a>
+                <a href="pyspark_ml/09_recommendation/index.html" class="card pyspark_ml">
+                    <div class="card-icon" style="background: rgba(156, 39, 176, 0.1); color: #9c27b0;">⭐</div>
+                    <h3 class="card-title">Recommendation Systems</h3>
+                    <p class="card-description">ALS collaborative filtering, implicit feedback</p>
+                    <div class="card-meta"><span>45 min</span><span>Advanced</span></div>
+                </a>
+                <a href="pyspark_ml/10_nlp/index.html" class="card pyspark_ml">
+                    <div class="card-icon" style="background: rgba(156, 39, 176, 0.1); color: #9c27b0;">📝</div>
+                    <h3 class="card-title">NLP</h3>
+                    <p class="card-description">Text preprocessing, TF-IDF, Word2Vec, topic modeling</p>
+                    <div class="card-meta"><span>50 min</span><span>Advanced</span></div>
+                </a>
+                <a href="pyspark_ml/11_model_persistence/index.html" class="card pyspark_ml">
+                    <div class="card-icon" style="background: rgba(156, 39, 176, 0.1); color: #9c27b0;">💾</div>
+                    <h3 class="card-title">Model Persistence</h3>
+                    <p class="card-description">Save/load models, versioning, model registry</p>
+                    <div class="card-meta"><span>35 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="pyspark_ml/12_best_practices/index.html" class="card pyspark_ml">
+                    <div class="card-icon" style="background: rgba(156, 39, 176, 0.1); color: #9c27b0;">🏆</div>
+                    <h3 class="card-title">ML Best Practices</h3>
+                    <p class="card-description">Data prep, training, production, monitoring</p>
+                    <div class="card-meta"><span>50 min</span><span>Expert</span></div>
                 </a>
             </div>
         </section>

@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Regression - PySpark ML</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pyspark_ml" class="nav-link active">PySpark ML</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Regression Algorithms</h1>
+            <p>Build regression models to predict continuous outcomes using PySpark ML's regression algorithms.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Regression Models</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="linear">Linear Regression</button>
+                <button class="tab" data-tab="tree">Tree Regressors</button>
+                <button class="tab" data-tab="ensemble">Ensemble Regressors</button>
+                <button class="tab" data-tab="evaluation">Evaluation</button>
+            </div>
+            <div class="tab-contents">
+                <div id="linear" class="tab-content active">
+                    <h3>Linear Regression</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.regression import LinearRegression, GeneralizedLinearRegression
+from pyspark.ml.evaluation import RegressionEvaluator
+
+spark = SparkSession.builder.appName("LinearRegression").getOrCreate()
+
+# Sample data
+data = spark.createDataFrame([
+    (1.0, 2.0, 5.0),
+    (2.0, 3.0, 8.0),
+    (3.0, 4.0, 11.0),
+    (4.0, 5.0, 14.0),
+    (5.0, 6.0, 17.0),
+    (6.0, 7.0, 20.0)
+], ["feature1", "feature2", "label"])
+
+assembler = VectorAssembler(inputCols=["feature1", "feature2"], outputCol="features")
+data = assembler.transform(data)
+train, test = data.randomSplit([0.8, 0.2], seed=42)
+
+# Linear Regression
+lr = LinearRegression(
+    featuresCol="features",
+    labelCol="label",
+    maxIter=100,
+    regParam=0.01,           # L2 regularization
+    elasticNetParam=0.0,     # 0=L2, 1=L1
+    fitIntercept=True,
+    standardization=True
+)
+
+lr_model = lr.fit(train)
+
+# Model parameters
+print(f"Coefficients: {lr_model.coefficients}")
+print(f"Intercept: {lr_model.intercept}")
+
+# Training summary
+summary = lr_model.summary
+print(f"R2: {summary.r2}")
+print(f"Adjusted R2: {summary.r2adj}")
+print(f"RMSE: {summary.rootMeanSquaredError}")
+print(f"MAE: {summary.meanAbsoluteError}")
+
+# Predictions
+predictions = lr_model.transform(test)
+predictions.select("features", "label", "prediction").show()
+
+# Generalized Linear Regression
+glr = GeneralizedLinearRegression(
+    featuresCol="features",
+    labelCol="label",
+    family="gaussian",       # gaussian, binomial, poisson, gamma
+    link="identity",         # identity, log, inverse, logit, probit
+    maxIter=100
+)
+
+glr_model = glr.fit(train)
+print(f"GLR Coefficients: {glr_model.coefficients}")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="tree" class="tab-content">
+                    <h3>Decision Tree Regressor</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.regression import DecisionTreeRegressor
+from pyspark.ml.evaluation import RegressionEvaluator
+
+spark = SparkSession.builder.appName("TreeRegressor").getOrCreate()
+
+# Sample data
+data = spark.createDataFrame([
+    (1.0, 1.0, 2.5),
+    (2.0, 2.0, 5.0),
+    (3.0, 3.0, 7.5),
+    (4.0, 4.0, 10.0),
+    (5.0, 5.0, 12.5),
+    (6.0, 6.0, 15.0)
+], ["f1", "f2", "label"])
+
+assembler = VectorAssembler(inputCols=["f1", "f2"], outputCol="features")
+data = assembler.transform(data)
+train, test = data.randomSplit([0.8, 0.2], seed=42)
+
+# Decision Tree Regressor
+dt = DecisionTreeRegressor(
+    featuresCol="features",
+    labelCol="label",
+    maxDepth=5,
+    maxBins=32,
+    minInstancesPerNode=1,
+    minInfoGain=0.0,
+    varianceCol="variance"   # Optional: output variance
+)
+
+dt_model = dt.fit(train)
+
+# Model info
+print(f"Feature Importances: {dt_model.featureImportances}")
+print(f"Depth: {dt_model.depth}")
+print(f"Number of Nodes: {dt_model.numNodes}")
+print(f"Tree Structure:\n{dt_model.toDebugString}")
+
+# Predictions
+predictions = dt_model.transform(test)
+
+# Evaluate
+evaluator = RegressionEvaluator(labelCol="label", predictionCol="prediction")
+print(f"RMSE: {evaluator.evaluate(predictions, {evaluator.metricName: 'rmse'})}")
+print(f"MAE: {evaluator.evaluate(predictions, {evaluator.metricName: 'mae'})}")
+print(f"R2: {evaluator.evaluate(predictions, {evaluator.metricName: 'r2'})}")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="ensemble" class="tab-content">
+                    <h3>Ensemble Regressors</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.regression import (
+    RandomForestRegressor, GBTRegressor
+)
+from pyspark.ml.evaluation import RegressionEvaluator
+
+spark = SparkSession.builder.appName("EnsembleRegressors").getOrCreate()
+
+# Sample data
+data = spark.createDataFrame([
+    (1.0, 2.0, 3.0, 10.0),
+    (2.0, 3.0, 4.0, 15.0),
+    (3.0, 4.0, 5.0, 20.0),
+    (4.0, 5.0, 6.0, 25.0),
+    (5.0, 6.0, 7.0, 30.0),
+    (6.0, 7.0, 8.0, 35.0)
+], ["f1", "f2", "f3", "label"])
+
+assembler = VectorAssembler(inputCols=["f1", "f2", "f3"], outputCol="features")
+data = assembler.transform(data)
+train, test = data.randomSplit([0.8, 0.2], seed=42)
+
+# 1. Random Forest Regressor
+rf = RandomForestRegressor(
+    featuresCol="features",
+    labelCol="label",
+    numTrees=100,
+    maxDepth=5,
+    featureSubsetStrategy="auto",
+    subsamplingRate=1.0,
+    seed=42
+)
+
+rf_model = rf.fit(train)
+print(f"RF Feature Importances: {rf_model.featureImportances}")
+
+# 2. Gradient Boosted Trees Regressor
+gbt = GBTRegressor(
+    featuresCol="features",
+    labelCol="label",
+    maxIter=20,
+    maxDepth=5,
+    stepSize=0.1,
+    lossType="squared",      # "squared" or "absolute"
+    seed=42
+)
+
+gbt_model = gbt.fit(train)
+print(f"GBT Feature Importances: {gbt_model.featureImportances}")
+
+# Compare models
+evaluator = RegressionEvaluator(labelCol="label", predictionCol="prediction")
+
+rf_predictions = rf_model.transform(test)
+gbt_predictions = gbt_model.transform(test)
+
+print(f"Random Forest RMSE: {evaluator.evaluate(rf_predictions, {evaluator.metricName: 'rmse'})}")
+print(f"Random Forest R2: {evaluator.evaluate(rf_predictions, {evaluator.metricName: 'r2'})}")
+
+print(f"GBT RMSE: {evaluator.evaluate(gbt_predictions, {evaluator.metricName: 'rmse'})}")
+print(f"GBT R2: {evaluator.evaluate(gbt_predictions, {evaluator.metricName: 'r2'})}")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="evaluation" class="tab-content">
+                    <h3>Regression Evaluation Metrics</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.regression import LinearRegression
+from pyspark.ml.evaluation import RegressionEvaluator
+from pyspark.sql.functions import col, abs as spark_abs, pow as spark_pow, mean, sqrt
+
+spark = SparkSession.builder.appName("RegressionEvaluation").getOrCreate()
+
+# Sample predictions
+predictions = spark.createDataFrame([
+    (10.0, 9.5),
+    (20.0, 21.0),
+    (30.0, 29.0),
+    (40.0, 42.0),
+    (50.0, 48.0)
+], ["label", "prediction"])
+
+# Using RegressionEvaluator
+evaluator = RegressionEvaluator(labelCol="label", predictionCol="prediction")
+
+# RMSE - Root Mean Squared Error
+rmse = evaluator.evaluate(predictions, {evaluator.metricName: "rmse"})
+print(f"RMSE: {rmse}")
+
+# MSE - Mean Squared Error
+mse = evaluator.evaluate(predictions, {evaluator.metricName: "mse"})
+print(f"MSE: {mse}")
+
+# MAE - Mean Absolute Error
+mae = evaluator.evaluate(predictions, {evaluator.metricName: "mae"})
+print(f"MAE: {mae}")
+
+# R2 - Coefficient of Determination
+r2 = evaluator.evaluate(predictions, {evaluator.metricName: "r2"})
+print(f"R2: {r2}")
+
+# Variance - Explained Variance
+var = evaluator.evaluate(predictions, {evaluator.metricName: "var"})
+print(f"Explained Variance: {var}")
+
+# Manual calculation for understanding
+predictions_with_error = predictions.withColumn(
+    "error", col("label") - col("prediction")
+).withColumn(
+    "abs_error", spark_abs(col("error"))
+).withColumn(
+    "squared_error", spark_pow(col("error"), 2)
+)
+
+manual_mae = predictions_with_error.select(mean("abs_error")).collect()[0][0]
+manual_mse = predictions_with_error.select(mean("squared_error")).collect()[0][0]
+manual_rmse = manual_mse ** 0.5
+
+print(f"\nManual calculations:")
+print(f"MAE: {manual_mae}")
+print(f"MSE: {manual_mse}")
+print(f"RMSE: {manual_rmse}")
+
+# Residual analysis
+predictions_with_error.select("label", "prediction", "error", "abs_error").show()</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../03_classification/index.html" style="color: var(--text-muted);">&larr; Previous: Classification</a>
+                <a href="../05_clustering/index.html" style="color: var(--accent-primary);">Next: Clustering &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showRegressionVisualization();
+        });
+        
+        function showRegressionVisualization() {
+            viz.clear();
+            
+            // Data points
+            const points = [[-1.5, 0.3], [-0.5, 0.5], [0.5, 0.7], [1.5, 0.9]];
+            points.forEach(p => {
+                viz.createDataNode({ type: 'sphere', size: 0.15, color: 0x4dabf7, position: { x: p[0], y: p[1], z: 0 } });
+            });
+            
+            // Regression line (approximation)
+            viz.createArrow({ x: -2, y: 0.2, z: 0 }, { x: 2, y: 1, z: 0 }, { color: 0xff6b6b });
+            
+            viz.createLabel('Regression Line', { x: 0, y: 1.2, z: 0 });
+            
+            viz.createGrid(5, 5);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ML Pipelines - PySpark ML</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pyspark_ml" class="nav-link active">PySpark ML</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>ML Pipelines</h1>
+            <p>Chain multiple transformers and estimators into a single workflow using PySpark ML Pipelines.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Pipeline Concepts</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="basic">Basic Pipeline</button>
+                <button class="tab" data-tab="complex">Complex Pipeline</button>
+                <button class="tab" data-tab="persistence">Save & Load</button>
+                <button class="tab" data-tab="custom">Custom Transformers</button>
+            </div>
+            <div class="tab-contents">
+                <div id="basic" class="tab-content active">
+                    <h3>Basic Pipeline</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml import Pipeline
+from pyspark.ml.feature import (
+    VectorAssembler, StringIndexer, StandardScaler
+)
+from pyspark.ml.classification import LogisticRegression
+
+spark = SparkSession.builder.appName("BasicPipeline").getOrCreate()
+
+# Sample data
+data = spark.createDataFrame([
+    (1.0, 2.0, "cat", 0),
+    (2.0, 3.0, "dog", 0),
+    (3.0, 4.0, "cat", 1),
+    (4.0, 5.0, "dog", 1),
+    (5.0, 6.0, "cat", 1)
+], ["feature1", "feature2", "category", "label"])
+
+# Define pipeline stages
+# Stage 1: Index categorical column
+indexer = StringIndexer(inputCol="category", outputCol="category_index")
+
+# Stage 2: Assemble features
+assembler = VectorAssembler(
+    inputCols=["feature1", "feature2", "category_index"],
+    outputCol="raw_features"
+)
+
+# Stage 3: Scale features
+scaler = StandardScaler(
+    inputCol="raw_features",
+    outputCol="features",
+    withMean=True,
+    withStd=True
+)
+
+# Stage 4: Train classifier
+lr = LogisticRegression(featuresCol="features", labelCol="label")
+
+# Create pipeline
+pipeline = Pipeline(stages=[indexer, assembler, scaler, lr])
+
+# Split data
+train, test = data.randomSplit([0.8, 0.2], seed=42)
+
+# Fit pipeline (trains all stages)
+model = pipeline.fit(train)
+
+# Transform (applies all stages)
+predictions = model.transform(test)
+predictions.select("features", "label", "prediction", "probability").show()
+
+# Access individual stage models
+indexer_model = model.stages[0]
+print(f"Category labels: {indexer_model.labels}")
+
+lr_model = model.stages[3]
+print(f"LR Coefficients: {lr_model.coefficients}")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="complex" class="tab-content">
+                    <h3>Complex Pipeline</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml import Pipeline
+from pyspark.ml.feature import (
+    VectorAssembler, StringIndexer, OneHotEncoder,
+    StandardScaler, Imputer, Bucketizer
+)
+from pyspark.ml.classification import RandomForestClassifier
+
+spark = SparkSession.builder.appName("ComplexPipeline").getOrCreate()
+
+# Sample data with missing values and multiple types
+data = spark.createDataFrame([
+    (1.0, None, "A", "red", 0),
+    (2.0, 3.0, "B", "blue", 0),
+    (None, 4.0, "A", "green", 1),
+    (4.0, 5.0, "C", "red", 1),
+    (5.0, 6.0, "B", "blue", 1)
+], ["num1", "num2", "cat1", "cat2", "label"])
+
+# Stage 1: Impute missing numeric values
+imputer = Imputer(
+    inputCols=["num1", "num2"],
+    outputCols=["num1_imputed", "num2_imputed"],
+    strategy="mean"
+)
+
+# Stage 2: Bucketize numeric feature
+bucketizer = Bucketizer(
+    splits=[0, 2, 4, float("inf")],
+    inputCol="num1_imputed",
+    outputCol="num1_bucket"
+)
+
+# Stage 3-4: Index categorical columns
+cat1_indexer = StringIndexer(inputCol="cat1", outputCol="cat1_index")
+cat2_indexer = StringIndexer(inputCol="cat2", outputCol="cat2_index")
+
+# Stage 5-6: One-hot encode
+cat1_encoder = OneHotEncoder(inputCol="cat1_index", outputCol="cat1_vec")
+cat2_encoder = OneHotEncoder(inputCol="cat2_index", outputCol="cat2_vec")
+
+# Stage 7: Assemble all features
+assembler = VectorAssembler(
+    inputCols=["num1_imputed", "num2_imputed", "num1_bucket", "cat1_vec", "cat2_vec"],
+    outputCol="raw_features"
+)
+
+# Stage 8: Scale features
+scaler = StandardScaler(inputCol="raw_features", outputCol="features")
+
+# Stage 9: Classifier
+rf = RandomForestClassifier(
+    featuresCol="features",
+    labelCol="label",
+    numTrees=10
+)
+
+# Create complex pipeline
+pipeline = Pipeline(stages=[
+    imputer,
+    bucketizer,
+    cat1_indexer, cat2_indexer,
+    cat1_encoder, cat2_encoder,
+    assembler,
+    scaler,
+    rf
+])
+
+# Fit and transform
+model = pipeline.fit(data)
+predictions = model.transform(data)
+
+# View intermediate results
+predictions.select(
+    "num1", "num1_imputed", "num1_bucket",
+    "cat1", "cat1_index", "cat1_vec",
+    "prediction"
+).show(truncate=False)</code></pre>
+                    </div>
+                </div>
+                
+                <div id="persistence" class="tab-content">
+                    <h3>Save and Load Pipelines</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml import Pipeline, PipelineModel
+from pyspark.ml.feature import VectorAssembler, StandardScaler
+from pyspark.ml.classification import LogisticRegression
+
+spark = SparkSession.builder.appName("PipelinePersistence").getOrCreate()
+
+# Sample data
+data = spark.createDataFrame([
+    (1.0, 2.0, 0), (2.0, 3.0, 0),
+    (3.0, 4.0, 1), (4.0, 5.0, 1)
+], ["f1", "f2", "label"])
+
+# Create pipeline
+assembler = VectorAssembler(inputCols=["f1", "f2"], outputCol="raw_features")
+scaler = StandardScaler(inputCol="raw_features", outputCol="features")
+lr = LogisticRegression(featuresCol="features", labelCol="label")
+
+pipeline = Pipeline(stages=[assembler, scaler, lr])
+
+# Fit pipeline
+model = pipeline.fit(data)
+
+# Save fitted pipeline model
+model.write().overwrite().save("/models/my_pipeline_model")
+
+# Save unfitted pipeline (for retraining)
+pipeline.write().overwrite().save("/models/my_pipeline")
+
+# Load fitted model
+loaded_model = PipelineModel.load("/models/my_pipeline_model")
+
+# Load unfitted pipeline
+loaded_pipeline = Pipeline.load("/models/my_pipeline")
+
+# Use loaded model for predictions
+new_data = spark.createDataFrame([(5.0, 6.0), (6.0, 7.0)], ["f1", "f2"])
+predictions = loaded_model.transform(new_data)
+predictions.show()
+
+# Retrain loaded pipeline on new data
+new_training_data = spark.createDataFrame([
+    (1.0, 2.0, 0), (2.0, 3.0, 0),
+    (3.0, 4.0, 1), (4.0, 5.0, 1),
+    (5.0, 6.0, 1), (6.0, 7.0, 1)
+], ["f1", "f2", "label"])
+
+retrained_model = loaded_pipeline.fit(new_training_data)
+
+# Save with metadata
+model.write() \
+    .overwrite() \
+    .option("metadata", "version=1.0") \
+    .save("/models/my_pipeline_v1")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="custom" class="tab-content">
+                    <h3>Custom Transformers</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml import Pipeline, Transformer
+from pyspark.ml.param.shared import HasInputCol, HasOutputCol, Param
+from pyspark.ml.util import DefaultParamsReadable, DefaultParamsWritable
+from pyspark.sql.functions import col, udf
+from pyspark.sql.types import DoubleType
+
+spark = SparkSession.builder.appName("CustomTransformers").getOrCreate()
+
+# Custom Transformer using inheritance
+class LogTransformer(Transformer, HasInputCol, HasOutputCol,
+                     DefaultParamsReadable, DefaultParamsWritable):
+    """Custom transformer that applies log transformation"""
+    
+    def __init__(self, inputCol=None, outputCol=None):
+        super(LogTransformer, self).__init__()
+        self._setDefault(inputCol="input", outputCol="output")
+        if inputCol is not None:
+            self.setInputCol(inputCol)
+        if outputCol is not None:
+            self.setOutputCol(outputCol)
+    
+    def setInputCol(self, value):
+        return self._set(inputCol=value)
+    
+    def setOutputCol(self, value):
+        return self._set(outputCol=value)
+    
+    def _transform(self, dataset):
+        import math
+        log_udf = udf(lambda x: math.log(x + 1) if x is not None else None, DoubleType())
+        return dataset.withColumn(
+            self.getOutputCol(),
+            log_udf(col(self.getInputCol()))
+        )
+
+# Use custom transformer in pipeline
+data = spark.createDataFrame([
+    (1.0, 100.0, 0),
+    (2.0, 200.0, 0),
+    (3.0, 300.0, 1),
+    (4.0, 400.0, 1)
+], ["f1", "f2", "label"])
+
+# Create custom transformer
+log_transformer = LogTransformer(inputCol="f2", outputCol="f2_log")
+
+# Use in pipeline
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.classification import LogisticRegression
+
+assembler = VectorAssembler(inputCols=["f1", "f2_log"], outputCol="features")
+lr = LogisticRegression(featuresCol="features", labelCol="label")
+
+pipeline = Pipeline(stages=[log_transformer, assembler, lr])
+model = pipeline.fit(data)
+
+predictions = model.transform(data)
+predictions.select("f1", "f2", "f2_log", "prediction").show()
+
+# Simple function-based transformer using SQLTransformer
+from pyspark.ml.feature import SQLTransformer
+
+sql_transformer = SQLTransformer(
+    statement="SELECT *, LOG(f2 + 1) as f2_log, f1 * f2 as interaction FROM __THIS__"
+)
+
+transformed = sql_transformer.transform(data)
+transformed.show()</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../05_clustering/index.html" style="color: var(--text-muted);">&larr; Previous: Clustering</a>
+                <a href="../07_model_evaluation/index.html" style="color: var(--accent-primary);">Next: Model Evaluation &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 8, y: 4, z: 6 } });
+            showPipelineVisualization();
+        });
+        
+        function showPipelineVisualization() {
+            viz.clear();
+            
+            // Pipeline stages
+            const stages = ['Data', 'Transform', 'Scale', 'Model'];
+            const colors = [0x4dabf7, 0x51cf66, 0xffd43b, 0xff6b6b];
+            
+            for (let i = 0; i < stages.length; i++) {
+                viz.createDataNode({ type: 'cylinder', size: 0.35, color: colors[i], position: { x: -2 + i * 1.3, y: 0.35, z: 0 } });
+                viz.createLabel(stages[i], { x: -2 + i * 1.3, y: 1, z: 0 });
+                
+                if (i < stages.length - 1) {
+                    viz.createArrow({ x: -1.4 + i * 1.3, y: 0.35, z: 0 }, { x: -0.8 + i * 1.3, y: 0.35, z: 0 }, { color: 0x888888 });
+                }
+            }
+            
+            viz.createGrid(8, 6);
+        }
+    </script>
+</body>
+</html>

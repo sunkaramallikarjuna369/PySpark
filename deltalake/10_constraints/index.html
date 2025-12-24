@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Constraints - Delta Lake</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#deltalake" class="nav-link active">Delta Lake</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Constraints in Delta Lake</h1>
+            <p>Delta Lake supports CHECK constraints and NOT NULL constraints to enforce data quality at the table level, preventing bad data from entering your tables.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Constraint Types</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="check">CHECK Constraints</button>
+                <button class="tab" data-tab="notnull">NOT NULL</button>
+                <button class="tab" data-tab="manage">Manage Constraints</button>
+                <button class="tab" data-tab="patterns">Validation Patterns</button>
+            </div>
+            <div class="tab-contents">
+                <div id="check" class="tab-content active">
+                    <h3>CHECK Constraints</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("CheckConstraints") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Add CHECK constraint to existing table
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    ADD CONSTRAINT salary_positive CHECK (salary > 0)
+""")
+
+# Multiple constraints
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    ADD CONSTRAINT valid_age CHECK (age >= 18 AND age <= 120)
+""")
+
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    ADD CONSTRAINT valid_email CHECK (email LIKE '%@%.%')
+""")
+
+# Complex constraint with multiple columns
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/orders`
+    ADD CONSTRAINT valid_dates CHECK (ship_date >= order_date)
+""")
+
+# Constraint with IN clause
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    ADD CONSTRAINT valid_status CHECK (status IN ('active', 'inactive', 'pending'))
+""")
+
+# Test constraint violation
+try:
+    df_bad = spark.createDataFrame([(-1, "Test", -5000)], ["id", "name", "salary"])
+    df_bad.write.format("delta").mode("append").save("/data/delta/employees")
+except Exception as e:
+    print(f"Constraint violation: {e}")
+
+# Constraint with NULL handling
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/products`
+    ADD CONSTRAINT valid_price CHECK (price IS NULL OR price >= 0)
+""")
+
+# View all constraints
+spark.sql("SHOW TBLPROPERTIES delta.`/data/delta/employees`") \
+    .filter("key LIKE 'delta.constraints%'").show(truncate=False)</code></pre>
+                    </div>
+                </div>
+                
+                <div id="notnull" class="tab-content">
+                    <h3>NOT NULL Constraints</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType
+
+spark = SparkSession.builder \
+    .appName("NotNullConstraints") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Create table with NOT NULL columns
+spark.sql("""
+    CREATE TABLE employees_strict (
+        id INT NOT NULL,
+        name STRING NOT NULL,
+        email STRING NOT NULL,
+        department STRING,
+        salary DOUBLE
+    )
+    USING DELTA
+""")
+
+# Add NOT NULL to existing column
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    ALTER COLUMN id SET NOT NULL
+""")
+
+# Remove NOT NULL constraint
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    ALTER COLUMN email DROP NOT NULL
+""")
+
+# NOT NULL with schema definition
+schema = StructType([
+    StructField("id", IntegerType(), nullable=False),
+    StructField("name", StringType(), nullable=False),
+    StructField("salary", DoubleType(), nullable=True)
+])
+
+df = spark.createDataFrame([(1, "Alice", 75000.0)], schema)
+df.write.format("delta").mode("overwrite").save("/data/delta/employees_typed")
+
+# Test NOT NULL violation
+try:
+    df_null = spark.createDataFrame([(None, "Test", 50000.0)], ["id", "name", "salary"])
+    df_null.write.format("delta").mode("append").save("/data/delta/employees_strict")
+except Exception as e:
+    print(f"NOT NULL violation: {e}")
+
+# View column nullability
+spark.sql("DESCRIBE delta.`/data/delta/employees_strict`").show()</code></pre>
+                    </div>
+                </div>
+                
+                <div id="manage" class="tab-content">
+                    <h3>Managing Constraints</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("ManageConstraints") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# View all constraints on a table
+spark.sql("""
+    SHOW TBLPROPERTIES delta.`/data/delta/employees`
+""").filter("key LIKE 'delta.constraints%'").show(truncate=False)
+
+# Drop a constraint
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    DROP CONSTRAINT salary_positive
+""")
+
+# Drop constraint if exists (avoid error)
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    DROP CONSTRAINT IF EXISTS old_constraint
+""")
+
+# Rename constraint (drop and recreate)
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    DROP CONSTRAINT valid_age
+""")
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/employees`
+    ADD CONSTRAINT age_range CHECK (age >= 18 AND age <= 120)
+""")
+
+# Disable constraint checking temporarily (not recommended)
+# Delta Lake doesn't support disabling constraints
+# Instead, drop and recreate after bulk load
+
+# Validate existing data against new constraint
+def validate_before_constraint(table_path, constraint_expr):
+    """Check if existing data satisfies constraint"""
+    df = spark.read.format("delta").load(table_path)
+    violations = df.filter(f"NOT ({constraint_expr})")
+    
+    if violations.count() > 0:
+        print(f"Found {violations.count()} violations:")
+        violations.show()
+        return False
+    return True
+
+# Example: Validate before adding constraint
+if validate_before_constraint("/data/delta/employees", "salary > 0"):
+    spark.sql("""
+        ALTER TABLE delta.`/data/delta/employees`
+        ADD CONSTRAINT salary_positive CHECK (salary > 0)
+    """)
+else:
+    print("Fix data violations before adding constraint")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="patterns" class="tab-content">
+                    <h3>Data Validation Patterns</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, when, regexp_extract
+
+spark = SparkSession.builder \
+    .appName("ValidationPatterns") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Pattern 1: Comprehensive table constraints
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/orders`
+    ADD CONSTRAINT valid_order CHECK (
+        order_id IS NOT NULL AND
+        customer_id IS NOT NULL AND
+        order_date IS NOT NULL AND
+        total_amount >= 0 AND
+        status IN ('pending', 'processing', 'shipped', 'delivered', 'cancelled')
+    )
+""")
+
+# Pattern 2: Pre-write validation function
+def validate_dataframe(df, validations):
+    """Validate DataFrame before writing to Delta"""
+    errors = []
+    
+    for name, condition in validations.items():
+        violations = df.filter(f"NOT ({condition})")
+        count = violations.count()
+        if count > 0:
+            errors.append(f"{name}: {count} violations")
+    
+    if errors:
+        raise ValueError(f"Validation failed: {', '.join(errors)}")
+    
+    return df
+
+# Usage
+validations = {
+    "positive_salary": "salary > 0",
+    "valid_email": "email LIKE '%@%.%'",
+    "valid_age": "age >= 18 AND age <= 120"
+}
+
+df = spark.createDataFrame([(1, "Alice", 75000, "alice@example.com", 30)],
+                           ["id", "name", "salary", "email", "age"])
+validated_df = validate_dataframe(df, validations)
+validated_df.write.format("delta").mode("append").save("/data/delta/employees")
+
+# Pattern 3: Quarantine invalid records
+def write_with_quarantine(df, table_path, quarantine_path, constraint_expr):
+    """Write valid records, quarantine invalid ones"""
+    valid = df.filter(constraint_expr)
+    invalid = df.filter(f"NOT ({constraint_expr})")
+    
+    valid.write.format("delta").mode("append").save(table_path)
+    
+    if invalid.count() > 0:
+        invalid.withColumn("quarantine_reason", lit(f"Failed: {constraint_expr}")) \
+            .write.format("delta").mode("append").save(quarantine_path)
+        print(f"Quarantined {invalid.count()} records")
+
+# Pattern 4: Soft constraints with warnings
+def check_soft_constraints(df, soft_constraints):
+    """Check soft constraints and log warnings"""
+    for name, condition in soft_constraints.items():
+        violations = df.filter(f"NOT ({condition})")
+        count = violations.count()
+        if count > 0:
+            print(f"WARNING: {name} - {count} records don't meet recommendation")
+
+soft_constraints = {
+    "recommended_salary": "salary >= 30000",
+    "complete_profile": "phone IS NOT NULL AND address IS NOT NULL"
+}
+check_soft_constraints(df, soft_constraints)</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../09_streaming/index.html" style="color: var(--text-muted);">&larr; Previous: Streaming</a>
+                <a href="../11_clone_tables/index.html" style="color: var(--accent-primary);">Next: Clone Tables &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 4, z: 5 } });
+            showConstraintsVisualization();
+        });
+        
+        function showConstraintsVisualization() {
+            viz.clear();
+            
+            // Valid data
+            viz.createDataNode({ type: 'cube', size: 0.35, color: 0x51cf66, position: { x: -1, y: 0.25, z: 0 } });
+            viz.createLabel('Valid', { x: -1, y: 0.9, z: 0 });
+            
+            // Constraint gate
+            viz.createDataNode({ type: 'cylinder', size: 0.3, color: 0x4dabf7, position: { x: 0, y: 0.4, z: 0 } });
+            viz.createLabel('CHECK', { x: 0, y: 1, z: 0 });
+            
+            // Invalid data (rejected)
+            viz.createDataNode({ type: 'cube', size: 0.35, color: 0xff6b6b, position: { x: 1, y: 0.25, z: 0 } });
+            viz.createLabel('Rejected', { x: 1, y: 0.9, z: 0 });
+            
+            viz.createGrid(5, 5);
+        }
+    </script>
+</body>
+</html>

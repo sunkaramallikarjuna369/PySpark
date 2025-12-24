@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Change Data Feed - Delta Lake</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#deltalake" class="nav-link active">Delta Lake</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Change Data Feed (CDF)</h1>
+            <p>Change Data Feed captures row-level changes (inserts, updates, deletes) in Delta tables, enabling efficient incremental processing and CDC pipelines.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>CDF Operations</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="enable">Enable CDF</button>
+                <button class="tab" data-tab="read">Read Changes</button>
+                <button class="tab" data-tab="streaming">Streaming CDF</button>
+                <button class="tab" data-tab="patterns">Use Patterns</button>
+            </div>
+            <div class="tab-contents">
+                <div id="enable" class="tab-content active">
+                    <h3>Enabling Change Data Feed</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("EnableCDF") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Enable CDF on new table
+spark.sql("""
+    CREATE TABLE events_with_cdf (
+        id BIGINT,
+        event_type STRING,
+        user_id STRING,
+        timestamp TIMESTAMP
+    )
+    USING DELTA
+    TBLPROPERTIES ('delta.enableChangeDataFeed' = 'true')
+""")
+
+# Enable CDF on existing table
+spark.sql("""
+    ALTER TABLE delta.`/data/delta/events`
+    SET TBLPROPERTIES ('delta.enableChangeDataFeed' = 'true')
+""")
+
+# Enable CDF globally for all new tables
+spark.conf.set("spark.databricks.delta.properties.defaults.enableChangeDataFeed", "true")
+
+# Verify CDF is enabled
+spark.sql("""
+    SHOW TBLPROPERTIES delta.`/data/delta/events`
+""").filter("key = 'delta.enableChangeDataFeed'").show()
+
+# CDF adds special columns to track changes:
+# _change_type: INSERT, UPDATE_PREIMAGE, UPDATE_POSTIMAGE, DELETE
+# _commit_version: Version number of the change
+# _commit_timestamp: Timestamp of the change
+
+# Note: CDF only captures changes AFTER it's enabled
+# Historical changes before enabling are not available</code></pre>
+                    </div>
+                </div>
+                
+                <div id="read" class="tab-content">
+                    <h3>Reading Change Data</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("ReadCDF") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Read changes by version range
+changes = spark.read.format("delta") \
+    .option("readChangeFeed", "true") \
+    .option("startingVersion", 5) \
+    .option("endingVersion", 10) \
+    .load("/data/delta/events")
+
+changes.show()
+
+# Read changes by timestamp range
+changes = spark.read.format("delta") \
+    .option("readChangeFeed", "true") \
+    .option("startingTimestamp", "2024-01-15 00:00:00") \
+    .option("endingTimestamp", "2024-01-16 00:00:00") \
+    .load("/data/delta/events")
+
+# Read all changes from a starting version
+changes = spark.read.format("delta") \
+    .option("readChangeFeed", "true") \
+    .option("startingVersion", 0) \
+    .load("/data/delta/events")
+
+# Using SQL
+spark.sql("""
+    SELECT * FROM table_changes('delta.`/data/delta/events`', 5, 10)
+""").show()
+
+spark.sql("""
+    SELECT * FROM table_changes('delta.`/data/delta/events`', '2024-01-15', '2024-01-16')
+""").show()
+
+# Filter by change type
+inserts = changes.filter("_change_type = 'insert'")
+updates = changes.filter("_change_type IN ('update_preimage', 'update_postimage')")
+deletes = changes.filter("_change_type = 'delete'")
+
+# Get only the latest version of updated records
+from pyspark.sql.window import Window
+from pyspark.sql.functions import row_number, col
+
+window = Window.partitionBy("id").orderBy(col("_commit_version").desc())
+latest_changes = changes.withColumn("rn", row_number().over(window)) \
+    .filter("rn = 1 AND _change_type != 'update_preimage'") \
+    .drop("rn")
+
+latest_changes.show()</code></pre>
+                    </div>
+                </div>
+                
+                <div id="streaming" class="tab-content">
+                    <h3>Streaming Change Data Feed</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, when
+
+spark = SparkSession.builder \
+    .appName("StreamingCDF") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Stream changes from Delta table
+changes_stream = spark.readStream.format("delta") \
+    .option("readChangeFeed", "true") \
+    .option("startingVersion", 0) \
+    .load("/data/delta/events")
+
+# Process changes in real-time
+def process_changes(batch_df, batch_id):
+    """Process each batch of changes"""
+    inserts = batch_df.filter("_change_type = 'insert'")
+    updates = batch_df.filter("_change_type = 'update_postimage'")
+    deletes = batch_df.filter("_change_type = 'delete'")
+    
+    print(f"Batch {batch_id}: {inserts.count()} inserts, {updates.count()} updates, {deletes.count()} deletes")
+    
+    # Apply changes to downstream table
+    # ... your processing logic here
+
+# Write stream with foreachBatch
+query = changes_stream.writeStream \
+    .foreachBatch(process_changes) \
+    .option("checkpointLocation", "/checkpoints/cdf_stream") \
+    .start()
+
+# Stream to another Delta table (CDC replication)
+changes_stream.writeStream \
+    .format("delta") \
+    .option("checkpointLocation", "/checkpoints/cdf_replicate") \
+    .option("mergeSchema", "true") \
+    .start("/data/delta/events_replica")
+
+# Stream changes to Kafka
+changes_stream.selectExpr("to_json(struct(*)) AS value") \
+    .writeStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("topic", "events-changes") \
+    .option("checkpointLocation", "/checkpoints/cdf_kafka") \
+    .start()
+
+# Incremental aggregation using CDF
+def update_aggregates(batch_df, batch_id):
+    """Update aggregates based on changes"""
+    from delta.tables import DeltaTable
+    
+    # Calculate deltas from changes
+    deltas = batch_df.groupBy("event_type").agg(
+        sum(when(col("_change_type") == "insert", 1)
+            .when(col("_change_type") == "delete", -1)
+            .otherwise(0)).alias("count_delta")
+    )
+    
+    # Merge deltas into aggregate table
+    agg_table = DeltaTable.forPath(spark, "/data/delta/event_counts")
+    agg_table.alias("target").merge(
+        deltas.alias("source"),
+        "target.event_type = source.event_type"
+    ).whenMatchedUpdate(set={
+        "count": col("target.count") + col("source.count_delta")
+    }).whenNotMatchedInsert(values={
+        "event_type": col("source.event_type"),
+        "count": col("source.count_delta")
+    }).execute()</code></pre>
+                    </div>
+                </div>
+                
+                <div id="patterns" class="tab-content">
+                    <h3>CDF Use Patterns</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
+from pyspark.sql.functions import col, max as spark_max
+
+spark = SparkSession.builder \
+    .appName("CDFPatterns") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Pattern 1: Incremental ETL with watermark tracking
+def incremental_etl():
+    """Process only new changes since last run"""
+    
+    # Read last processed version from checkpoint
+    checkpoint_path = "/checkpoints/etl_watermark"
+    try:
+        last_version = spark.read.text(checkpoint_path).collect()[0][0]
+    except:
+        last_version = 0
+    
+    # Get current version
+    current_version = spark.sql("""
+        DESCRIBE HISTORY delta.`/data/delta/events` LIMIT 1
+    """).select("version").collect()[0][0]
+    
+    # Read changes since last version
+    changes = spark.read.format("delta") \
+        .option("readChangeFeed", "true") \
+        .option("startingVersion", int(last_version) + 1) \
+        .option("endingVersion", current_version) \
+        .load("/data/delta/events")
+    
+    # Process changes
+    # ... your ETL logic
+    
+    # Update watermark
+    spark.createDataFrame([(str(current_version),)], ["version"]) \
+        .write.mode("overwrite").text(checkpoint_path)
+
+# Pattern 2: Audit logging
+def audit_changes():
+    """Log all changes for compliance"""
+    
+    changes = spark.read.format("delta") \
+        .option("readChangeFeed", "true") \
+        .option("startingVersion", 0) \
+        .load("/data/delta/sensitive_data")
+    
+    # Add audit metadata
+    audit_log = changes.select(
+        col("id"),
+        col("_change_type").alias("operation"),
+        col("_commit_version").alias("version"),
+        col("_commit_timestamp").alias("change_time"),
+        # Hash sensitive fields
+        sha2(col("email"), 256).alias("email_hash")
+    )
+    
+    audit_log.write.format("delta") \
+        .mode("append") \
+        .save("/data/delta/audit_log")
+
+# Pattern 3: Materialized view maintenance
+def update_materialized_view():
+    """Incrementally update materialized view"""
+    
+    # Read changes to source table
+    changes = spark.read.format("delta") \
+        .option("readChangeFeed", "true") \
+        .option("startingVersion", last_processed_version) \
+        .load("/data/delta/orders")
+    
+    # Calculate incremental aggregates
+    incremental = changes.filter("_change_type != 'update_preimage'") \
+        .groupBy("product_id", "region") \
+        .agg(
+            sum(when(col("_change_type") == "delete", -col("amount"))
+                .otherwise(col("amount"))).alias("amount_delta"),
+            sum(when(col("_change_type") == "delete", -1)
+                .otherwise(1)).alias("count_delta")
+        )
+    
+    # Merge into materialized view
+    mv_table = DeltaTable.forPath(spark, "/data/delta/sales_summary")
+    mv_table.alias("mv").merge(
+        incremental.alias("inc"),
+        "mv.product_id = inc.product_id AND mv.region = inc.region"
+    ).whenMatchedUpdate(set={
+        "total_amount": col("mv.total_amount") + col("inc.amount_delta"),
+        "order_count": col("mv.order_count") + col("inc.count_delta")
+    }).whenNotMatchedInsert(values={
+        "product_id": col("inc.product_id"),
+        "region": col("inc.region"),
+        "total_amount": col("inc.amount_delta"),
+        "order_count": col("inc.count_delta")
+    }).execute()</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../07_z_ordering/index.html" style="color: var(--text-muted);">&larr; Previous: Z-Ordering</a>
+                <a href="../09_streaming/index.html" style="color: var(--accent-primary);">Next: Streaming &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showCDFVisualization();
+        });
+        
+        function showCDFVisualization() {
+            viz.clear();
+            
+            // Change types
+            viz.createDataNode({ type: 'cube', size: 0.35, color: 0x51cf66, position: { x: -1.5, y: 0.25, z: 0 } });
+            viz.createLabel('INSERT', { x: -1.5, y: 0.8, z: 0 });
+            
+            viz.createDataNode({ type: 'cube', size: 0.35, color: 0x4dabf7, position: { x: 0, y: 0.25, z: 0 } });
+            viz.createLabel('UPDATE', { x: 0, y: 0.8, z: 0 });
+            
+            viz.createDataNode({ type: 'cube', size: 0.35, color: 0xff6b6b, position: { x: 1.5, y: 0.25, z: 0 } });
+            viz.createLabel('DELETE', { x: 1.5, y: 0.8, z: 0 });
+            
+            viz.createGrid(6, 6);
+        }
+    </script>
+</body>
+</html>

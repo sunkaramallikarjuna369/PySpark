@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Classification - PySpark ML</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pyspark_ml" class="nav-link active">PySpark ML</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Classification Algorithms</h1>
+            <p>Build classification models to predict categorical outcomes using PySpark ML's classification algorithms.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Classification Models</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="logistic">Logistic Regression</button>
+                <button class="tab" data-tab="trees">Decision Trees</button>
+                <button class="tab" data-tab="ensemble">Ensemble Methods</button>
+                <button class="tab" data-tab="multiclass">Multiclass</button>
+            </div>
+            <div class="tab-contents">
+                <div id="logistic" class="tab-content active">
+                    <h3>Logistic Regression</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.evaluation import BinaryClassificationEvaluator, MulticlassClassificationEvaluator
+
+spark = SparkSession.builder.appName("LogisticRegression").getOrCreate()
+
+# Load and prepare data
+data = spark.read.csv("data/classification_data.csv", header=True, inferSchema=True)
+
+# Or create sample data
+data = spark.createDataFrame([
+    (1.0, 2.0, 0), (2.0, 3.0, 0), (3.0, 4.0, 0),
+    (4.0, 5.0, 1), (5.0, 6.0, 1), (6.0, 7.0, 1),
+    (7.0, 8.0, 1), (8.0, 9.0, 1)
+], ["feature1", "feature2", "label"])
+
+# Prepare features
+assembler = VectorAssembler(inputCols=["feature1", "feature2"], outputCol="features")
+data = assembler.transform(data)
+
+# Split data
+train, test = data.randomSplit([0.8, 0.2], seed=42)
+
+# Binary Logistic Regression
+lr = LogisticRegression(
+    featuresCol="features",
+    labelCol="label",
+    maxIter=100,
+    regParam=0.01,           # L2 regularization
+    elasticNetParam=0.0,     # 0=L2, 1=L1, between=ElasticNet
+    threshold=0.5            # Classification threshold
+)
+
+# Train model
+lr_model = lr.fit(train)
+
+# Model coefficients
+print(f"Coefficients: {lr_model.coefficients}")
+print(f"Intercept: {lr_model.intercept}")
+
+# Training summary
+summary = lr_model.summary
+print(f"Area under ROC: {summary.areaUnderROC}")
+print(f"Accuracy: {summary.accuracy}")
+
+# Predictions
+predictions = lr_model.transform(test)
+predictions.select("features", "label", "prediction", "probability").show()
+
+# Evaluate
+evaluator = BinaryClassificationEvaluator(labelCol="label", metricName="areaUnderROC")
+auc = evaluator.evaluate(predictions)
+print(f"Test AUC: {auc}")
+
+# Multiclass evaluator
+mc_evaluator = MulticlassClassificationEvaluator(
+    labelCol="label",
+    predictionCol="prediction",
+    metricName="accuracy"
+)
+accuracy = mc_evaluator.evaluate(predictions)
+print(f"Test Accuracy: {accuracy}")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="trees" class="tab-content">
+                    <h3>Decision Tree Classifier</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler, StringIndexer
+from pyspark.ml.classification import DecisionTreeClassifier
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+
+spark = SparkSession.builder.appName("DecisionTree").getOrCreate()
+
+# Sample data
+data = spark.createDataFrame([
+    (1.0, 2.0, "low", 0),
+    (2.0, 3.0, "low", 0),
+    (3.0, 4.0, "medium", 0),
+    (4.0, 5.0, "medium", 1),
+    (5.0, 6.0, "high", 1),
+    (6.0, 7.0, "high", 1)
+], ["feature1", "feature2", "category", "label"])
+
+# Index categorical feature
+indexer = StringIndexer(inputCol="category", outputCol="category_index")
+data = indexer.fit(data).transform(data)
+
+# Assemble features
+assembler = VectorAssembler(
+    inputCols=["feature1", "feature2", "category_index"],
+    outputCol="features"
+)
+data = assembler.transform(data)
+
+# Split data
+train, test = data.randomSplit([0.8, 0.2], seed=42)
+
+# Decision Tree Classifier
+dt = DecisionTreeClassifier(
+    featuresCol="features",
+    labelCol="label",
+    maxDepth=5,              # Maximum tree depth
+    maxBins=32,              # Max bins for discretizing continuous features
+    minInstancesPerNode=1,   # Min instances per leaf
+    minInfoGain=0.0,         # Min information gain for split
+    impurity="gini"          # "gini" or "entropy"
+)
+
+# Train model
+dt_model = dt.fit(train)
+
+# Feature importances
+print(f"Feature Importances: {dt_model.featureImportances}")
+print(f"Tree Depth: {dt_model.depth}")
+print(f"Number of Nodes: {dt_model.numNodes}")
+
+# Print tree structure
+print(dt_model.toDebugString)
+
+# Predictions
+predictions = dt_model.transform(test)
+
+# Evaluate
+evaluator = MulticlassClassificationEvaluator(
+    labelCol="label",
+    predictionCol="prediction"
+)
+print(f"Accuracy: {evaluator.evaluate(predictions, {evaluator.metricName: 'accuracy'})}")
+print(f"F1 Score: {evaluator.evaluate(predictions, {evaluator.metricName: 'f1'})}")
+print(f"Precision: {evaluator.evaluate(predictions, {evaluator.metricName: 'weightedPrecision'})}")
+print(f"Recall: {evaluator.evaluate(predictions, {evaluator.metricName: 'weightedRecall'})}")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="ensemble" class="tab-content">
+                    <h3>Ensemble Methods</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.classification import (
+    RandomForestClassifier, GBTClassifier
+)
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+
+spark = SparkSession.builder.appName("EnsembleMethods").getOrCreate()
+
+# Prepare data
+data = spark.createDataFrame([
+    (1.0, 2.0, 3.0, 0), (2.0, 3.0, 4.0, 0), (3.0, 4.0, 5.0, 0),
+    (4.0, 5.0, 6.0, 1), (5.0, 6.0, 7.0, 1), (6.0, 7.0, 8.0, 1),
+    (7.0, 8.0, 9.0, 1), (8.0, 9.0, 10.0, 1)
+], ["f1", "f2", "f3", "label"])
+
+assembler = VectorAssembler(inputCols=["f1", "f2", "f3"], outputCol="features")
+data = assembler.transform(data)
+train, test = data.randomSplit([0.8, 0.2], seed=42)
+
+# 1. Random Forest Classifier
+rf = RandomForestClassifier(
+    featuresCol="features",
+    labelCol="label",
+    numTrees=100,            # Number of trees
+    maxDepth=5,              # Max depth per tree
+    maxBins=32,
+    featureSubsetStrategy="auto",  # "auto", "all", "sqrt", "log2"
+    subsamplingRate=1.0,     # Fraction of data for each tree
+    seed=42
+)
+
+rf_model = rf.fit(train)
+print(f"RF Feature Importances: {rf_model.featureImportances}")
+print(f"RF Number of Trees: {rf_model.getNumTrees}")
+
+rf_predictions = rf_model.transform(test)
+
+# 2. Gradient Boosted Trees (GBT)
+gbt = GBTClassifier(
+    featuresCol="features",
+    labelCol="label",
+    maxIter=20,              # Number of boosting iterations
+    maxDepth=5,
+    stepSize=0.1,            # Learning rate
+    subsamplingRate=1.0,
+    seed=42
+)
+
+gbt_model = gbt.fit(train)
+print(f"GBT Feature Importances: {gbt_model.featureImportances}")
+
+gbt_predictions = gbt_model.transform(test)
+
+# Compare models
+evaluator = MulticlassClassificationEvaluator(labelCol="label", metricName="accuracy")
+
+print(f"Random Forest Accuracy: {evaluator.evaluate(rf_predictions)}")
+print(f"GBT Accuracy: {evaluator.evaluate(gbt_predictions)}")
+
+# Get individual tree predictions (Random Forest)
+for i, tree in enumerate(rf_model.trees[:3]):  # First 3 trees
+    print(f"Tree {i} depth: {tree.depth}")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="multiclass" class="tab-content">
+                    <h3>Multiclass Classification</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler, StringIndexer
+from pyspark.ml.classification import (
+    LogisticRegression, RandomForestClassifier,
+    NaiveBayes, MultilayerPerceptronClassifier
+)
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+
+spark = SparkSession.builder.appName("MulticlassClassification").getOrCreate()
+
+# Multiclass data (3 classes)
+data = spark.createDataFrame([
+    (1.0, 1.0, "A"), (1.5, 1.5, "A"), (2.0, 2.0, "A"),
+    (3.0, 1.0, "B"), (3.5, 1.5, "B"), (4.0, 2.0, "B"),
+    (2.0, 4.0, "C"), (2.5, 4.5, "C"), (3.0, 5.0, "C")
+], ["f1", "f2", "label_str"])
+
+# Index labels
+indexer = StringIndexer(inputCol="label_str", outputCol="label")
+data = indexer.fit(data).transform(data)
+
+assembler = VectorAssembler(inputCols=["f1", "f2"], outputCol="features")
+data = assembler.transform(data)
+train, test = data.randomSplit([0.8, 0.2], seed=42)
+
+# 1. Multinomial Logistic Regression
+lr = LogisticRegression(
+    featuresCol="features",
+    labelCol="label",
+    family="multinomial"  # For multiclass
+)
+lr_model = lr.fit(train)
+print(f"LR Coefficient Matrix:\n{lr_model.coefficientMatrix}")
+
+# 2. Naive Bayes
+nb = NaiveBayes(
+    featuresCol="features",
+    labelCol="label",
+    modelType="multinomial"  # or "gaussian", "complement"
+)
+nb_model = nb.fit(train)
+
+# 3. Multilayer Perceptron (Neural Network)
+# Input layer size = number of features
+# Output layer size = number of classes
+layers = [2, 5, 4, 3]  # input, hidden1, hidden2, output
+
+mlp = MultilayerPerceptronClassifier(
+    featuresCol="features",
+    labelCol="label",
+    layers=layers,
+    maxIter=100,
+    blockSize=128,
+    seed=42
+)
+mlp_model = mlp.fit(train)
+
+# Evaluate all models
+evaluator = MulticlassClassificationEvaluator(labelCol="label")
+
+models = {
+    "Logistic Regression": lr_model,
+    "Naive Bayes": nb_model,
+    "MLP": mlp_model
+}
+
+for name, model in models.items():
+    predictions = model.transform(test)
+    accuracy = evaluator.evaluate(predictions, {evaluator.metricName: "accuracy"})
+    f1 = evaluator.evaluate(predictions, {evaluator.metricName: "f1"})
+    print(f"{name} - Accuracy: {accuracy:.4f}, F1: {f1:.4f}")
+
+# Confusion matrix
+from pyspark.mllib.evaluation import MulticlassMetrics
+
+predictions = lr_model.transform(test)
+predictionAndLabels = predictions.select("prediction", "label").rdd.map(lambda x: (float(x[0]), float(x[1])))
+metrics = MulticlassMetrics(predictionAndLabels)
+print(f"Confusion Matrix:\n{metrics.confusionMatrix().toArray()}")</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../02_feature_engineering/index.html" style="color: var(--text-muted);">&larr; Previous: Feature Engineering</a>
+                <a href="../04_regression/index.html" style="color: var(--accent-primary);">Next: Regression &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showClassificationVisualization();
+        });
+        
+        function showClassificationVisualization() {
+            viz.clear();
+            
+            // Class 0 points
+            viz.createDataNode({ type: 'sphere', size: 0.2, color: 0x4dabf7, position: { x: -1.5, y: 0.2, z: -0.5 } });
+            viz.createDataNode({ type: 'sphere', size: 0.2, color: 0x4dabf7, position: { x: -1, y: 0.2, z: 0 } });
+            viz.createDataNode({ type: 'sphere', size: 0.2, color: 0x4dabf7, position: { x: -1.2, y: 0.2, z: 0.5 } });
+            
+            // Class 1 points
+            viz.createDataNode({ type: 'sphere', size: 0.2, color: 0xff6b6b, position: { x: 1.5, y: 0.2, z: -0.5 } });
+            viz.createDataNode({ type: 'sphere', size: 0.2, color: 0xff6b6b, position: { x: 1, y: 0.2, z: 0 } });
+            viz.createDataNode({ type: 'sphere', size: 0.2, color: 0xff6b6b, position: { x: 1.2, y: 0.2, z: 0.5 } });
+            
+            viz.createLabel('Class 0', { x: -1.2, y: 0.8, z: 0 });
+            viz.createLabel('Class 1', { x: 1.2, y: 0.8, z: 0 });
+            
+            viz.createGrid(5, 5);
+        }
+    </script>
+</body>
+</html>

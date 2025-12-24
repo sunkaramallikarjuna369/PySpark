@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Model Evaluation - PySpark ML</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pyspark_ml" class="nav-link active">PySpark ML</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Model Evaluation</h1>
+            <p>Evaluate machine learning models using various metrics and cross-validation techniques in PySpark ML.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Evaluation Methods</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="binary">Binary Classification</button>
+                <button class="tab" data-tab="multiclass">Multiclass Classification</button>
+                <button class="tab" data-tab="regression">Regression Metrics</button>
+                <button class="tab" data-tab="crossval">Cross-Validation</button>
+            </div>
+            <div class="tab-contents">
+                <div id="binary" class="tab-content active">
+                    <h3>Binary Classification Metrics</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.evaluation import BinaryClassificationEvaluator
+from pyspark.mllib.evaluation import BinaryClassificationMetrics
+
+spark = SparkSession.builder.appName("BinaryEvaluation").getOrCreate()
+
+# Sample data
+data = spark.createDataFrame([
+    (1.0, 2.0, 0), (2.0, 3.0, 0), (3.0, 4.0, 0),
+    (4.0, 5.0, 1), (5.0, 6.0, 1), (6.0, 7.0, 1)
+], ["f1", "f2", "label"])
+
+assembler = VectorAssembler(inputCols=["f1", "f2"], outputCol="features")
+data = assembler.transform(data)
+train, test = data.randomSplit([0.8, 0.2], seed=42)
+
+# Train model
+lr = LogisticRegression(featuresCol="features", labelCol="label")
+model = lr.fit(train)
+predictions = model.transform(test)
+
+# BinaryClassificationEvaluator
+evaluator = BinaryClassificationEvaluator(
+    labelCol="label",
+    rawPredictionCol="rawPrediction"
+)
+
+# Area Under ROC
+auc_roc = evaluator.evaluate(predictions, {evaluator.metricName: "areaUnderROC"})
+print(f"Area Under ROC: {auc_roc}")
+
+# Area Under PR (Precision-Recall)
+auc_pr = evaluator.evaluate(predictions, {evaluator.metricName: "areaUnderPR"})
+print(f"Area Under PR: {auc_pr}")
+
+# Detailed metrics using MLlib
+predictionAndLabels = predictions.select("probability", "label").rdd.map(
+    lambda row: (float(row["probability"][1]), float(row["label"]))
+)
+metrics = BinaryClassificationMetrics(predictionAndLabels)
+
+# ROC curve points
+print("\nROC Curve Points:")
+for point in metrics.roc().collect()[:5]:
+    print(f"  FPR: {point[0]:.4f}, TPR: {point[1]:.4f}")
+
+# PR curve points
+print("\nPR Curve Points:")
+for point in metrics.pr().collect()[:5]:
+    print(f"  Recall: {point[0]:.4f}, Precision: {point[1]:.4f}")
+
+# Thresholds
+print(f"\nThresholds by F-Measure:")
+for t in metrics.fMeasureByThreshold().collect()[:5]:
+    print(f"  Threshold: {t[0]:.4f}, F1: {t[1]:.4f}")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="multiclass" class="tab-content">
+                    <h3>Multiclass Classification Metrics</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.classification import RandomForestClassifier
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+from pyspark.mllib.evaluation import MulticlassMetrics
+
+spark = SparkSession.builder.appName("MulticlassEvaluation").getOrCreate()
+
+# Sample multiclass data
+data = spark.createDataFrame([
+    (1.0, 1.0, 0), (1.5, 1.5, 0), (2.0, 2.0, 0),
+    (3.0, 1.0, 1), (3.5, 1.5, 1), (4.0, 2.0, 1),
+    (2.0, 4.0, 2), (2.5, 4.5, 2), (3.0, 5.0, 2)
+], ["f1", "f2", "label"])
+
+assembler = VectorAssembler(inputCols=["f1", "f2"], outputCol="features")
+data = assembler.transform(data)
+train, test = data.randomSplit([0.8, 0.2], seed=42)
+
+# Train model
+rf = RandomForestClassifier(featuresCol="features", labelCol="label", numTrees=10)
+model = rf.fit(train)
+predictions = model.transform(test)
+
+# MulticlassClassificationEvaluator
+evaluator = MulticlassClassificationEvaluator(
+    labelCol="label",
+    predictionCol="prediction"
+)
+
+# Various metrics
+accuracy = evaluator.evaluate(predictions, {evaluator.metricName: "accuracy"})
+f1 = evaluator.evaluate(predictions, {evaluator.metricName: "f1"})
+precision = evaluator.evaluate(predictions, {evaluator.metricName: "weightedPrecision"})
+recall = evaluator.evaluate(predictions, {evaluator.metricName: "weightedRecall"})
+
+print(f"Accuracy: {accuracy}")
+print(f"F1 Score: {f1}")
+print(f"Weighted Precision: {precision}")
+print(f"Weighted Recall: {recall}")
+
+# Detailed metrics using MLlib
+predictionAndLabels = predictions.select("prediction", "label").rdd.map(
+    lambda row: (float(row["prediction"]), float(row["label"]))
+)
+metrics = MulticlassMetrics(predictionAndLabels)
+
+# Confusion Matrix
+print(f"\nConfusion Matrix:\n{metrics.confusionMatrix().toArray()}")
+
+# Per-class metrics
+labels = [0.0, 1.0, 2.0]
+for label in labels:
+    print(f"\nClass {int(label)}:")
+    print(f"  Precision: {metrics.precision(label):.4f}")
+    print(f"  Recall: {metrics.recall(label):.4f}")
+    print(f"  F1: {metrics.fMeasure(label):.4f}")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="regression" class="tab-content">
+                    <h3>Regression Metrics</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.regression import LinearRegression
+from pyspark.ml.evaluation import RegressionEvaluator
+from pyspark.mllib.evaluation import RegressionMetrics
+
+spark = SparkSession.builder.appName("RegressionEvaluation").getOrCreate()
+
+# Sample data
+data = spark.createDataFrame([
+    (1.0, 2.0, 5.0),
+    (2.0, 3.0, 8.0),
+    (3.0, 4.0, 11.0),
+    (4.0, 5.0, 14.0),
+    (5.0, 6.0, 17.0)
+], ["f1", "f2", "label"])
+
+assembler = VectorAssembler(inputCols=["f1", "f2"], outputCol="features")
+data = assembler.transform(data)
+train, test = data.randomSplit([0.8, 0.2], seed=42)
+
+# Train model
+lr = LinearRegression(featuresCol="features", labelCol="label")
+model = lr.fit(train)
+predictions = model.transform(test)
+
+# RegressionEvaluator
+evaluator = RegressionEvaluator(labelCol="label", predictionCol="prediction")
+
+# Various metrics
+rmse = evaluator.evaluate(predictions, {evaluator.metricName: "rmse"})
+mse = evaluator.evaluate(predictions, {evaluator.metricName: "mse"})
+mae = evaluator.evaluate(predictions, {evaluator.metricName: "mae"})
+r2 = evaluator.evaluate(predictions, {evaluator.metricName: "r2"})
+var = evaluator.evaluate(predictions, {evaluator.metricName: "var"})
+
+print(f"RMSE: {rmse}")
+print(f"MSE: {mse}")
+print(f"MAE: {mae}")
+print(f"R2: {r2}")
+print(f"Explained Variance: {var}")
+
+# Detailed metrics using MLlib
+predictionAndLabels = predictions.select("prediction", "label").rdd.map(
+    lambda row: (float(row["prediction"]), float(row["label"]))
+)
+metrics = RegressionMetrics(predictionAndLabels)
+
+print(f"\nMLlib Metrics:")
+print(f"  Mean Squared Error: {metrics.meanSquaredError}")
+print(f"  Root Mean Squared Error: {metrics.rootMeanSquaredError}")
+print(f"  Mean Absolute Error: {metrics.meanAbsoluteError}")
+print(f"  R-squared: {metrics.r2}")
+print(f"  Explained Variance: {metrics.explainedVariance}")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="crossval" class="tab-content">
+                    <h3>Cross-Validation</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml import Pipeline
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.evaluation import BinaryClassificationEvaluator
+from pyspark.ml.tuning import CrossValidator, ParamGridBuilder, TrainValidationSplit
+
+spark = SparkSession.builder.appName("CrossValidation").getOrCreate()
+
+# Sample data
+data = spark.createDataFrame([
+    (1.0, 2.0, 0), (2.0, 3.0, 0), (3.0, 4.0, 0), (4.0, 5.0, 0),
+    (5.0, 6.0, 1), (6.0, 7.0, 1), (7.0, 8.0, 1), (8.0, 9.0, 1)
+], ["f1", "f2", "label"])
+
+assembler = VectorAssembler(inputCols=["f1", "f2"], outputCol="features")
+lr = LogisticRegression(featuresCol="features", labelCol="label")
+pipeline = Pipeline(stages=[assembler, lr])
+
+# Parameter grid
+paramGrid = ParamGridBuilder() \
+    .addGrid(lr.regParam, [0.01, 0.1, 1.0]) \
+    .addGrid(lr.elasticNetParam, [0.0, 0.5, 1.0]) \
+    .addGrid(lr.maxIter, [10, 50, 100]) \
+    .build()
+
+# Evaluator
+evaluator = BinaryClassificationEvaluator(labelCol="label")
+
+# K-Fold Cross-Validation
+crossval = CrossValidator(
+    estimator=pipeline,
+    estimatorParamMaps=paramGrid,
+    evaluator=evaluator,
+    numFolds=3,
+    parallelism=2,
+    seed=42
+)
+
+# Fit cross-validator
+cv_model = crossval.fit(data)
+
+# Best model
+best_model = cv_model.bestModel
+print(f"Best Model Parameters:")
+print(f"  regParam: {best_model.stages[-1].getRegParam()}")
+print(f"  elasticNetParam: {best_model.stages[-1].getElasticNetParam()}")
+print(f"  maxIter: {best_model.stages[-1].getMaxIter()}")
+
+# Cross-validation metrics
+print(f"\nAverage Metrics per Parameter Combination:")
+for params, metric in zip(paramGrid, cv_model.avgMetrics):
+    print(f"  {params}: {metric:.4f}")
+
+# Train-Validation Split (faster alternative)
+tvs = TrainValidationSplit(
+    estimator=pipeline,
+    estimatorParamMaps=paramGrid,
+    evaluator=evaluator,
+    trainRatio=0.8,
+    parallelism=2,
+    seed=42
+)
+
+tvs_model = tvs.fit(data)
+print(f"\nTrain-Validation Split Best Metric: {max(tvs_model.validationMetrics):.4f}")</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../06_pipelines/index.html" style="color: var(--text-muted);">&larr; Previous: Pipelines</a>
+                <a href="../08_hyperparameter_tuning/index.html" style="color: var(--accent-primary);">Next: Hyperparameter Tuning &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 5, y: 4, z: 5 } });
+            showEvaluationVisualization();
+        });
+        
+        function showEvaluationVisualization() {
+            viz.clear();
+            
+            // Metrics display
+            viz.createDataNode({ type: 'cube', size: 0.4, color: 0x51cf66, position: { x: -1, y: 0.3, z: 0 } });
+            viz.createLabel('Accuracy', { x: -1, y: 0.9, z: 0 });
+            
+            viz.createDataNode({ type: 'cube', size: 0.4, color: 0x4dabf7, position: { x: 0.5, y: 0.3, z: 0 } });
+            viz.createLabel('F1 Score', { x: 0.5, y: 0.9, z: 0 });
+            
+            viz.createDataNode({ type: 'cube', size: 0.4, color: 0xff6b6b, position: { x: 2, y: 0.3, z: 0 } });
+            viz.createLabel('AUC', { x: 2, y: 0.9, z: 0 });
+            
+            viz.createGrid(5, 5);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Z-Ordering - Delta Lake</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#deltalake" class="nav-link active">Delta Lake</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Z-Ordering in Delta Lake</h1>
+            <p>Z-Ordering is a technique to co-locate related data in the same files, enabling data skipping and dramatically improving query performance.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Z-Order Concepts</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="concept">How It Works</button>
+                <button class="tab" data-tab="usage">Usage Examples</button>
+                <button class="tab" data-tab="columns">Column Selection</button>
+                <button class="tab" data-tab="skipping">Data Skipping</button>
+            </div>
+            <div class="tab-contents">
+                <div id="concept" class="tab-content active">
+                    <h3>Understanding Z-Ordering</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("ZOrderConcept") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Z-Ordering uses space-filling curves to map multi-dimensional data
+# to a single dimension while preserving locality
+
+# Without Z-ORDER: Data is randomly distributed across files
+# - Query for user_id='U123' may need to scan ALL files
+# - No data skipping possible
+
+# With Z-ORDER: Related data is co-located
+# - Query for user_id='U123' scans only relevant files
+# - Delta Lake tracks min/max values per file for skipping
+
+# Example: Events table with user_id and event_type
+# Before Z-ORDER:
+# File 1: user_ids [U001, U500, U999], event_types [click, view, purchase]
+# File 2: user_ids [U002, U501, U998], event_types [click, view, purchase]
+# Query WHERE user_id = 'U001' -> scans both files
+
+# After Z-ORDER BY (user_id):
+# File 1: user_ids [U001-U333], event_types [mixed]
+# File 2: user_ids [U334-U666], event_types [mixed]
+# File 3: user_ids [U667-U999], event_types [mixed]
+# Query WHERE user_id = 'U001' -> scans only File 1!
+
+# Z-ORDER on multiple columns creates multi-dimensional clustering
+# After Z-ORDER BY (user_id, event_type):
+# Files are organized so queries on EITHER column benefit
+
+# View file statistics (min/max values used for skipping)
+spark.sql("""
+    DESCRIBE DETAIL delta.`/data/delta/events`
+""").show(truncate=False)
+
+# Check data skipping effectiveness
+spark.conf.set("spark.databricks.delta.stats.collect", "true")
+df = spark.read.format("delta").load("/data/delta/events")
+df.filter("user_id = 'U12345'").explain(True)
+# Look for "files pruned" in the execution plan</code></pre>
+                    </div>
+                </div>
+                
+                <div id="usage" class="tab-content">
+                    <h3>Z-ORDER Usage Examples</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
+
+spark = SparkSession.builder \
+    .appName("ZOrderUsage") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Basic Z-ORDER on single column
+spark.sql("""
+    OPTIMIZE delta.`/data/delta/events`
+    ZORDER BY (user_id)
+""")
+
+# Z-ORDER on multiple columns
+spark.sql("""
+    OPTIMIZE delta.`/data/delta/events`
+    ZORDER BY (user_id, event_type, product_id)
+""")
+
+# Z-ORDER specific partitions only
+spark.sql("""
+    OPTIMIZE delta.`/data/delta/events`
+    WHERE event_date >= '2024-01-01' AND event_date < '2024-02-01'
+    ZORDER BY (user_id)
+""")
+
+# Using Python API
+delta_table = DeltaTable.forPath(spark, "/data/delta/events")
+
+# Z-ORDER entire table
+delta_table.optimize().executeZOrderBy("user_id")
+
+# Z-ORDER with partition filter
+delta_table.optimize() \
+    .where("event_date = '2024-01-15'") \
+    .executeZOrderBy("user_id", "event_type")
+
+# Incremental Z-ORDER (only new data)
+# Delta Lake automatically tracks which files need optimization
+delta_table.optimize() \
+    .where("event_date >= current_date() - interval 7 days") \
+    .executeZOrderBy("user_id")
+
+# Schedule regular Z-ORDER maintenance
+# Example: Daily job to Z-ORDER yesterday's partition
+from datetime import datetime, timedelta
+yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+spark.sql(f"""
+    OPTIMIZE delta.`/data/delta/events`
+    WHERE event_date = '{yesterday}'
+    ZORDER BY (user_id, event_type)
+""")
+
+# Verify Z-ORDER results
+history = delta_table.history(5)
+history.filter("operation = 'OPTIMIZE'").select(
+    "version", "timestamp", "operationParameters", "operationMetrics"
+).show(truncate=False)</code></pre>
+                    </div>
+                </div>
+                
+                <div id="columns" class="tab-content">
+                    <h3>Choosing Z-ORDER Columns</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, countDistinct
+
+spark = SparkSession.builder \
+    .appName("ZOrderColumnSelection") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# GOOD candidates for Z-ORDER:
+# 1. High cardinality columns (many distinct values)
+# 2. Columns frequently used in WHERE clauses
+# 3. Columns used in JOIN conditions
+# 4. NOT partition columns (already clustered)
+
+# Analyze column cardinality
+df = spark.read.format("delta").load("/data/delta/events")
+
+cardinality = df.agg(
+    countDistinct("user_id").alias("user_id_cardinality"),
+    countDistinct("event_type").alias("event_type_cardinality"),
+    countDistinct("product_id").alias("product_id_cardinality"),
+    countDistinct("region").alias("region_cardinality")
+)
+cardinality.show()
+
+# Rule of thumb:
+# - Cardinality > 1000: Good for Z-ORDER
+# - Cardinality < 100: Better for partitioning
+# - Cardinality 100-1000: Could use either
+
+# Analyze query patterns to identify frequently filtered columns
+# Example: If most queries filter by user_id and event_type
+# Z-ORDER BY (user_id, event_type)
+
+# Column order matters!
+# First column gets most benefit, effectiveness decreases for later columns
+# Put most frequently queried column first
+
+# BAD choices for Z-ORDER:
+# - Partition columns (already clustered by partition)
+# - Low cardinality columns (use partitioning instead)
+# - Columns rarely used in filters
+# - More than 4 columns (diminishing returns)
+
+# Example: Events table analysis
+# Partition by: event_date (low cardinality, time-based queries)
+# Z-ORDER by: user_id, event_type (high cardinality, frequent filters)
+
+spark.sql("""
+    OPTIMIZE delta.`/data/delta/events`
+    WHERE event_date = '2024-01-15'
+    ZORDER BY (user_id, event_type)
+""")
+
+# Don't Z-ORDER by partition column!
+# BAD: ZORDER BY (event_date, user_id) -- event_date is partition column
+# GOOD: ZORDER BY (user_id, event_type) -- non-partition columns only</code></pre>
+                    </div>
+                </div>
+                
+                <div id="skipping" class="tab-content">
+                    <h3>Data Skipping Statistics</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
+
+spark = SparkSession.builder \
+    .appName("DataSkipping") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# Delta Lake automatically collects statistics for data skipping
+# Stats include: min, max, null count for each column
+
+# Enable statistics collection (enabled by default)
+spark.conf.set("spark.databricks.delta.stats.collect", "true")
+
+# Configure number of columns to collect stats for
+spark.conf.set("spark.databricks.delta.stats.skipping.numIndexedCols", "32")
+
+# View file-level statistics
+spark.sql("""
+    SELECT 
+        path,
+        stats:numRecords as num_records,
+        stats:minValues:user_id as min_user_id,
+        stats:maxValues:user_id as max_user_id
+    FROM (
+        SELECT path, stats 
+        FROM delta.`/data/delta/events/_delta_log`
+        WHERE path IS NOT NULL
+    )
+""").show(truncate=False)
+
+# Check data skipping effectiveness
+# Run query and check execution plan
+df = spark.read.format("delta").load("/data/delta/events")
+query = df.filter("user_id = 'U12345'")
+
+# Enable detailed explain
+query.explain(mode="extended")
+# Look for:
+# - "files read" vs "files pruned"
+# - "partitions read" vs "partitions pruned"
+
+# Measure data skipping improvement
+def measure_skipping(table_path, filter_condition):
+    """Measure files scanned with and without filter"""
+    df = spark.read.format("delta").load(table_path)
+    
+    # Get total files
+    detail = spark.sql(f"DESCRIBE DETAIL delta.`{table_path}`")
+    total_files = detail.select("numFiles").collect()[0][0]
+    
+    # Run filtered query and check metrics
+    filtered = df.filter(filter_condition)
+    filtered.count()  # Trigger execution
+    
+    # Check Spark UI or use explain for actual files scanned
+    print(f"Total files: {total_files}")
+    print(f"Filter: {filter_condition}")
+    filtered.explain(True)
+
+measure_skipping("/data/delta/events", "user_id = 'U12345'")
+
+# After Z-ORDER, data skipping should be much more effective
+spark.sql("OPTIMIZE delta.`/data/delta/events` ZORDER BY (user_id)")
+measure_skipping("/data/delta/events", "user_id = 'U12345'")</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../06_optimize_vacuum/index.html" style="color: var(--text-muted);">&larr; Previous: Optimize & Vacuum</a>
+                <a href="../08_change_data_feed/index.html" style="color: var(--accent-primary);">Next: Change Data Feed &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 5, z: 6 } });
+            showZOrderVisualization();
+        });
+        
+        function showZOrderVisualization() {
+            viz.clear();
+            
+            // Z-curve pattern visualization
+            const colors = [0xff6b6b, 0x4dabf7, 0x51cf66, 0xffd43b];
+            const positions = [
+                [-1, 0, -1], [-0.5, 0, -1], [-1, 0, -0.5], [-0.5, 0, -0.5],
+                [0, 0, -1], [0.5, 0, -1], [0, 0, -0.5], [0.5, 0, -0.5]
+            ];
+            
+            positions.forEach((pos, i) => {
+                viz.createDataNode({ 
+                    type: 'cube', 
+                    size: 0.25, 
+                    color: colors[Math.floor(i / 2) % 4], 
+                    position: { x: pos[0], y: 0.2, z: pos[2] } 
+                });
+            });
+            
+            viz.createLabel('Z-Order Clustering', { x: 0, y: 1, z: 0 });
+            viz.createGrid(4, 4);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Model Persistence - PySpark ML</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#pyspark_ml" class="nav-link active">PySpark ML</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Model Persistence</h1>
+            <p>Save, load, and manage machine learning models and pipelines for production deployment.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Persistence Methods</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="save">Save Models</button>
+                <button class="tab" data-tab="load">Load Models</button>
+                <button class="tab" data-tab="versioning">Model Versioning</button>
+                <button class="tab" data-tab="registry">Model Registry</button>
+            </div>
+            <div class="tab-contents">
+                <div id="save" class="tab-content active">
+                    <h3>Saving Models and Pipelines</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml import Pipeline
+from pyspark.ml.feature import VectorAssembler, StandardScaler
+from pyspark.ml.classification import LogisticRegression, RandomForestClassifier
+
+spark = SparkSession.builder.appName("SaveModels").getOrCreate()
+
+# Sample data
+data = spark.createDataFrame([
+    (1.0, 2.0, 0), (2.0, 3.0, 0),
+    (3.0, 4.0, 1), (4.0, 5.0, 1)
+], ["f1", "f2", "label"])
+
+# Create and train pipeline
+assembler = VectorAssembler(inputCols=["f1", "f2"], outputCol="raw_features")
+scaler = StandardScaler(inputCol="raw_features", outputCol="features")
+lr = LogisticRegression(featuresCol="features", labelCol="label")
+
+pipeline = Pipeline(stages=[assembler, scaler, lr])
+model = pipeline.fit(data)
+
+# 1. Save fitted PipelineModel
+model.write().overwrite().save("/models/pipeline_model")
+
+# 2. Save unfitted Pipeline (for retraining)
+pipeline.write().overwrite().save("/models/pipeline_unfitted")
+
+# 3. Save individual model
+lr_model = model.stages[-1]
+lr_model.write().overwrite().save("/models/lr_model")
+
+# 4. Save to cloud storage
+model.write().overwrite().save("s3://bucket/models/pipeline_model")
+model.write().overwrite().save("gs://bucket/models/pipeline_model")
+model.write().overwrite().save("abfss://container@account.dfs.core.windows.net/models/pipeline_model")
+
+# 5. Save with metadata
+import json
+from datetime import datetime
+
+metadata = {
+    "model_name": "customer_churn_predictor",
+    "version": "1.0.0",
+    "created_at": datetime.now().isoformat(),
+    "metrics": {"accuracy": 0.95, "f1": 0.93},
+    "features": ["f1", "f2"],
+    "author": "data_team"
+}
+
+# Save metadata alongside model
+spark.sparkContext.parallelize([json.dumps(metadata)]).saveAsTextFile("/models/pipeline_model/metadata")
+
+# 6. Save transformer separately
+scaler_model = model.stages[1]
+scaler_model.write().overwrite().save("/models/scaler_model")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="load" class="tab-content">
+                    <h3>Loading Models and Pipelines</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml import Pipeline, PipelineModel
+from pyspark.ml.classification import LogisticRegressionModel, RandomForestClassificationModel
+from pyspark.ml.feature import StandardScalerModel
+
+spark = SparkSession.builder.appName("LoadModels").getOrCreate()
+
+# 1. Load fitted PipelineModel
+loaded_model = PipelineModel.load("/models/pipeline_model")
+
+# 2. Load unfitted Pipeline
+loaded_pipeline = Pipeline.load("/models/pipeline_unfitted")
+
+# 3. Load individual model
+loaded_lr = LogisticRegressionModel.load("/models/lr_model")
+
+# 4. Load from cloud storage
+cloud_model = PipelineModel.load("s3://bucket/models/pipeline_model")
+
+# 5. Use loaded model for predictions
+new_data = spark.createDataFrame([
+    (5.0, 6.0), (6.0, 7.0)
+], ["f1", "f2"])
+
+predictions = loaded_model.transform(new_data)
+predictions.show()
+
+# 6. Access individual stages from loaded pipeline
+print(f"Number of stages: {len(loaded_model.stages)}")
+for i, stage in enumerate(loaded_model.stages):
+    print(f"Stage {i}: {type(stage).__name__}")
+
+# 7. Retrain loaded pipeline on new data
+new_training_data = spark.createDataFrame([
+    (1.0, 2.0, 0), (2.0, 3.0, 0),
+    (3.0, 4.0, 1), (4.0, 5.0, 1),
+    (5.0, 6.0, 1), (6.0, 7.0, 1)
+], ["f1", "f2", "label"])
+
+retrained_model = loaded_pipeline.fit(new_training_data)
+
+# 8. Load and inspect model parameters
+lr_model = loaded_model.stages[-1]
+print(f"Coefficients: {lr_model.coefficients}")
+print(f"Intercept: {lr_model.intercept}")
+
+# 9. Load scaler and apply to new data
+loaded_scaler = StandardScalerModel.load("/models/scaler_model")
+print(f"Scaler mean: {loaded_scaler.mean}")
+print(f"Scaler std: {loaded_scaler.std}")</code></pre>
+                    </div>
+                </div>
+                
+                <div id="versioning" class="tab-content">
+                    <h3>Model Versioning</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml import Pipeline, PipelineModel
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.classification import LogisticRegression
+from datetime import datetime
+import json
+
+spark = SparkSession.builder.appName("ModelVersioning").getOrCreate()
+
+class ModelVersionManager:
+    """Simple model versioning system"""
+    
+    def __init__(self, base_path):
+        self.base_path = base_path
+    
+    def save_model(self, model, name, version, metrics=None):
+        """Save model with version"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        model_path = f"{self.base_path}/{name}/v{version}_{timestamp}"
+        
+        # Save model
+        model.write().overwrite().save(model_path)
+        
+        # Save metadata
+        metadata = {
+            "name": name,
+            "version": version,
+            "timestamp": timestamp,
+            "path": model_path,
+            "metrics": metrics or {}
+        }
+        
+        metadata_path = f"{model_path}/version_metadata.json"
+        spark.sparkContext.parallelize([json.dumps(metadata)]).coalesce(1).saveAsTextFile(metadata_path)
+        
+        print(f"Saved model to: {model_path}")
+        return model_path
+    
+    def load_model(self, name, version=None):
+        """Load model by name and optional version"""
+        import os
+        
+        model_dir = f"{self.base_path}/{name}"
+        
+        if version:
+            # Load specific version
+            versions = spark.sparkContext.wholeTextFiles(f"{model_dir}/v{version}_*").collect()
+            if versions:
+                model_path = versions[0][0].rsplit("/", 1)[0]
+        else:
+            # Load latest version
+            # In production, use proper file listing
+            model_path = f"{model_dir}/latest"
+        
+        return PipelineModel.load(model_path)
+    
+    def list_versions(self, name):
+        """List all versions of a model"""
+        # Implementation depends on storage system
+        pass
+
+# Usage
+version_manager = ModelVersionManager("/models/versioned")
+
+# Train model
+data = spark.createDataFrame([
+    (1.0, 2.0, 0), (2.0, 3.0, 0),
+    (3.0, 4.0, 1), (4.0, 5.0, 1)
+], ["f1", "f2", "label"])
+
+assembler = VectorAssembler(inputCols=["f1", "f2"], outputCol="features")
+lr = LogisticRegression(featuresCol="features", labelCol="label")
+pipeline = Pipeline(stages=[assembler, lr])
+model = pipeline.fit(data)
+
+# Save with version
+metrics = {"accuracy": 0.95, "f1": 0.93}
+version_manager.save_model(model, "churn_predictor", "1.0.0", metrics)
+
+# Save new version
+version_manager.save_model(model, "churn_predictor", "1.0.1", {"accuracy": 0.96})</code></pre>
+                    </div>
+                </div>
+                
+                <div id="registry" class="tab-content">
+                    <h3>Model Registry Pattern</h3>
+                    <div class="code-container">
+                        <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.ml import PipelineModel
+from pyspark.sql.functions import col, max as spark_max
+from datetime import datetime
+import json
+
+spark = SparkSession.builder.appName("ModelRegistry").getOrCreate()
+
+class ModelRegistry:
+    """Delta Lake-based model registry"""
+    
+    def __init__(self, registry_path):
+        self.registry_path = registry_path
+        self.metadata_table = f"{registry_path}/model_metadata"
+    
+    def register_model(self, model, name, version, stage="staging", metrics=None):
+        """Register a model in the registry"""
+        timestamp = datetime.now().isoformat()
+        model_path = f"{self.registry_path}/models/{name}/{version}"
+        
+        # Save model
+        model.write().overwrite().save(model_path)
+        
+        # Create metadata record
+        metadata = spark.createDataFrame([{
+            "name": name,
+            "version": version,
+            "stage": stage,
+            "model_path": model_path,
+            "created_at": timestamp,
+            "metrics": json.dumps(metrics or {})
+        }])
+        
+        # Append to registry (Delta Lake)
+        metadata.write.format("delta") \
+            .mode("append") \
+            .save(self.metadata_table)
+        
+        print(f"Registered model: {name} v{version} ({stage})")
+        return model_path
+    
+    def transition_stage(self, name, version, new_stage):
+        """Transition model to new stage (staging -> production)"""
+        from delta.tables import DeltaTable
+        
+        registry = DeltaTable.forPath(spark, self.metadata_table)
+        
+        # Archive current production model
+        if new_stage == "production":
+            registry.update(
+                condition=f"name = '{name}' AND stage = 'production'",
+                set={"stage": "'archived'"}
+            )
+        
+        # Update target model stage
+        registry.update(
+            condition=f"name = '{name}' AND version = '{version}'",
+            set={"stage": f"'{new_stage}'"}
+        )
+        
+        print(f"Transitioned {name} v{version} to {new_stage}")
+    
+    def get_model(self, name, stage="production"):
+        """Get model by name and stage"""
+        metadata = spark.read.format("delta").load(self.metadata_table)
+        
+        model_info = metadata.filter(
+            (col("name") == name) & (col("stage") == stage)
+        ).orderBy(col("created_at").desc()).first()
+        
+        if model_info:
+            return PipelineModel.load(model_info["model_path"])
+        return None
+    
+    def list_models(self, name=None):
+        """List all registered models"""
+        metadata = spark.read.format("delta").load(self.metadata_table)
+        
+        if name:
+            metadata = metadata.filter(col("name") == name)
+        
+        return metadata.orderBy("name", "version")
+    
+    def get_latest_version(self, name):
+        """Get latest version number for a model"""
+        metadata = spark.read.format("delta").load(self.metadata_table)
+        
+        latest = metadata.filter(col("name") == name) \
+            .agg(spark_max("version").alias("latest_version")) \
+            .first()
+        
+        return latest["latest_version"] if latest else None
+
+# Usage
+registry = ModelRegistry("/data/model_registry")
+
+# Register models
+registry.register_model(model, "churn_predictor", "1.0.0", "staging", {"accuracy": 0.95})
+registry.register_model(model, "churn_predictor", "1.0.1", "staging", {"accuracy": 0.96})
+
+# Promote to production
+registry.transition_stage("churn_predictor", "1.0.1", "production")
+
+# Load production model
+prod_model = registry.get_model("churn_predictor", "production")</code></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../10_nlp/index.html" style="color: var(--text-muted);">&larr; Previous: NLP</a>
+                <a href="../12_best_practices/index.html" style="color: var(--accent-primary);">Next: Best Practices &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showPersistenceVisualization();
+        });
+        
+        function showPersistenceVisualization() {
+            viz.clear();
+            
+            // Model
+            viz.createDataNode({ type: 'sphere', size: 0.4, color: 0x4dabf7, position: { x: -1.5, y: 0.4, z: 0 } });
+            viz.createLabel('Model', { x: -1.5, y: 1, z: 0 });
+            
+            // Save arrow
+            viz.createArrow({ x: -0.9, y: 0.4, z: 0 }, { x: 0.9, y: 0.4, z: 0 }, { color: 0x51cf66 });
+            viz.createLabel('Save/Load', { x: 0, y: 0.8, z: 0 });
+            
+            // Storage
+            viz.createDataNode({ type: 'cube', size: 0.4, color: 0xff6b6b, position: { x: 1.5, y: 0.3, z: 0 } });
+            viz.createLabel('Storage', { x: 1.5, y: 1, z: 0 });
+            
+            viz.createGrid(5, 5);
+        }
+    </script>
+</body>
+</html>
