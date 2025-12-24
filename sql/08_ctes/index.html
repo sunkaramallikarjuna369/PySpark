@@ -17,7 +17,7 @@
     <main class="container">
         <section class="section">
             <h1>CTEs (Common Table Expressions)</h1>
-            <p>CTEs provide a way to write auxiliary statements for use in a larger query. They improve readability and can be referenced multiple times.</p>
+            <p>CTEs provide a way to write auxiliary statements for use in a larger query. Learn CTEs using standard SQL, PySpark DataFrame API, and PySpark SQL.</p>
             <div id="visualization" class="visualization-container"></div>
             <div class="visualization-controls">
                 <button class="viz-btn" onclick="showCTE()">Basic CTE</button>
@@ -25,54 +25,24 @@
             </div>
             <h2>Code Examples</h2>
             <div class="tabs">
-                <button class="tab active" data-tab="basic">Basic CTE</button>
-                <button class="tab" data-tab="multiple">Multiple CTEs</button>
-                <button class="tab" data-tab="recursive">Recursive CTE</button>
+                <button class="tab active" data-tab="sql">Standard SQL</button>
+                <button class="tab" data-tab="pyspark-df">PySpark DataFrame</button>
+                <button class="tab" data-tab="pyspark-sql">PySpark SQL</button>
+                <button class="tab" data-tab="comparison">Side-by-Side</button>
             </div>
             <div class="tab-contents">
-                <div id="basic" class="tab-content active">
+                <div id="sql" class="tab-content active">
                     <div class="code-container">
                         <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
 <pre>-- Basic CTE
 WITH dept_stats AS (
-    SELECT 
-        department_id,
-        COUNT(*) AS emp_count,
-        AVG(salary) AS avg_salary
-    FROM employees
-    GROUP BY department_id
+    SELECT department_id, COUNT(*) AS emp_count, AVG(salary) AS avg_salary
+    FROM employees GROUP BY department_id
 )
 SELECT * FROM dept_stats WHERE avg_salary > 50000;
 
--- CTE with join
-WITH high_earners AS (
-    SELECT * FROM employees WHERE salary > 60000
-)
-SELECT h.first_name, d.department_name
-FROM high_earners h
-JOIN departments d ON h.department_id = d.department_id;
-
--- CTE referenced multiple times
-WITH dept_avg AS (
-    SELECT department_id, AVG(salary) AS avg_sal
-    FROM employees GROUP BY department_id
-)
-SELECT 
-    e.first_name,
-    e.salary,
-    d.avg_sal,
-    e.salary - d.avg_sal AS diff_from_avg
-FROM employees e
-JOIN dept_avg d ON e.department_id = d.department_id;</pre>
-                        </div>
-                    </div>
-                </div>
-                <div id="multiple" class="tab-content">
-                    <div class="code-container">
-                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
-                        <div class="code-block">
-<pre>-- Multiple CTEs
+-- Multiple CTEs
 WITH 
 dept_stats AS (
     SELECT department_id, AVG(salary) AS avg_salary
@@ -80,83 +50,169 @@ dept_stats AS (
 ),
 high_paying_depts AS (
     SELECT department_id FROM dept_stats WHERE avg_salary > 60000
-),
-employees_in_high_paying AS (
-    SELECT e.* FROM employees e
-    WHERE e.department_id IN (SELECT department_id FROM high_paying_depts)
 )
-SELECT * FROM employees_in_high_paying;
+SELECT * FROM high_paying_depts;
 
--- CTEs referencing each other
-WITH 
-base_data AS (
-    SELECT department_id, salary FROM employees
-),
-dept_totals AS (
-    SELECT department_id, SUM(salary) AS total
-    FROM base_data GROUP BY department_id
-),
-ranked_depts AS (
-    SELECT *, RANK() OVER (ORDER BY total DESC) AS rank
-    FROM dept_totals
+-- CTE referenced multiple times
+WITH dept_avg AS (
+    SELECT department_id, AVG(salary) AS avg_sal
+    FROM employees GROUP BY department_id
 )
-SELECT * FROM ranked_depts WHERE rank <= 3;
-
--- CTE with INSERT (some databases)
-WITH new_employees AS (
-    SELECT 'John' AS name, 50000 AS salary
-)
-INSERT INTO employees (name, salary)
-SELECT name, salary FROM new_employees;</pre>
+SELECT e.first_name, e.salary, d.avg_sal
+FROM employees e JOIN dept_avg d ON e.department_id = d.department_id;</pre>
                         </div>
                     </div>
                 </div>
-                <div id="recursive" class="tab-content">
+                <div id="pyspark-df" class="tab-content">
                     <div class="code-container">
-                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-header"><span class="code-language">Python (PySpark DataFrame API)</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
-<pre>-- Recursive CTE for hierarchical data
-WITH RECURSIVE org_hierarchy AS (
-    -- Base case: top-level managers
-    SELECT employee_id, first_name, manager_id, 1 AS level
-    FROM employees
-    WHERE manager_id IS NULL
-    
-    UNION ALL
-    
-    -- Recursive case: employees with managers
-    SELECT e.employee_id, e.first_name, e.manager_id, h.level + 1
-    FROM employees e
-    JOIN org_hierarchy h ON e.manager_id = h.employee_id
-)
-SELECT * FROM org_hierarchy ORDER BY level, employee_id;
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, count, avg, sum
 
--- Recursive CTE for number series
-WITH RECURSIVE numbers AS (
-    SELECT 1 AS n
-    UNION ALL
-    SELECT n + 1 FROM numbers WHERE n < 10
-)
-SELECT * FROM numbers;
+spark = SparkSession.builder.appName("CTEs").getOrCreate()
 
--- Recursive CTE for path finding
-WITH RECURSIVE paths AS (
-    SELECT source, destination, distance, 
-           ARRAY[source] AS path
-    FROM routes WHERE source = 'A'
-    
-    UNION ALL
-    
-    SELECT r.source, r.destination, p.distance + r.distance,
-           p.path || r.destination
-    FROM routes r
-    JOIN paths p ON r.source = p.destination
-    WHERE NOT r.destination = ANY(p.path)
+# Create sample DataFrame
+data = [
+    (1, "Alice", 50000, 10), (2, "Bob", 60000, 10),
+    (3, "Charlie", 75000, 20), (4, "Diana", 55000, 20)
+]
+df = spark.createDataFrame(data, ["id", "name", "salary", "dept_id"])
+
+# CTE equivalent - create intermediate DataFrames
+# Basic CTE: dept_stats
+dept_stats = df.groupBy("dept_id").agg(
+    count("*").alias("emp_count"),
+    avg("salary").alias("avg_salary")
 )
-SELECT * FROM paths WHERE destination = 'Z';</pre>
+dept_stats.filter(col("avg_salary") > 50000).show()
+
+# Multiple CTEs equivalent - chain transformations
+# CTE 1: dept_stats
+dept_stats = df.groupBy("dept_id").agg(avg("salary").alias("avg_salary"))
+# CTE 2: high_paying_depts (references dept_stats)
+high_paying_depts = dept_stats.filter(col("avg_salary") > 55000).select("dept_id")
+high_paying_depts.show()
+
+# CTE referenced multiple times
+dept_avg = df.groupBy("dept_id").agg(avg("salary").alias("avg_sal"))
+# Use the same DataFrame multiple times
+df.join(dept_avg, "dept_id") \
+  .select("name", "salary", "avg_sal") \
+  .withColumn("diff", col("salary") - col("avg_sal")).show()
+
+# Cache for reuse (like CTE optimization)
+dept_avg.cache()
+result1 = df.join(dept_avg, "dept_id").filter(col("salary") > col("avg_sal"))
+result2 = df.join(dept_avg, "dept_id").filter(col("salary") < col("avg_sal"))
+result1.show()
+result2.show()
+dept_avg.unpersist()</pre>
                         </div>
                     </div>
                 </div>
+                <div id="pyspark-sql" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (PySpark SQL)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("CTEs").getOrCreate()
+
+# Create and register temp view
+data = [
+    (1, "Alice", 50000, 10), (2, "Bob", 60000, 10),
+    (3, "Charlie", 75000, 20), (4, "Diana", 55000, 20)
+]
+df = spark.createDataFrame(data, ["id", "name", "salary", "dept_id"])
+df.createOrReplaceTempView("employees")
+
+# Basic CTE
+spark.sql("""
+    WITH dept_stats AS (
+        SELECT dept_id, COUNT(*) AS emp_count, AVG(salary) AS avg_salary
+        FROM employees GROUP BY dept_id
+    )
+    SELECT * FROM dept_stats WHERE avg_salary > 50000
+""").show()
+
+# Multiple CTEs
+spark.sql("""
+    WITH 
+    dept_stats AS (
+        SELECT dept_id, AVG(salary) AS avg_salary
+        FROM employees GROUP BY dept_id
+    ),
+    high_paying_depts AS (
+        SELECT dept_id FROM dept_stats WHERE avg_salary > 55000
+    )
+    SELECT * FROM high_paying_depts
+""").show()
+
+# CTE referenced multiple times
+spark.sql("""
+    WITH dept_avg AS (
+        SELECT dept_id, AVG(salary) AS avg_sal
+        FROM employees GROUP BY dept_id
+    )
+    SELECT e.name, e.salary, d.avg_sal, e.salary - d.avg_sal AS diff
+    FROM employees e
+    JOIN dept_avg d ON e.dept_id = d.dept_id
+""").show()
+
+# CTEs referencing each other
+spark.sql("""
+    WITH 
+    base AS (SELECT dept_id, salary FROM employees),
+    totals AS (SELECT dept_id, SUM(salary) AS total FROM base GROUP BY dept_id)
+    SELECT * FROM totals ORDER BY total DESC
+""").show()</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="comparison" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Side-by-Side Comparison</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre># ============================================
+# CTEs: DataFrame API vs SQL
+# ============================================
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, avg
+
+spark = SparkSession.builder.appName("Comparison").getOrCreate()
+
+data = [(1, "Alice", 50000, 10), (2, "Bob", 60000, 10), (3, "Charlie", 75000, 20)]
+df = spark.createDataFrame(data, ["id", "name", "salary", "dept_id"])
+df.createOrReplaceTempView("employees")
+
+# BASIC CTE
+# DataFrame API (CTE = intermediate DataFrame):
+dept_stats = df.groupBy("dept_id").agg(avg("salary").alias("avg_sal"))
+dept_stats.filter(col("avg_sal") > 55000).show()
+# PySpark SQL:
+spark.sql("""
+    WITH dept_stats AS (SELECT dept_id, AVG(salary) AS avg_sal FROM employees GROUP BY dept_id)
+    SELECT * FROM dept_stats WHERE avg_sal > 55000
+""").show()
+
+# CTE REFERENCED MULTIPLE TIMES
+# DataFrame API (cache for reuse):
+dept_avg = df.groupBy("dept_id").agg(avg("salary").alias("avg_sal"))
+dept_avg.cache()
+df.join(dept_avg, "dept_id").filter(col("salary") > col("avg_sal")).show()
+# PySpark SQL:
+spark.sql("""
+    WITH dept_avg AS (SELECT dept_id, AVG(salary) AS avg_sal FROM employees GROUP BY dept_id)
+    SELECT * FROM employees e JOIN dept_avg d ON e.dept_id = d.dept_id WHERE salary > avg_sal
+""").show()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../07_subqueries/index.html" style="color: var(--text-muted);">&larr; Previous: Subqueries</a>
+                <a href="../09_window_functions/index.html" style="color: var(--accent-primary);">Next: Window Functions &rarr;</a>
             </div>
         </section>
     </main>

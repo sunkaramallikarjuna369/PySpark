@@ -17,7 +17,7 @@
     <main class="container">
         <section class="section">
             <h1>SELECT Basics</h1>
-            <p>The SELECT statement is the foundation of SQL queries. It retrieves data from one or more tables and is the most commonly used SQL command.</p>
+            <p>The SELECT statement is the foundation of SQL queries. Learn how to retrieve data using standard SQL, PySpark DataFrame API, and PySpark SQL.</p>
             <div id="visualization" class="visualization-container"></div>
             <div class="visualization-controls">
                 <button class="viz-btn" onclick="showSelectAll()">SELECT *</button>
@@ -26,110 +26,37 @@
             </div>
             <h2>Code Examples</h2>
             <div class="tabs">
-                <button class="tab active" data-tab="basic">Basic SELECT</button>
-                <button class="tab" data-tab="columns">Column Selection</button>
-                <button class="tab" data-tab="aliases">Aliases & Expressions</button>
+                <button class="tab active" data-tab="sql">Standard SQL</button>
+                <button class="tab" data-tab="pyspark-df">PySpark DataFrame</button>
+                <button class="tab" data-tab="pyspark-sql">PySpark SQL</button>
+                <button class="tab" data-tab="comparison">Side-by-Side</button>
             </div>
             <div class="tab-contents">
-                <div id="basic" class="tab-content active">
+                <div id="sql" class="tab-content active">
                     <div class="code-container">
                         <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
 <pre>-- Select all columns from a table
 SELECT * FROM employees;
 
--- Select all with table alias
-SELECT * FROM employees e;
+-- Select specific columns
+SELECT first_name, last_name, salary FROM employees;
 
--- Select with schema prefix
-SELECT * FROM hr.employees;
+-- Select with column alias
+SELECT 
+    first_name AS "First Name",
+    last_name AS "Last Name",
+    salary * 12 AS annual_salary
+FROM employees;
 
--- Limit results (different syntax per database)
--- MySQL/PostgreSQL:
-SELECT * FROM employees LIMIT 10;
-
--- SQL Server:
-SELECT TOP 10 * FROM employees;
-
--- Oracle:
-SELECT * FROM employees WHERE ROWNUM <= 10;
+-- Select distinct values
+SELECT DISTINCT department_id FROM employees;
 
 -- Count all rows
 SELECT COUNT(*) FROM employees;
 
--- Check if table has data
-SELECT EXISTS (SELECT 1 FROM employees);</pre>
-                        </div>
-                    </div>
-                </div>
-                <div id="columns" class="tab-content">
-                    <div class="code-container">
-                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
-                        <div class="code-block">
-<pre>-- Select specific columns
-SELECT first_name, last_name, salary
-FROM employees;
-
--- Select with column order
-SELECT last_name, first_name, email
-FROM employees;
-
--- Select distinct values
-SELECT DISTINCT department_id
-FROM employees;
-
--- Select distinct combinations
-SELECT DISTINCT department_id, job_id
-FROM employees;
-
--- Count distinct values
-SELECT COUNT(DISTINCT department_id)
-FROM employees;
-
--- Select with table prefix (useful in joins)
-SELECT employees.first_name, employees.last_name
-FROM employees;
-
--- Using table alias
-SELECT e.first_name, e.last_name
-FROM employees e;</pre>
-                        </div>
-                    </div>
-                </div>
-                <div id="aliases" class="tab-content">
-                    <div class="code-container">
-                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
-                        <div class="code-block">
-<pre>-- Column aliases
-SELECT 
-    first_name AS "First Name",
-    last_name AS "Last Name",
-    salary AS annual_salary
-FROM employees;
-
--- Calculated columns
-SELECT 
-    first_name,
-    last_name,
-    salary,
-    salary * 12 AS annual_salary,
-    salary * 1.1 AS salary_with_raise
-FROM employees;
-
--- String concatenation
--- Standard SQL:
-SELECT first_name || ' ' || last_name AS full_name FROM employees;
--- MySQL:
-SELECT CONCAT(first_name, ' ', last_name) AS full_name FROM employees;
--- SQL Server:
-SELECT first_name + ' ' + last_name AS full_name FROM employees;
-
--- Literal values
-SELECT 
-    first_name,
-    'Active' AS status,
-    2024 AS year
-FROM employees;
+-- Limit results
+SELECT * FROM employees LIMIT 10;
 
 -- CASE expression in SELECT
 SELECT 
@@ -144,6 +71,171 @@ FROM employees;</pre>
                         </div>
                     </div>
                 </div>
+                <div id="pyspark-df" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (PySpark DataFrame API)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, concat, lit, when, countDistinct
+
+spark = SparkSession.builder.appName("SelectBasics").getOrCreate()
+
+# Create sample DataFrame
+data = [
+    (1, "Alice", "Smith", 50000, 101),
+    (2, "Bob", "Johnson", 60000, 102),
+    (3, "Charlie", "Brown", 75000, 101)
+]
+df = spark.createDataFrame(data, ["id", "first_name", "last_name", "salary", "dept_id"])
+
+# Select all columns
+df.select("*").show()
+
+# Select specific columns
+df.select("first_name", "last_name", "salary").show()
+
+# Select with column alias
+df.select(
+    col("first_name").alias("First Name"),
+    col("last_name").alias("Last Name"),
+    (col("salary") * 12).alias("annual_salary")
+).show()
+
+# Select distinct values
+df.select("dept_id").distinct().show()
+
+# Count all rows
+print(f"Total rows: {df.count()}")
+
+# Limit results
+df.limit(10).show()
+
+# CASE expression using when()
+df.select(
+    "first_name",
+    "salary",
+    when(col("salary") > 10000, "High")
+    .when(col("salary") > 5000, "Medium")
+    .otherwise("Low").alias("salary_level")
+).show()</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="pyspark-sql" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (PySpark SQL)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("SelectBasics").getOrCreate()
+
+# Create DataFrame and register as temp view
+data = [
+    (1, "Alice", "Smith", 50000, 101),
+    (2, "Bob", "Johnson", 60000, 102),
+    (3, "Charlie", "Brown", 75000, 101)
+]
+df = spark.createDataFrame(data, ["id", "first_name", "last_name", "salary", "dept_id"])
+df.createOrReplaceTempView("employees")
+
+# Select all columns
+spark.sql("SELECT * FROM employees").show()
+
+# Select specific columns
+spark.sql("SELECT first_name, last_name, salary FROM employees").show()
+
+# Select with column alias
+spark.sql("""
+    SELECT 
+        first_name AS `First Name`,
+        last_name AS `Last Name`,
+        salary * 12 AS annual_salary
+    FROM employees
+""").show()
+
+# Select distinct values
+spark.sql("SELECT DISTINCT dept_id FROM employees").show()
+
+# Count all rows
+spark.sql("SELECT COUNT(*) AS total FROM employees").show()
+
+# Limit results
+spark.sql("SELECT * FROM employees LIMIT 10").show()
+
+# CASE expression
+spark.sql("""
+    SELECT 
+        first_name,
+        salary,
+        CASE 
+            WHEN salary > 10000 THEN 'High'
+            WHEN salary > 5000 THEN 'Medium'
+            ELSE 'Low'
+        END AS salary_level
+    FROM employees
+""").show()</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="comparison" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Side-by-Side Comparison</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre># ============================================
+# SELECT BASICS: DataFrame API vs SQL
+# ============================================
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, when
+
+spark = SparkSession.builder.appName("Comparison").getOrCreate()
+
+# Sample data
+data = [(1, "Alice", 50000), (2, "Bob", 60000), (3, "Charlie", 75000)]
+df = spark.createDataFrame(data, ["id", "name", "salary"])
+df.createOrReplaceTempView("employees")
+
+# SELECT ALL
+# DataFrame API:
+df.select("*").show()
+# PySpark SQL:
+spark.sql("SELECT * FROM employees").show()
+
+# SELECT SPECIFIC COLUMNS
+# DataFrame API:
+df.select("name", "salary").show()
+# PySpark SQL:
+spark.sql("SELECT name, salary FROM employees").show()
+
+# SELECT WITH ALIAS
+# DataFrame API:
+df.select(col("name").alias("employee_name")).show()
+# PySpark SQL:
+spark.sql("SELECT name AS employee_name FROM employees").show()
+
+# CALCULATED COLUMNS
+# DataFrame API:
+df.select("name", (col("salary") * 12).alias("annual")).show()
+# PySpark SQL:
+spark.sql("SELECT name, salary * 12 AS annual FROM employees").show()
+
+# CASE/WHEN
+# DataFrame API:
+df.select("name", 
+    when(col("salary") > 60000, "High").otherwise("Normal").alias("level")
+).show()
+# PySpark SQL:
+spark.sql("""
+    SELECT name, 
+        CASE WHEN salary > 60000 THEN 'High' ELSE 'Normal' END AS level
+    FROM employees
+""").show()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <span style="color: var(--text-muted);">First Topic</span>
+                <a href="../02_where_filtering/index.html" style="color: var(--accent-primary);">Next: WHERE Filtering &rarr;</a>
             </div>
         </section>
     </main>

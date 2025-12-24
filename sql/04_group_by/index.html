@@ -17,7 +17,7 @@
     <main class="container">
         <section class="section">
             <h1>GROUP BY</h1>
-            <p>GROUP BY groups rows with the same values into summary rows. It's used with aggregate functions like COUNT, SUM, AVG, MIN, MAX.</p>
+            <p>GROUP BY groups rows with the same values into summary rows. Learn aggregations using standard SQL, PySpark DataFrame API, and PySpark SQL.</p>
             <div id="visualization" class="visualization-container"></div>
             <div class="visualization-controls">
                 <button class="viz-btn" onclick="showGroupBy()">GROUP BY</button>
@@ -25,140 +25,217 @@
             </div>
             <h2>Code Examples</h2>
             <div class="tabs">
-                <button class="tab active" data-tab="basic">Basic GROUP BY</button>
-                <button class="tab" data-tab="aggregates">Aggregate Functions</button>
-                <button class="tab" data-tab="advanced">Advanced</button>
+                <button class="tab active" data-tab="sql">Standard SQL</button>
+                <button class="tab" data-tab="pyspark-df">PySpark DataFrame</button>
+                <button class="tab" data-tab="pyspark-sql">PySpark SQL</button>
+                <button class="tab" data-tab="comparison">Side-by-Side</button>
             </div>
             <div class="tab-contents">
-                <div id="basic" class="tab-content active">
+                <div id="sql" class="tab-content active">
                     <div class="code-container">
                         <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
-<pre>-- Basic GROUP BY
+<pre>-- Basic GROUP BY with COUNT
 SELECT department_id, COUNT(*) AS employee_count
-FROM employees
-GROUP BY department_id;
+FROM employees GROUP BY department_id;
 
 -- GROUP BY multiple columns
 SELECT department_id, job_id, COUNT(*) AS count
-FROM employees
-GROUP BY department_id, job_id;
+FROM employees GROUP BY department_id, job_id;
+
+-- SUM, AVG, MIN, MAX
+SELECT department_id,
+    SUM(salary) AS total_salary,
+    AVG(salary) AS avg_salary,
+    MIN(salary) AS min_salary,
+    MAX(salary) AS max_salary
+FROM employees GROUP BY department_id;
 
 -- GROUP BY with ORDER BY
 SELECT department_id, COUNT(*) AS count
-FROM employees
-GROUP BY department_id
-ORDER BY count DESC;
+FROM employees GROUP BY department_id ORDER BY count DESC;
 
--- GROUP BY with column alias (some databases)
-SELECT department_id AS dept, COUNT(*) AS count
-FROM employees
-GROUP BY dept;  -- MySQL allows this
+-- ROLLUP (hierarchical subtotals)
+SELECT department_id, job_id, SUM(salary)
+FROM employees GROUP BY ROLLUP(department_id, job_id);
 
--- GROUP BY with expression
-SELECT 
-    YEAR(hire_date) AS hire_year,
-    COUNT(*) AS hired_count
-FROM employees
-GROUP BY YEAR(hire_date);
-
--- GROUP BY with NULL values (NULL is its own group)
-SELECT department_id, COUNT(*)
-FROM employees
-GROUP BY department_id;</pre>
+-- CUBE (all combinations)
+SELECT department_id, job_id, SUM(salary)
+FROM employees GROUP BY CUBE(department_id, job_id);</pre>
                         </div>
                     </div>
                 </div>
-                <div id="aggregates" class="tab-content">
+                <div id="pyspark-df" class="tab-content">
                     <div class="code-container">
-                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-header"><span class="code-language">Python (PySpark DataFrame API)</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
-<pre>-- COUNT
-SELECT department_id, COUNT(*) AS total_employees
-FROM employees GROUP BY department_id;
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, count, sum, avg, min, max, countDistinct
+from pyspark.sql.functions import collect_list, concat_ws
 
--- COUNT DISTINCT
-SELECT department_id, COUNT(DISTINCT job_id) AS unique_jobs
-FROM employees GROUP BY department_id;
+spark = SparkSession.builder.appName("GroupBy").getOrCreate()
 
--- SUM
-SELECT department_id, SUM(salary) AS total_salary
-FROM employees GROUP BY department_id;
+# Create sample DataFrame
+data = [
+    (1, "Alice", 50000, 10, "Engineer"),
+    (2, "Bob", 60000, 10, "Engineer"),
+    (3, "Charlie", 75000, 20, "Manager"),
+    (4, "Diana", 55000, 20, "Analyst")
+]
+df = spark.createDataFrame(data, ["id", "name", "salary", "dept_id", "job"])
 
--- AVG
-SELECT department_id, AVG(salary) AS avg_salary
-FROM employees GROUP BY department_id;
+# Basic GROUP BY with count
+df.groupBy("dept_id").count().show()
 
--- MIN and MAX
-SELECT department_id, 
-       MIN(salary) AS min_salary,
-       MAX(salary) AS max_salary
-FROM employees GROUP BY department_id;
+# GROUP BY with multiple aggregations
+df.groupBy("dept_id").agg(
+    count("*").alias("employee_count"),
+    sum("salary").alias("total_salary"),
+    avg("salary").alias("avg_salary"),
+    min("salary").alias("min_salary"),
+    max("salary").alias("max_salary")
+).show()
 
--- Multiple aggregates
-SELECT 
-    department_id,
-    COUNT(*) AS count,
-    SUM(salary) AS total,
-    AVG(salary) AS average,
-    MIN(salary) AS minimum,
-    MAX(salary) AS maximum
-FROM employees
-GROUP BY department_id;
+# GROUP BY multiple columns
+df.groupBy("dept_id", "job").count().show()
 
--- STRING_AGG / GROUP_CONCAT (concatenate values)
--- PostgreSQL:
-SELECT department_id, STRING_AGG(first_name, ', ')
-FROM employees GROUP BY department_id;
--- MySQL:
-SELECT department_id, GROUP_CONCAT(first_name)
-FROM employees GROUP BY department_id;</pre>
+# GROUP BY with ORDER BY
+df.groupBy("dept_id").count().orderBy(col("count").desc()).show()
+
+# Count distinct
+df.groupBy("dept_id").agg(countDistinct("job").alias("unique_jobs")).show()
+
+# Collect list (like GROUP_CONCAT)
+df.groupBy("dept_id").agg(
+    collect_list("name").alias("employees"),
+    concat_ws(", ", collect_list("name")).alias("employee_names")
+).show(truncate=False)
+
+# ROLLUP (hierarchical subtotals)
+df.rollup("dept_id", "job").agg(sum("salary").alias("total")).show()
+
+# CUBE (all combinations)
+df.cube("dept_id", "job").agg(sum("salary").alias("total")).show()
+
+# Pivot table
+df.groupBy("dept_id").pivot("job").agg(sum("salary")).show()</pre>
                         </div>
                     </div>
                 </div>
-                <div id="advanced" class="tab-content">
+                <div id="pyspark-sql" class="tab-content">
                     <div class="code-container">
-                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-header"><span class="code-language">Python (PySpark SQL)</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
-<pre>-- ROLLUP (hierarchical subtotals)
-SELECT department_id, job_id, SUM(salary)
-FROM employees
-GROUP BY ROLLUP(department_id, job_id);
+<pre>from pyspark.sql import SparkSession
 
--- CUBE (all combinations of subtotals)
-SELECT department_id, job_id, SUM(salary)
-FROM employees
-GROUP BY CUBE(department_id, job_id);
+spark = SparkSession.builder.appName("GroupBy").getOrCreate()
 
--- GROUPING SETS (specific groupings)
-SELECT department_id, job_id, SUM(salary)
-FROM employees
-GROUP BY GROUPING SETS (
-    (department_id, job_id),
-    (department_id),
-    ()
-);
+# Create and register temp view
+data = [
+    (1, "Alice", 50000, 10, "Engineer"),
+    (2, "Bob", 60000, 10, "Engineer"),
+    (3, "Charlie", 75000, 20, "Manager"),
+    (4, "Diana", 55000, 20, "Analyst")
+]
+df = spark.createDataFrame(data, ["id", "name", "salary", "dept_id", "job"])
+df.createOrReplaceTempView("employees")
 
--- GROUPING function (identify subtotal rows)
-SELECT 
-    department_id,
-    job_id,
-    SUM(salary),
-    GROUPING(department_id) AS is_dept_subtotal,
-    GROUPING(job_id) AS is_job_subtotal
-FROM employees
-GROUP BY ROLLUP(department_id, job_id);
+# Basic GROUP BY
+spark.sql("SELECT dept_id, COUNT(*) AS count FROM employees GROUP BY dept_id").show()
 
--- Conditional aggregation
-SELECT 
-    department_id,
-    COUNT(CASE WHEN salary > 50000 THEN 1 END) AS high_earners,
-    COUNT(CASE WHEN salary <= 50000 THEN 1 END) AS others
-FROM employees
-GROUP BY department_id;</pre>
+# Multiple aggregations
+spark.sql("""
+    SELECT dept_id,
+        COUNT(*) AS employee_count,
+        SUM(salary) AS total_salary,
+        AVG(salary) AS avg_salary,
+        MIN(salary) AS min_salary,
+        MAX(salary) AS max_salary
+    FROM employees GROUP BY dept_id
+""").show()
+
+# GROUP BY multiple columns
+spark.sql("SELECT dept_id, job, COUNT(*) FROM employees GROUP BY dept_id, job").show()
+
+# GROUP BY with ORDER BY
+spark.sql("""
+    SELECT dept_id, COUNT(*) AS count 
+    FROM employees GROUP BY dept_id ORDER BY count DESC
+""").show()
+
+# Count distinct
+spark.sql("SELECT dept_id, COUNT(DISTINCT job) AS unique_jobs FROM employees GROUP BY dept_id").show()
+
+# Collect list
+spark.sql("SELECT dept_id, collect_list(name) AS employees FROM employees GROUP BY dept_id").show()
+
+# ROLLUP
+spark.sql("SELECT dept_id, job, SUM(salary) FROM employees GROUP BY ROLLUP(dept_id, job)").show()
+
+# CUBE
+spark.sql("SELECT dept_id, job, SUM(salary) FROM employees GROUP BY CUBE(dept_id, job)").show()
+
+# GROUPING SETS
+spark.sql("""
+    SELECT dept_id, job, SUM(salary) FROM employees 
+    GROUP BY GROUPING SETS ((dept_id, job), (dept_id), ())
+""").show()</pre>
                         </div>
                     </div>
                 </div>
+                <div id="comparison" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Side-by-Side Comparison</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre># ============================================
+# GROUP BY: DataFrame API vs SQL
+# ============================================
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import count, sum, avg, col
+
+spark = SparkSession.builder.appName("Comparison").getOrCreate()
+
+data = [(1, "Alice", 50000, 10), (2, "Bob", 60000, 10), (3, "Charlie", 75000, 20)]
+df = spark.createDataFrame(data, ["id", "name", "salary", "dept_id"])
+df.createOrReplaceTempView("employees")
+
+# BASIC GROUP BY
+# DataFrame API:
+df.groupBy("dept_id").count().show()
+# PySpark SQL:
+spark.sql("SELECT dept_id, COUNT(*) FROM employees GROUP BY dept_id").show()
+
+# MULTIPLE AGGREGATIONS
+# DataFrame API:
+df.groupBy("dept_id").agg(
+    count("*").alias("count"),
+    sum("salary").alias("total"),
+    avg("salary").alias("average")
+).show()
+# PySpark SQL:
+spark.sql("""
+    SELECT dept_id, COUNT(*) AS count, SUM(salary) AS total, AVG(salary) AS average
+    FROM employees GROUP BY dept_id
+""").show()
+
+# GROUP BY WITH ORDER BY
+# DataFrame API:
+df.groupBy("dept_id").count().orderBy(col("count").desc()).show()
+# PySpark SQL:
+spark.sql("SELECT dept_id, COUNT(*) AS cnt FROM employees GROUP BY dept_id ORDER BY cnt DESC").show()
+
+# ROLLUP
+# DataFrame API:
+df.rollup("dept_id").agg(sum("salary")).show()
+# PySpark SQL:
+spark.sql("SELECT dept_id, SUM(salary) FROM employees GROUP BY ROLLUP(dept_id)").show()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../03_joins/index.html" style="color: var(--text-muted);">&larr; Previous: JOINs</a>
+                <a href="../05_having/index.html" style="color: var(--accent-primary);">Next: HAVING &rarr;</a>
             </div>
         </section>
     </main>

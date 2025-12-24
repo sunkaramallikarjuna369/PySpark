@@ -17,7 +17,7 @@
     <main class="container">
         <section class="section">
             <h1>SQL JOINs</h1>
-            <p>JOINs combine rows from two or more tables based on related columns. Understanding different join types is essential for relational database queries.</p>
+            <p>JOINs combine rows from two or more tables based on related columns. Learn different join types using standard SQL, PySpark DataFrame API, and PySpark SQL.</p>
             <div id="visualization" class="visualization-container"></div>
             <div class="visualization-controls">
                 <button class="viz-btn" onclick="showInner()">INNER</button>
@@ -27,139 +27,237 @@
             </div>
             <h2>Code Examples</h2>
             <div class="tabs">
-                <button class="tab active" data-tab="inner">INNER JOIN</button>
-                <button class="tab" data-tab="outer">OUTER JOINs</button>
-                <button class="tab" data-tab="special">Special JOINs</button>
+                <button class="tab active" data-tab="sql">Standard SQL</button>
+                <button class="tab" data-tab="pyspark-df">PySpark DataFrame</button>
+                <button class="tab" data-tab="pyspark-sql">PySpark SQL</button>
+                <button class="tab" data-tab="comparison">Side-by-Side</button>
             </div>
             <div class="tab-contents">
-                <div id="inner" class="tab-content active">
+                <div id="sql" class="tab-content active">
                     <div class="code-container">
                         <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
 <pre>-- INNER JOIN - Only matching rows from both tables
-SELECT 
-    e.employee_id,
-    e.first_name,
-    d.department_name
+SELECT e.employee_id, e.first_name, d.department_name
 FROM employees e
 INNER JOIN departments d ON e.department_id = d.department_id;
 
--- Equivalent syntax (implicit join)
-SELECT e.employee_id, e.first_name, d.department_name
-FROM employees e, departments d
-WHERE e.department_id = d.department_id;
-
--- Multiple join conditions
-SELECT e.*, d.department_name
+-- LEFT JOIN - All rows from left table, matching from right
+SELECT e.first_name, d.department_name
 FROM employees e
-INNER JOIN departments d 
-    ON e.department_id = d.department_id
-    AND e.location_id = d.location_id;
+LEFT JOIN departments d ON e.department_id = d.department_id;
 
--- Join multiple tables
-SELECT 
-    e.first_name,
-    d.department_name,
-    l.city
+-- RIGHT JOIN - All rows from right table, matching from left
+SELECT e.first_name, d.department_name
 FROM employees e
-INNER JOIN departments d ON e.department_id = d.department_id
-INNER JOIN locations l ON d.location_id = l.location_id;
+RIGHT JOIN departments d ON e.department_id = d.department_id;
 
--- Self join (join table to itself)
-SELECT 
-    e.first_name AS employee,
-    m.first_name AS manager
+-- FULL OUTER JOIN - All rows from both tables
+SELECT e.first_name, d.department_name
+FROM employees e
+FULL OUTER JOIN departments d ON e.department_id = d.department_id;
+
+-- CROSS JOIN - Cartesian product
+SELECT e.first_name, d.department_name
+FROM employees e CROSS JOIN departments d;
+
+-- Self join
+SELECT e.first_name AS employee, m.first_name AS manager
 FROM employees e
 INNER JOIN employees m ON e.manager_id = m.employee_id;</pre>
                         </div>
                     </div>
                 </div>
-                <div id="outer" class="tab-content">
+                <div id="pyspark-df" class="tab-content">
                     <div class="code-container">
-                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-header"><span class="code-language">Python (PySpark DataFrame API)</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
-<pre>-- LEFT JOIN - All rows from left table, matching from right
-SELECT 
-    e.employee_id,
-    e.first_name,
-    d.department_name
-FROM employees e
-LEFT JOIN departments d ON e.department_id = d.department_id;
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
 
--- LEFT JOIN with NULL check (find unmatched)
-SELECT e.first_name
-FROM employees e
-LEFT JOIN departments d ON e.department_id = d.department_id
-WHERE d.department_id IS NULL;
+spark = SparkSession.builder.appName("Joins").getOrCreate()
 
--- RIGHT JOIN - All rows from right table, matching from left
-SELECT 
-    e.first_name,
-    d.department_name
-FROM employees e
-RIGHT JOIN departments d ON e.department_id = d.department_id;
+# Create sample DataFrames
+employees = spark.createDataFrame([
+    (1, "Alice", 10), (2, "Bob", 20), (3, "Charlie", 30), (4, "Diana", None)
+], ["emp_id", "name", "dept_id"])
 
--- FULL OUTER JOIN - All rows from both tables
-SELECT 
-    e.first_name,
-    d.department_name
-FROM employees e
-FULL OUTER JOIN departments d ON e.department_id = d.department_id;
+departments = spark.createDataFrame([
+    (10, "Engineering"), (20, "Sales"), (40, "Marketing")
+], ["dept_id", "dept_name"])
 
--- Find rows only in left or right (exclusive)
-SELECT e.first_name, d.department_name
-FROM employees e
-FULL OUTER JOIN departments d ON e.department_id = d.department_id
-WHERE e.employee_id IS NULL OR d.department_id IS NULL;</pre>
+# INNER JOIN - Only matching rows
+employees.join(departments, employees.dept_id == departments.dept_id, "inner").show()
+# Shorthand when column names match:
+employees.join(departments, "dept_id", "inner").show()
+
+# LEFT JOIN - All from left + matches from right
+employees.join(departments, "dept_id", "left").show()
+employees.join(departments, "dept_id", "left_outer").show()
+
+# RIGHT JOIN - All from right + matches from left
+employees.join(departments, "dept_id", "right").show()
+employees.join(departments, "dept_id", "right_outer").show()
+
+# FULL OUTER JOIN - All rows from both
+employees.join(departments, "dept_id", "outer").show()
+employees.join(departments, "dept_id", "full").show()
+employees.join(departments, "dept_id", "full_outer").show()
+
+# CROSS JOIN - Cartesian product
+employees.crossJoin(departments).show()
+
+# LEFT ANTI JOIN - Rows in left not in right
+employees.join(departments, "dept_id", "left_anti").show()
+
+# LEFT SEMI JOIN - Rows in left that have match in right
+employees.join(departments, "dept_id", "left_semi").show()
+
+# Multiple join conditions
+employees.join(
+    departments,
+    (employees.dept_id == departments.dept_id) & (employees.emp_id > 1),
+    "inner"
+).show()
+
+# Self join (employees with managers)
+emp_with_mgr = spark.createDataFrame([
+    (1, "Alice", None), (2, "Bob", 1), (3, "Charlie", 1)
+], ["emp_id", "name", "manager_id"])
+
+emp_with_mgr.alias("e").join(
+    emp_with_mgr.alias("m"),
+    col("e.manager_id") == col("m.emp_id"),
+    "left"
+).select("e.name", col("m.name").alias("manager")).show()</pre>
                         </div>
                     </div>
                 </div>
-                <div id="special" class="tab-content">
+                <div id="pyspark-sql" class="tab-content">
                     <div class="code-container">
-                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-header"><span class="code-language">Python (PySpark SQL)</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
-<pre>-- CROSS JOIN - Cartesian product (all combinations)
-SELECT e.first_name, d.department_name
-FROM employees e
-CROSS JOIN departments d;
+<pre>from pyspark.sql import SparkSession
 
--- NATURAL JOIN - Auto-join on same column names
-SELECT e.first_name, department_name
-FROM employees e
-NATURAL JOIN departments;
+spark = SparkSession.builder.appName("Joins").getOrCreate()
 
--- USING clause (when column names match)
-SELECT e.first_name, d.department_name
-FROM employees e
-JOIN departments d USING (department_id);
+# Create and register temp views
+employees = spark.createDataFrame([
+    (1, "Alice", 10), (2, "Bob", 20), (3, "Charlie", 30), (4, "Diana", None)
+], ["emp_id", "name", "dept_id"])
+employees.createOrReplaceTempView("employees")
 
--- Anti-join (rows in A not in B)
-SELECT e.first_name
-FROM employees e
-WHERE NOT EXISTS (
-    SELECT 1 FROM departments d 
-    WHERE d.department_id = e.department_id
-);
+departments = spark.createDataFrame([
+    (10, "Engineering"), (20, "Sales"), (40, "Marketing")
+], ["dept_id", "dept_name"])
+departments.createOrReplaceTempView("departments")
 
--- Semi-join (rows in A that have match in B)
-SELECT e.first_name
-FROM employees e
-WHERE EXISTS (
-    SELECT 1 FROM departments d 
-    WHERE d.department_id = e.department_id
-);
+# INNER JOIN
+spark.sql("""
+    SELECT e.emp_id, e.name, d.dept_name
+    FROM employees e
+    INNER JOIN departments d ON e.dept_id = d.dept_id
+""").show()
 
--- Lateral join (PostgreSQL) / CROSS APPLY (SQL Server)
-SELECT e.first_name, recent.order_date
-FROM employees e
-CROSS JOIN LATERAL (
-    SELECT order_date FROM orders o 
-    WHERE o.employee_id = e.employee_id 
-    ORDER BY order_date DESC LIMIT 1
-) recent;</pre>
+# LEFT JOIN
+spark.sql("""
+    SELECT e.name, d.dept_name
+    FROM employees e
+    LEFT JOIN departments d ON e.dept_id = d.dept_id
+""").show()
+
+# RIGHT JOIN
+spark.sql("""
+    SELECT e.name, d.dept_name
+    FROM employees e
+    RIGHT JOIN departments d ON e.dept_id = d.dept_id
+""").show()
+
+# FULL OUTER JOIN
+spark.sql("""
+    SELECT e.name, d.dept_name
+    FROM employees e
+    FULL OUTER JOIN departments d ON e.dept_id = d.dept_id
+""").show()
+
+# CROSS JOIN
+spark.sql("""
+    SELECT e.name, d.dept_name
+    FROM employees e CROSS JOIN departments d
+""").show()
+
+# LEFT ANTI JOIN (employees without departments)
+spark.sql("""
+    SELECT e.name FROM employees e
+    LEFT ANTI JOIN departments d ON e.dept_id = d.dept_id
+""").show()
+
+# LEFT SEMI JOIN (employees with departments)
+spark.sql("""
+    SELECT e.name FROM employees e
+    LEFT SEMI JOIN departments d ON e.dept_id = d.dept_id
+""").show()</pre>
                         </div>
                     </div>
                 </div>
+                <div id="comparison" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Side-by-Side Comparison</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre># ============================================
+# JOINS: DataFrame API vs SQL
+# ============================================
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("Comparison").getOrCreate()
+
+emp = spark.createDataFrame([(1, "Alice", 10), (2, "Bob", 20)], ["id", "name", "dept_id"])
+dept = spark.createDataFrame([(10, "Eng"), (30, "HR")], ["dept_id", "dept_name"])
+emp.createOrReplaceTempView("emp")
+dept.createOrReplaceTempView("dept")
+
+# INNER JOIN
+# DataFrame API:
+emp.join(dept, "dept_id", "inner").show()
+# PySpark SQL:
+spark.sql("SELECT * FROM emp e INNER JOIN dept d ON e.dept_id = d.dept_id").show()
+
+# LEFT JOIN
+# DataFrame API:
+emp.join(dept, "dept_id", "left").show()
+# PySpark SQL:
+spark.sql("SELECT * FROM emp e LEFT JOIN dept d ON e.dept_id = d.dept_id").show()
+
+# RIGHT JOIN
+# DataFrame API:
+emp.join(dept, "dept_id", "right").show()
+# PySpark SQL:
+spark.sql("SELECT * FROM emp e RIGHT JOIN dept d ON e.dept_id = d.dept_id").show()
+
+# FULL OUTER JOIN
+# DataFrame API:
+emp.join(dept, "dept_id", "outer").show()
+# PySpark SQL:
+spark.sql("SELECT * FROM emp e FULL OUTER JOIN dept d ON e.dept_id = d.dept_id").show()
+
+# CROSS JOIN
+# DataFrame API:
+emp.crossJoin(dept).show()
+# PySpark SQL:
+spark.sql("SELECT * FROM emp CROSS JOIN dept").show()
+
+# LEFT ANTI (not in)
+# DataFrame API:
+emp.join(dept, "dept_id", "left_anti").show()
+# PySpark SQL:
+spark.sql("SELECT * FROM emp e LEFT ANTI JOIN dept d ON e.dept_id = d.dept_id").show()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../02_where_filtering/index.html" style="color: var(--text-muted);">&larr; Previous: WHERE Filtering</a>
+                <a href="../04_group_by/index.html" style="color: var(--accent-primary);">Next: GROUP BY &rarr;</a>
             </div>
         </section>
     </main>

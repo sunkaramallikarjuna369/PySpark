@@ -17,26 +17,25 @@
     <main class="container">
         <section class="section">
             <h1>CASE Statements</h1>
-            <p>CASE provides conditional logic in SQL, similar to if-then-else in programming languages. It can be used in SELECT, WHERE, ORDER BY, and other clauses.</p>
+            <p>CASE provides conditional logic in SQL, similar to if-then-else. Learn CASE using standard SQL, PySpark DataFrame API, and PySpark SQL.</p>
             <div id="visualization" class="visualization-container"></div>
             <div class="visualization-controls">
                 <button class="viz-btn" onclick="showCase()">CASE Logic</button>
             </div>
             <h2>Code Examples</h2>
             <div class="tabs">
-                <button class="tab active" data-tab="simple">Simple CASE</button>
-                <button class="tab" data-tab="searched">Searched CASE</button>
-                <button class="tab" data-tab="advanced">Advanced Uses</button>
+                <button class="tab active" data-tab="sql">Standard SQL</button>
+                <button class="tab" data-tab="pyspark-df">PySpark DataFrame</button>
+                <button class="tab" data-tab="pyspark-sql">PySpark SQL</button>
+                <button class="tab" data-tab="comparison">Side-by-Side</button>
             </div>
             <div class="tab-contents">
-                <div id="simple" class="tab-content active">
+                <div id="sql" class="tab-content active">
                     <div class="code-container">
                         <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
 <pre>-- Simple CASE (equality check)
-SELECT 
-    first_name,
-    department_id,
+SELECT first_name, department_id,
     CASE department_id
         WHEN 10 THEN 'IT'
         WHEN 20 THEN 'HR'
@@ -45,112 +44,181 @@ SELECT
     END AS department_name
 FROM employees;
 
--- CASE with NULL handling
-SELECT 
-    first_name,
-    commission_pct,
-    CASE commission_pct
-        WHEN NULL THEN 'No Commission'  -- Won't work!
-        ELSE 'Has Commission'
-    END AS status
-FROM employees;
-
--- Correct NULL handling
-SELECT 
-    first_name,
+-- Searched CASE (any condition)
+SELECT first_name, salary,
     CASE 
-        WHEN commission_pct IS NULL THEN 'No Commission'
-        ELSE 'Has Commission'
-    END AS status
-FROM employees;</pre>
-                        </div>
-                    </div>
-                </div>
-                <div id="searched" class="tab-content">
-                    <div class="code-container">
-                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
-                        <div class="code-block">
-<pre>-- Searched CASE (any condition)
-SELECT 
-    first_name,
-    salary,
-    CASE 
-        WHEN salary >= 100000 THEN 'Executive'
         WHEN salary >= 70000 THEN 'Senior'
         WHEN salary >= 50000 THEN 'Mid-Level'
-        WHEN salary >= 30000 THEN 'Junior'
-        ELSE 'Entry'
+        ELSE 'Junior'
     END AS level
 FROM employees;
 
--- Multiple conditions per WHEN
-SELECT 
-    first_name,
-    CASE 
-        WHEN department_id = 10 AND salary > 50000 THEN 'High IT'
-        WHEN department_id = 10 THEN 'IT'
-        WHEN department_id = 20 THEN 'HR'
-        ELSE 'Other'
-    END AS category
-FROM employees;
-
--- CASE with functions
-SELECT 
-    first_name,
-    hire_date,
-    CASE 
-        WHEN EXTRACT(YEAR FROM hire_date) < 2020 THEN 'Veteran'
-        WHEN EXTRACT(YEAR FROM hire_date) < 2023 THEN 'Experienced'
-        ELSE 'New Hire'
-    END AS tenure_category
-FROM employees;</pre>
-                        </div>
-                    </div>
-                </div>
-                <div id="advanced" class="tab-content">
-                    <div class="code-container">
-                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
-                        <div class="code-block">
-<pre>-- CASE in WHERE clause
-SELECT * FROM employees
-WHERE CASE 
-    WHEN department_id = 10 THEN salary > 50000
-    WHEN department_id = 20 THEN salary > 40000
-    ELSE salary > 30000
-END;
-
--- CASE in ORDER BY
-SELECT * FROM employees
-ORDER BY CASE status
-    WHEN 'Active' THEN 1
-    WHEN 'Pending' THEN 2
-    WHEN 'Inactive' THEN 3
-END;
-
 -- CASE in aggregation (pivot-like)
-SELECT 
-    department_id,
-    SUM(CASE WHEN gender = 'M' THEN 1 ELSE 0 END) AS male_count,
-    SUM(CASE WHEN gender = 'F' THEN 1 ELSE 0 END) AS female_count
-FROM employees
-GROUP BY department_id;
-
--- Nested CASE
-SELECT 
-    first_name,
-    CASE 
-        WHEN department_id = 10 THEN
-            CASE WHEN salary > 50000 THEN 'Senior IT' ELSE 'Junior IT' END
-        ELSE 'Other'
-    END AS category
-FROM employees;
-
--- COALESCE and NULLIF (CASE shortcuts)
-SELECT COALESCE(commission, 0) AS commission;  -- First non-null
-SELECT NULLIF(value, 0) AS value;  -- NULL if equal</pre>
+SELECT department_id,
+    SUM(CASE WHEN salary > 60000 THEN 1 ELSE 0 END) AS high_earners,
+    SUM(CASE WHEN salary <= 60000 THEN 1 ELSE 0 END) AS others
+FROM employees GROUP BY department_id;</pre>
                         </div>
                     </div>
                 </div>
+                <div id="pyspark-df" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (PySpark DataFrame API)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, when, lit, sum, coalesce
+
+spark = SparkSession.builder.appName("CaseStatements").getOrCreate()
+
+# Create sample DataFrame
+data = [
+    (1, "Alice", 50000, 10), (2, "Bob", 75000, 20),
+    (3, "Charlie", 60000, 10), (4, "Diana", 45000, 30)
+]
+df = spark.createDataFrame(data, ["id", "name", "salary", "dept_id"])
+
+# Simple CASE equivalent using when()
+df.select("name", "dept_id",
+    when(col("dept_id") == 10, "IT")
+    .when(col("dept_id") == 20, "HR")
+    .when(col("dept_id") == 30, "Finance")
+    .otherwise("Other").alias("department_name")
+).show()
+
+# Searched CASE equivalent
+df.select("name", "salary",
+    when(col("salary") >= 70000, "Senior")
+    .when(col("salary") >= 50000, "Mid-Level")
+    .otherwise("Junior").alias("level")
+).show()
+
+# Multiple conditions
+df.select("name",
+    when((col("dept_id") == 10) & (col("salary") > 55000), "Senior IT")
+    .when(col("dept_id") == 10, "IT")
+    .when(col("dept_id") == 20, "HR")
+    .otherwise("Other").alias("category")
+).show()
+
+# CASE in aggregation (pivot-like)
+df.groupBy("dept_id").agg(
+    sum(when(col("salary") > 55000, 1).otherwise(0)).alias("high_earners"),
+    sum(when(col("salary") <= 55000, 1).otherwise(0)).alias("others")
+).show()
+
+# COALESCE equivalent
+df_with_null = spark.createDataFrame([(1, None), (2, 100)], ["id", "bonus"])
+df_with_null.select("id", coalesce(col("bonus"), lit(0)).alias("bonus")).show()
+
+# Nested CASE equivalent
+df.select("name",
+    when(col("dept_id") == 10,
+        when(col("salary") > 55000, "Senior IT").otherwise("Junior IT")
+    ).otherwise("Other").alias("category")
+).show()</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="pyspark-sql" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (PySpark SQL)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("CaseStatements").getOrCreate()
+
+# Create and register temp view
+data = [
+    (1, "Alice", 50000, 10), (2, "Bob", 75000, 20),
+    (3, "Charlie", 60000, 10), (4, "Diana", 45000, 30)
+]
+df = spark.createDataFrame(data, ["id", "name", "salary", "dept_id"])
+df.createOrReplaceTempView("employees")
+
+# Simple CASE
+spark.sql("""
+    SELECT name, dept_id,
+        CASE dept_id
+            WHEN 10 THEN 'IT'
+            WHEN 20 THEN 'HR'
+            WHEN 30 THEN 'Finance'
+            ELSE 'Other'
+        END AS department_name
+    FROM employees
+""").show()
+
+# Searched CASE
+spark.sql("""
+    SELECT name, salary,
+        CASE 
+            WHEN salary >= 70000 THEN 'Senior'
+            WHEN salary >= 50000 THEN 'Mid-Level'
+            ELSE 'Junior'
+        END AS level
+    FROM employees
+""").show()
+
+# CASE in aggregation
+spark.sql("""
+    SELECT dept_id,
+        SUM(CASE WHEN salary > 55000 THEN 1 ELSE 0 END) AS high_earners,
+        SUM(CASE WHEN salary <= 55000 THEN 1 ELSE 0 END) AS others
+    FROM employees GROUP BY dept_id
+""").show()
+
+# Nested CASE
+spark.sql("""
+    SELECT name,
+        CASE 
+            WHEN dept_id = 10 THEN
+                CASE WHEN salary > 55000 THEN 'Senior IT' ELSE 'Junior IT' END
+            ELSE 'Other'
+        END AS category
+    FROM employees
+""").show()</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="comparison" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Side-by-Side Comparison</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre># ============================================
+# CASE STATEMENTS: DataFrame API vs SQL
+# ============================================
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, when, sum
+
+spark = SparkSession.builder.appName("Comparison").getOrCreate()
+
+data = [(1, "Alice", 50000, 10), (2, "Bob", 75000, 20), (3, "Charlie", 60000, 10)]
+df = spark.createDataFrame(data, ["id", "name", "salary", "dept_id"])
+df.createOrReplaceTempView("employees")
+
+# SIMPLE CASE
+# DataFrame API:
+df.select("name", when(col("dept_id") == 10, "IT").when(col("dept_id") == 20, "HR").otherwise("Other").alias("dept")).show()
+# PySpark SQL:
+spark.sql("SELECT name, CASE dept_id WHEN 10 THEN 'IT' WHEN 20 THEN 'HR' ELSE 'Other' END AS dept FROM employees").show()
+
+# SEARCHED CASE
+# DataFrame API:
+df.select("name", when(col("salary") >= 70000, "Senior").when(col("salary") >= 50000, "Mid").otherwise("Junior").alias("level")).show()
+# PySpark SQL:
+spark.sql("SELECT name, CASE WHEN salary >= 70000 THEN 'Senior' WHEN salary >= 50000 THEN 'Mid' ELSE 'Junior' END AS level FROM employees").show()
+
+# CASE IN AGGREGATION
+# DataFrame API:
+df.groupBy("dept_id").agg(sum(when(col("salary") > 55000, 1).otherwise(0)).alias("high")).show()
+# PySpark SQL:
+spark.sql("SELECT dept_id, SUM(CASE WHEN salary > 55000 THEN 1 ELSE 0 END) AS high FROM employees GROUP BY dept_id").show()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../10_union_set_ops/index.html" style="color: var(--text-muted);">&larr; Previous: UNION & Set Operations</a>
+                <a href="../12_null_handling/index.html" style="color: var(--accent-primary);">Next: NULL Handling &rarr;</a>
             </div>
         </section>
     </main>

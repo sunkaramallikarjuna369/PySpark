@@ -17,7 +17,7 @@
     <main class="container">
         <section class="section">
             <h1>UNION & Set Operations</h1>
-            <p>Set operations combine results from multiple SELECT statements. UNION, INTERSECT, and EXCEPT are the main set operators.</p>
+            <p>Set operations combine results from multiple SELECT statements. Learn UNION, INTERSECT, and EXCEPT using standard SQL, PySpark DataFrame API, and PySpark SQL.</p>
             <div id="visualization" class="visualization-container"></div>
             <div class="visualization-controls">
                 <button class="viz-btn" onclick="showUnion()">UNION</button>
@@ -26,11 +26,13 @@
             </div>
             <h2>Code Examples</h2>
             <div class="tabs">
-                <button class="tab active" data-tab="union">UNION</button>
-                <button class="tab" data-tab="intersect">INTERSECT & EXCEPT</button>
+                <button class="tab active" data-tab="sql">Standard SQL</button>
+                <button class="tab" data-tab="pyspark-df">PySpark DataFrame</button>
+                <button class="tab" data-tab="pyspark-sql">PySpark SQL</button>
+                <button class="tab" data-tab="comparison">Side-by-Side</button>
             </div>
             <div class="tab-contents">
-                <div id="union" class="tab-content active">
+                <div id="sql" class="tab-content active">
                     <div class="code-container">
                         <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
@@ -44,70 +46,172 @@ SELECT first_name, last_name FROM employees
 UNION ALL
 SELECT first_name, last_name FROM contractors;
 
--- Multiple UNIONs
-SELECT name, 'Employee' AS type FROM employees
-UNION ALL
-SELECT name, 'Contractor' AS type FROM contractors
-UNION ALL
-SELECT name, 'Intern' AS type FROM interns;
-
--- UNION with ORDER BY (at the end)
-SELECT first_name, salary FROM employees WHERE department_id = 10
-UNION
-SELECT first_name, salary FROM employees WHERE department_id = 20
-ORDER BY salary DESC;
-
--- UNION with different column names (uses first query's names)
-SELECT first_name AS name, salary AS pay FROM employees
-UNION
-SELECT contractor_name, hourly_rate * 2080 FROM contractors;</pre>
-                        </div>
-                    </div>
-                </div>
-                <div id="intersect" class="tab-content">
-                    <div class="code-container">
-                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
-                        <div class="code-block">
-<pre>-- INTERSECT (rows in both queries)
+-- INTERSECT (rows in both queries)
 SELECT employee_id FROM employees
 INTERSECT
 SELECT employee_id FROM project_assignments;
 
--- INTERSECT ALL (keeps duplicates)
-SELECT skill FROM employee_skills
-INTERSECT ALL
-SELECT skill FROM required_skills;
-
 -- EXCEPT / MINUS (rows in first but not second)
 SELECT employee_id FROM employees
 EXCEPT
-SELECT employee_id FROM terminated_employees;
-
--- EXCEPT ALL
-SELECT product_id FROM inventory
-EXCEPT ALL
-SELECT product_id FROM sold_items;
-
--- Combining set operations
-(SELECT id FROM table_a
- UNION
- SELECT id FROM table_b)
-INTERSECT
-SELECT id FROM table_c;
-
--- Using set operations for data comparison
--- Find new customers (in current but not previous)
-SELECT customer_id FROM current_customers
-EXCEPT
-SELECT customer_id FROM previous_customers;
-
--- Find churned customers (in previous but not current)
-SELECT customer_id FROM previous_customers
-EXCEPT
-SELECT customer_id FROM current_customers;</pre>
+SELECT employee_id FROM terminated_employees;</pre>
                         </div>
                     </div>
                 </div>
+                <div id="pyspark-df" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (PySpark DataFrame API)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("SetOperations").getOrCreate()
+
+# Create sample DataFrames
+employees = spark.createDataFrame([
+    (1, "Alice", "Smith"), (2, "Bob", "Johnson"), (3, "Charlie", "Brown")
+], ["id", "first_name", "last_name"])
+
+contractors = spark.createDataFrame([
+    (4, "Diana", "Wilson"), (2, "Bob", "Johnson"), (5, "Eve", "Davis")
+], ["id", "first_name", "last_name"])
+
+# UNION (removes duplicates)
+employees.select("first_name", "last_name") \
+    .union(contractors.select("first_name", "last_name")) \
+    .distinct().show()
+
+# UNION ALL (keeps duplicates) - union() in PySpark keeps duplicates by default
+employees.select("first_name", "last_name") \
+    .union(contractors.select("first_name", "last_name")).show()
+
+# unionByName - matches columns by name, not position
+employees.unionByName(contractors).show()
+
+# INTERSECT (rows in both)
+employees.select("first_name", "last_name") \
+    .intersect(contractors.select("first_name", "last_name")).show()
+
+# INTERSECT ALL (keeps duplicates)
+employees.select("first_name", "last_name") \
+    .intersectAll(contractors.select("first_name", "last_name")).show()
+
+# EXCEPT (rows in first but not second)
+employees.select("first_name", "last_name") \
+    .subtract(contractors.select("first_name", "last_name")).show()
+
+# EXCEPT ALL (keeps duplicates)
+employees.select("first_name", "last_name") \
+    .exceptAll(contractors.select("first_name", "last_name")).show()
+
+# Multiple unions
+interns = spark.createDataFrame([(6, "Frank", "Miller")], ["id", "first_name", "last_name"])
+employees.union(contractors).union(interns).distinct().show()</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="pyspark-sql" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (PySpark SQL)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("SetOperations").getOrCreate()
+
+# Create and register temp views
+employees = spark.createDataFrame([
+    (1, "Alice", "Smith"), (2, "Bob", "Johnson"), (3, "Charlie", "Brown")
+], ["id", "first_name", "last_name"])
+employees.createOrReplaceTempView("employees")
+
+contractors = spark.createDataFrame([
+    (4, "Diana", "Wilson"), (2, "Bob", "Johnson"), (5, "Eve", "Davis")
+], ["id", "first_name", "last_name"])
+contractors.createOrReplaceTempView("contractors")
+
+# UNION (removes duplicates)
+spark.sql("""
+    SELECT first_name, last_name FROM employees
+    UNION
+    SELECT first_name, last_name FROM contractors
+""").show()
+
+# UNION ALL (keeps duplicates)
+spark.sql("""
+    SELECT first_name, last_name FROM employees
+    UNION ALL
+    SELECT first_name, last_name FROM contractors
+""").show()
+
+# INTERSECT
+spark.sql("""
+    SELECT first_name, last_name FROM employees
+    INTERSECT
+    SELECT first_name, last_name FROM contractors
+""").show()
+
+# EXCEPT
+spark.sql("""
+    SELECT first_name, last_name FROM employees
+    EXCEPT
+    SELECT first_name, last_name FROM contractors
+""").show()
+
+# Multiple set operations
+spark.sql("""
+    (SELECT first_name FROM employees
+     UNION
+     SELECT first_name FROM contractors)
+    ORDER BY first_name
+""").show()</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="comparison" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Side-by-Side Comparison</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre># ============================================
+# SET OPERATIONS: DataFrame API vs SQL
+# ============================================
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("Comparison").getOrCreate()
+
+df1 = spark.createDataFrame([(1, "A"), (2, "B"), (3, "C")], ["id", "name"])
+df2 = spark.createDataFrame([(2, "B"), (3, "C"), (4, "D")], ["id", "name"])
+df1.createOrReplaceTempView("table1")
+df2.createOrReplaceTempView("table2")
+
+# UNION (distinct)
+# DataFrame API:
+df1.union(df2).distinct().show()
+# PySpark SQL:
+spark.sql("SELECT * FROM table1 UNION SELECT * FROM table2").show()
+
+# UNION ALL (with duplicates)
+# DataFrame API:
+df1.union(df2).show()
+# PySpark SQL:
+spark.sql("SELECT * FROM table1 UNION ALL SELECT * FROM table2").show()
+
+# INTERSECT
+# DataFrame API:
+df1.intersect(df2).show()
+# PySpark SQL:
+spark.sql("SELECT * FROM table1 INTERSECT SELECT * FROM table2").show()
+
+# EXCEPT (MINUS)
+# DataFrame API:
+df1.subtract(df2).show()  # Note: subtract() not except()
+# PySpark SQL:
+spark.sql("SELECT * FROM table1 EXCEPT SELECT * FROM table2").show()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../09_window_functions/index.html" style="color: var(--text-muted);">&larr; Previous: Window Functions</a>
+                <a href="../11_case_statements/index.html" style="color: var(--accent-primary);">Next: CASE Statements &rarr;</a>
             </div>
         </section>
     </main>

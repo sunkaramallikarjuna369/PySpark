@@ -17,7 +17,7 @@
     <main class="container">
         <section class="section">
             <h1>Stored Procedures</h1>
-            <p>Stored procedures are precompiled SQL code that can be saved and reused. They encapsulate business logic, improve performance, and enhance security.</p>
+            <p>Stored procedures encapsulate reusable SQL logic. Learn procedures/functions using standard SQL and PySpark UDFs.</p>
             <div id="visualization" class="visualization-container"></div>
             <div class="visualization-controls">
                 <button class="viz-btn" onclick="showProcedure()">Procedure</button>
@@ -25,159 +25,266 @@
             </div>
             <h2>Code Examples</h2>
             <div class="tabs">
-                <button class="tab active" data-tab="procedures">Procedures</button>
-                <button class="tab" data-tab="functions">Functions</button>
-                <button class="tab" data-tab="control">Control Flow</button>
+                <button class="tab active" data-tab="sql">Standard SQL</button>
+                <button class="tab" data-tab="pyspark-df">PySpark DataFrame</button>
+                <button class="tab" data-tab="pyspark-sql">PySpark SQL</button>
+                <button class="tab" data-tab="comparison">Side-by-Side</button>
             </div>
             <div class="tab-contents">
-                <div id="procedures" class="tab-content active">
+                <div id="sql" class="tab-content active">
                     <div class="code-container">
                         <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
 <pre>-- PostgreSQL Stored Procedure
-CREATE OR REPLACE PROCEDURE update_salary(
-    emp_id INT,
-    new_salary DECIMAL
-)
-LANGUAGE plpgsql
-AS $$
+CREATE OR REPLACE PROCEDURE update_salary(emp_id INT, new_salary DECIMAL)
+LANGUAGE plpgsql AS $$
 BEGIN
     UPDATE employees SET salary = new_salary WHERE employee_id = emp_id;
     COMMIT;
-END;
-$$;
+END; $$;
 
 -- Call procedure
 CALL update_salary(101, 75000);
 
--- MySQL Stored Procedure
-DELIMITER //
-CREATE PROCEDURE GetEmployeesByDept(IN dept_id INT)
+-- PostgreSQL Function
+CREATE OR REPLACE FUNCTION calculate_bonus(salary DECIMAL, pct INT)
+RETURNS DECIMAL LANGUAGE plpgsql AS $$
 BEGIN
-    SELECT * FROM employees WHERE department_id = dept_id;
-END //
-DELIMITER ;
-
--- Call MySQL procedure
-CALL GetEmployeesByDept(10);
-
--- SQL Server Stored Procedure
-CREATE PROCEDURE sp_GetEmployees
-    @DeptId INT,
-    @MinSalary DECIMAL = 0
-AS
-BEGIN
-    SELECT * FROM employees 
-    WHERE department_id = @DeptId AND salary >= @MinSalary;
-END;
-
--- Execute SQL Server procedure
-EXEC sp_GetEmployees @DeptId = 10, @MinSalary = 50000;
-
--- Drop procedure
-DROP PROCEDURE IF EXISTS update_salary;</pre>
-                        </div>
-                    </div>
-                </div>
-                <div id="functions" class="tab-content">
-                    <div class="code-container">
-                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
-                        <div class="code-block">
-<pre>-- PostgreSQL Function
-CREATE OR REPLACE FUNCTION calculate_bonus(salary DECIMAL, performance INT)
-RETURNS DECIMAL
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    RETURN salary * (performance / 100.0);
-END;
-$$;
+    RETURN salary * (pct / 100.0);
+END; $$;
 
 -- Use function
-SELECT first_name, salary, calculate_bonus(salary, 15) AS bonus FROM employees;
-
--- Table-returning function
-CREATE OR REPLACE FUNCTION get_high_earners(min_salary DECIMAL)
-RETURNS TABLE(name TEXT, salary DECIMAL)
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    RETURN QUERY
-    SELECT first_name || ' ' || last_name, e.salary
-    FROM employees e
-    WHERE e.salary > min_salary;
-END;
-$$;
-
--- Use table function
-SELECT * FROM get_high_earners(50000);
-
--- MySQL Function
-DELIMITER //
-CREATE FUNCTION get_full_name(first_name VARCHAR(50), last_name VARCHAR(50))
-RETURNS VARCHAR(100)
-DETERMINISTIC
-BEGIN
-    RETURN CONCAT(first_name, ' ', last_name);
-END //
-DELIMITER ;
-
--- SQL Server Function
-CREATE FUNCTION dbo.GetAnnualSalary(@monthly_salary DECIMAL)
-RETURNS DECIMAL
-AS
-BEGIN
-    RETURN @monthly_salary * 12;
-END;</pre>
+SELECT first_name, salary, calculate_bonus(salary, 15) AS bonus FROM employees;</pre>
                         </div>
                     </div>
                 </div>
-                <div id="control" class="tab-content">
+                <div id="pyspark-df" class="tab-content">
                     <div class="code-container">
-                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-header"><span class="code-language">Python (PySpark DataFrame API)</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
-<pre>-- Variables and control flow (PostgreSQL)
-CREATE OR REPLACE FUNCTION process_employees()
-RETURNS VOID
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    emp_record RECORD;
-    total_processed INT := 0;
-BEGIN
-    -- Loop through employees
-    FOR emp_record IN SELECT * FROM employees LOOP
-        -- IF statement
-        IF emp_record.salary > 100000 THEN
-            UPDATE employees SET bonus = salary * 0.2 
-            WHERE employee_id = emp_record.employee_id;
-        ELSIF emp_record.salary > 50000 THEN
-            UPDATE employees SET bonus = salary * 0.1 
-            WHERE employee_id = emp_record.employee_id;
-        ELSE
-            UPDATE employees SET bonus = salary * 0.05 
-            WHERE employee_id = emp_record.employee_id;
-        END IF;
-        
-        total_processed := total_processed + 1;
-    END LOOP;
-    
-    RAISE NOTICE 'Processed % employees', total_processed;
-END;
-$$;
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, udf, pandas_udf, when
+from pyspark.sql.types import DoubleType, StringType, IntegerType
+import pandas as pd
 
--- Exception handling
-BEGIN
-    -- risky operation
-EXCEPTION
-    WHEN division_by_zero THEN
-        RAISE NOTICE 'Division by zero error';
-    WHEN OTHERS THEN
-        RAISE NOTICE 'An error occurred: %', SQLERRM;
-END;</pre>
+spark = SparkSession.builder.appName("StoredProcedures").getOrCreate()
+
+# Create sample DataFrame
+data = [(1, "Alice", 50000), (2, "Bob", 75000), (3, "Charlie", 100000)]
+df = spark.createDataFrame(data, ["id", "name", "salary"])
+
+# ============================================
+# UDF (User Defined Function) - PySpark equivalent of SQL functions
+# ============================================
+
+# Simple UDF
+def calculate_bonus(salary, pct):
+    return salary * (pct / 100.0)
+
+# Register UDF
+calculate_bonus_udf = udf(calculate_bonus, DoubleType())
+
+# Use UDF with DataFrame API
+df.select("name", "salary", 
+    calculate_bonus_udf(col("salary"), col("salary") * 0).alias("bonus")
+).show()
+
+# UDF with fixed parameter
+@udf(returnType=DoubleType())
+def bonus_15_pct(salary):
+    return salary * 0.15
+
+df.select("name", "salary", bonus_15_pct(col("salary")).alias("bonus")).show()
+
+# String UDF
+@udf(returnType=StringType())
+def salary_level(salary):
+    if salary >= 80000:
+        return "Senior"
+    elif salary >= 50000:
+        return "Mid"
+    else:
+        return "Junior"
+
+df.select("name", "salary", salary_level(col("salary")).alias("level")).show()
+
+# ============================================
+# Pandas UDF (Vectorized - much faster)
+# ============================================
+
+@pandas_udf(DoubleType())
+def calculate_bonus_pandas(salary: pd.Series) -> pd.Series:
+    return salary * 0.15
+
+df.select("name", "salary", calculate_bonus_pandas(col("salary")).alias("bonus")).show()
+
+# Pandas UDF with multiple columns
+@pandas_udf(DoubleType())
+def custom_bonus(salary: pd.Series, multiplier: pd.Series) -> pd.Series:
+    return salary * multiplier
+
+# ============================================
+# Reusable transformation functions (like procedures)
+# ============================================
+
+def add_salary_level(df):
+    """Reusable transformation - like a stored procedure"""
+    return df.withColumn("level",
+        when(col("salary") >= 80000, "Senior")
+        .when(col("salary") >= 50000, "Mid")
+        .otherwise("Junior")
+    )
+
+def add_bonus(df, pct=0.15):
+    """Parameterized transformation"""
+    return df.withColumn("bonus", col("salary") * pct)
+
+# Chain transformations
+result = df.transform(add_salary_level).transform(lambda d: add_bonus(d, 0.10))
+result.show()</pre>
                         </div>
                     </div>
                 </div>
+                <div id="pyspark-sql" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (PySpark SQL)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import udf, pandas_udf
+from pyspark.sql.types import DoubleType, StringType
+import pandas as pd
+
+spark = SparkSession.builder.appName("StoredProcedures").getOrCreate()
+
+# Create base table
+data = [(1, "Alice", 50000), (2, "Bob", 75000), (3, "Charlie", 100000)]
+df = spark.createDataFrame(data, ["id", "name", "salary"])
+df.createOrReplaceTempView("employees")
+
+# ============================================
+# Register UDF for SQL use
+# ============================================
+
+# Define Python function
+def calculate_bonus(salary, pct):
+    if salary is None or pct is None:
+        return None
+    return float(salary) * (float(pct) / 100.0)
+
+# Register for SQL
+spark.udf.register("calculate_bonus", calculate_bonus, DoubleType())
+
+# Use in SQL
+spark.sql("""
+    SELECT name, salary, calculate_bonus(salary, 15) AS bonus
+    FROM employees
+""").show()
+
+# String function
+def get_salary_level(salary):
+    if salary is None:
+        return "Unknown"
+    if salary >= 80000:
+        return "Senior"
+    elif salary >= 50000:
+        return "Mid"
+    return "Junior"
+
+spark.udf.register("salary_level", get_salary_level, StringType())
+
+spark.sql("""
+    SELECT name, salary, salary_level(salary) AS level
+    FROM employees
+""").show()
+
+# ============================================
+# Register Pandas UDF for SQL (faster)
+# ============================================
+
+@pandas_udf(DoubleType())
+def bonus_pandas(salary: pd.Series) -> pd.Series:
+    return salary * 0.15
+
+spark.udf.register("bonus_pandas", bonus_pandas)
+
+spark.sql("""
+    SELECT name, salary, bonus_pandas(salary) AS bonus
+    FROM employees
+""").show()
+
+# ============================================
+# Complex logic in SQL with registered UDFs
+# ============================================
+
+spark.sql("""
+    SELECT 
+        name, 
+        salary,
+        salary_level(salary) AS level,
+        calculate_bonus(salary, 
+            CASE 
+                WHEN salary >= 80000 THEN 20
+                WHEN salary >= 50000 THEN 15
+                ELSE 10
+            END
+        ) AS bonus
+    FROM employees
+""").show()
+
+# List registered functions
+spark.sql("SHOW USER FUNCTIONS").show()</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="comparison" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Side-by-Side Comparison</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre># ============================================
+# FUNCTIONS/PROCEDURES: DataFrame API vs SQL
+# ============================================
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, udf
+from pyspark.sql.types import DoubleType
+
+spark = SparkSession.builder.appName("Comparison").getOrCreate()
+
+data = [(1, "Alice", 50000), (2, "Bob", 75000)]
+df = spark.createDataFrame(data, ["id", "name", "salary"])
+df.createOrReplaceTempView("employees")
+
+# Define function
+def calc_bonus(salary):
+    return salary * 0.15 if salary else 0
+
+# USING UDF WITH DATAFRAME API
+bonus_udf = udf(calc_bonus, DoubleType())
+df.select("name", "salary", bonus_udf(col("salary")).alias("bonus")).show()
+
+# USING UDF WITH SQL
+spark.udf.register("calc_bonus", calc_bonus, DoubleType())
+spark.sql("SELECT name, salary, calc_bonus(salary) AS bonus FROM employees").show()
+
+# REUSABLE TRANSFORMATIONS (Procedure-like)
+# DataFrame API - function that transforms DataFrame:
+def add_bonus_column(dataframe, pct=0.15):
+    return dataframe.withColumn("bonus", col("salary") * pct)
+
+df.transform(add_bonus_column).show()
+df.transform(lambda d: add_bonus_column(d, 0.20)).show()
+
+# Note: PySpark doesn't have stored procedures like databases
+# Instead, use:
+# 1. UDFs for custom scalar functions
+# 2. Pandas UDFs for vectorized operations
+# 3. Python functions that transform DataFrames for procedure-like logic</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../14_views/index.html" style="color: var(--text-muted);">&larr; Previous: Views</a>
+                <a href="../../index.html#sql" style="color: var(--accent-primary);">Back to SQL Topics &rarr;</a>
             </div>
         </section>
     </main>

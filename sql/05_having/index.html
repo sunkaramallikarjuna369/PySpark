@@ -17,93 +17,201 @@
     <main class="container">
         <section class="section">
             <h1>HAVING Clause</h1>
-            <p>HAVING filters groups after GROUP BY aggregation. While WHERE filters rows before grouping, HAVING filters the aggregated results.</p>
+            <p>HAVING filters groups after GROUP BY aggregation. Learn HAVING using standard SQL, PySpark DataFrame API, and PySpark SQL.</p>
             <div id="visualization" class="visualization-container"></div>
             <div class="visualization-controls">
                 <button class="viz-btn" onclick="showWhereVsHaving()">WHERE vs HAVING</button>
             </div>
             <h2>Code Examples</h2>
             <div class="tabs">
-                <button class="tab active" data-tab="basic">Basic HAVING</button>
-                <button class="tab" data-tab="complex">Complex Conditions</button>
+                <button class="tab active" data-tab="sql">Standard SQL</button>
+                <button class="tab" data-tab="pyspark-df">PySpark DataFrame</button>
+                <button class="tab" data-tab="pyspark-sql">PySpark SQL</button>
+                <button class="tab" data-tab="comparison">Side-by-Side</button>
             </div>
             <div class="tab-contents">
-                <div id="basic" class="tab-content active">
+                <div id="sql" class="tab-content active">
                     <div class="code-container">
                         <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
 <pre>-- Basic HAVING
 SELECT department_id, COUNT(*) AS emp_count
-FROM employees
-GROUP BY department_id
-HAVING COUNT(*) > 5;
+FROM employees GROUP BY department_id HAVING COUNT(*) > 5;
 
 -- HAVING with SUM
 SELECT department_id, SUM(salary) AS total_salary
-FROM employees
-GROUP BY department_id
-HAVING SUM(salary) > 100000;
+FROM employees GROUP BY department_id HAVING SUM(salary) > 100000;
 
 -- HAVING with AVG
 SELECT department_id, AVG(salary) AS avg_salary
-FROM employees
-GROUP BY department_id
-HAVING AVG(salary) > 50000;
+FROM employees GROUP BY department_id HAVING AVG(salary) > 50000;
 
 -- WHERE and HAVING together
 SELECT department_id, COUNT(*) AS count
 FROM employees
-WHERE salary > 30000          -- Filter rows first
+WHERE salary > 30000
 GROUP BY department_id
-HAVING COUNT(*) > 3;          -- Then filter groups
+HAVING COUNT(*) > 3;
 
--- HAVING with column alias (some databases)
-SELECT department_id, COUNT(*) AS emp_count
-FROM employees
-GROUP BY department_id
-HAVING emp_count > 5;  -- MySQL allows this</pre>
-                        </div>
-                    </div>
-                </div>
-                <div id="complex" class="tab-content">
-                    <div class="code-container">
-                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
-                        <div class="code-block">
-<pre>-- Multiple HAVING conditions
+-- Multiple HAVING conditions
 SELECT department_id, COUNT(*) AS count, AVG(salary) AS avg_sal
-FROM employees
-GROUP BY department_id
-HAVING COUNT(*) > 5 AND AVG(salary) > 50000;
-
--- HAVING with OR
-SELECT department_id, SUM(salary) AS total
-FROM employees
-GROUP BY department_id
-HAVING SUM(salary) > 200000 OR COUNT(*) > 10;
-
--- HAVING with subquery
-SELECT department_id, AVG(salary) AS avg_sal
-FROM employees
-GROUP BY department_id
-HAVING AVG(salary) > (SELECT AVG(salary) FROM employees);
-
--- HAVING with CASE
-SELECT department_id,
-       SUM(CASE WHEN salary > 50000 THEN 1 ELSE 0 END) AS high_earners
-FROM employees
-GROUP BY department_id
-HAVING SUM(CASE WHEN salary > 50000 THEN 1 ELSE 0 END) > 2;
-
--- Order of execution:
--- 1. FROM
--- 2. WHERE (filter rows)
--- 3. GROUP BY (group rows)
--- 4. HAVING (filter groups)
--- 5. SELECT
--- 6. ORDER BY</pre>
+FROM employees GROUP BY department_id
+HAVING COUNT(*) > 5 AND AVG(salary) > 50000;</pre>
                         </div>
                     </div>
                 </div>
+                <div id="pyspark-df" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (PySpark DataFrame API)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, count, sum, avg
+
+spark = SparkSession.builder.appName("Having").getOrCreate()
+
+# Create sample DataFrame
+data = [
+    (1, "Alice", 50000, 10), (2, "Bob", 60000, 10),
+    (3, "Charlie", 75000, 10), (4, "Diana", 55000, 20),
+    (5, "Eve", 45000, 20), (6, "Frank", 80000, 30)
+]
+df = spark.createDataFrame(data, ["id", "name", "salary", "dept_id"])
+
+# Basic HAVING - filter groups with count > 2
+df.groupBy("dept_id").agg(
+    count("*").alias("emp_count")
+).filter(col("emp_count") > 2).show()
+
+# HAVING with SUM
+df.groupBy("dept_id").agg(
+    sum("salary").alias("total_salary")
+).filter(col("total_salary") > 100000).show()
+
+# HAVING with AVG
+df.groupBy("dept_id").agg(
+    avg("salary").alias("avg_salary")
+).filter(col("avg_salary") > 50000).show()
+
+# WHERE and HAVING together
+df.filter(col("salary") > 30000) \
+  .groupBy("dept_id") \
+  .agg(count("*").alias("count")) \
+  .filter(col("count") > 1).show()
+
+# Multiple HAVING conditions
+df.groupBy("dept_id").agg(
+    count("*").alias("count"),
+    avg("salary").alias("avg_sal")
+).filter((col("count") > 1) & (col("avg_sal") > 50000)).show()
+
+# HAVING with subquery equivalent
+overall_avg = df.agg(avg("salary")).collect()[0][0]
+df.groupBy("dept_id").agg(
+    avg("salary").alias("avg_sal")
+).filter(col("avg_sal") > overall_avg).show()</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="pyspark-sql" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (PySpark SQL)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("Having").getOrCreate()
+
+# Create and register temp view
+data = [
+    (1, "Alice", 50000, 10), (2, "Bob", 60000, 10),
+    (3, "Charlie", 75000, 10), (4, "Diana", 55000, 20),
+    (5, "Eve", 45000, 20), (6, "Frank", 80000, 30)
+]
+df = spark.createDataFrame(data, ["id", "name", "salary", "dept_id"])
+df.createOrReplaceTempView("employees")
+
+# Basic HAVING
+spark.sql("""
+    SELECT dept_id, COUNT(*) AS emp_count
+    FROM employees GROUP BY dept_id HAVING COUNT(*) > 2
+""").show()
+
+# HAVING with SUM
+spark.sql("""
+    SELECT dept_id, SUM(salary) AS total_salary
+    FROM employees GROUP BY dept_id HAVING SUM(salary) > 100000
+""").show()
+
+# HAVING with AVG
+spark.sql("""
+    SELECT dept_id, AVG(salary) AS avg_salary
+    FROM employees GROUP BY dept_id HAVING AVG(salary) > 50000
+""").show()
+
+# WHERE and HAVING together
+spark.sql("""
+    SELECT dept_id, COUNT(*) AS count
+    FROM employees
+    WHERE salary > 30000
+    GROUP BY dept_id
+    HAVING COUNT(*) > 1
+""").show()
+
+# Multiple HAVING conditions
+spark.sql("""
+    SELECT dept_id, COUNT(*) AS count, AVG(salary) AS avg_sal
+    FROM employees GROUP BY dept_id
+    HAVING COUNT(*) > 1 AND AVG(salary) > 50000
+""").show()
+
+# HAVING with subquery
+spark.sql("""
+    SELECT dept_id, AVG(salary) AS avg_sal
+    FROM employees GROUP BY dept_id
+    HAVING AVG(salary) > (SELECT AVG(salary) FROM employees)
+""").show()</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="comparison" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Side-by-Side Comparison</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre># ============================================
+# HAVING: DataFrame API vs SQL
+# ============================================
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, count, avg
+
+spark = SparkSession.builder.appName("Comparison").getOrCreate()
+
+data = [(1, "Alice", 50000, 10), (2, "Bob", 60000, 10), (3, "Charlie", 75000, 20)]
+df = spark.createDataFrame(data, ["id", "name", "salary", "dept_id"])
+df.createOrReplaceTempView("employees")
+
+# BASIC HAVING
+# DataFrame API:
+df.groupBy("dept_id").agg(count("*").alias("cnt")).filter(col("cnt") > 1).show()
+# PySpark SQL:
+spark.sql("SELECT dept_id, COUNT(*) AS cnt FROM employees GROUP BY dept_id HAVING COUNT(*) > 1").show()
+
+# HAVING WITH AVG
+# DataFrame API:
+df.groupBy("dept_id").agg(avg("salary").alias("avg_sal")).filter(col("avg_sal") > 55000).show()
+# PySpark SQL:
+spark.sql("SELECT dept_id, AVG(salary) AS avg_sal FROM employees GROUP BY dept_id HAVING AVG(salary) > 55000").show()
+
+# WHERE + HAVING
+# DataFrame API:
+df.filter(col("salary") > 40000).groupBy("dept_id").agg(count("*").alias("cnt")).filter(col("cnt") > 1).show()
+# PySpark SQL:
+spark.sql("SELECT dept_id, COUNT(*) AS cnt FROM employees WHERE salary > 40000 GROUP BY dept_id HAVING COUNT(*) > 1").show()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../04_group_by/index.html" style="color: var(--text-muted);">&larr; Previous: GROUP BY</a>
+                <a href="../06_order_by/index.html" style="color: var(--accent-primary);">Next: ORDER BY &rarr;</a>
             </div>
         </section>
     </main>

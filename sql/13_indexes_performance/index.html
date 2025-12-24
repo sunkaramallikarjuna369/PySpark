@@ -17,7 +17,7 @@
     <main class="container">
         <section class="section">
             <h1>Indexes & Performance</h1>
-            <p>Indexes speed up data retrieval by creating efficient lookup structures. Understanding when and how to use indexes is crucial for query optimization.</p>
+            <p>Indexes speed up data retrieval. Learn performance optimization using standard SQL concepts and PySpark equivalents.</p>
             <div id="visualization" class="visualization-container"></div>
             <div class="visualization-controls">
                 <button class="viz-btn" onclick="showIndex()">B-Tree Index</button>
@@ -25,104 +25,181 @@
             </div>
             <h2>Code Examples</h2>
             <div class="tabs">
-                <button class="tab active" data-tab="create">Creating Indexes</button>
-                <button class="tab" data-tab="types">Index Types</button>
-                <button class="tab" data-tab="optimize">Optimization</button>
+                <button class="tab active" data-tab="sql">Standard SQL</button>
+                <button class="tab" data-tab="pyspark-df">PySpark DataFrame</button>
+                <button class="tab" data-tab="pyspark-sql">PySpark SQL</button>
+                <button class="tab" data-tab="comparison">Side-by-Side</button>
             </div>
             <div class="tab-contents">
-                <div id="create" class="tab-content active">
+                <div id="sql" class="tab-content active">
                     <div class="code-container">
                         <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
 <pre>-- Create basic index
 CREATE INDEX idx_employee_name ON employees(last_name);
 
--- Create unique index
-CREATE UNIQUE INDEX idx_employee_email ON employees(email);
-
 -- Create composite index
 CREATE INDEX idx_emp_dept_salary ON employees(department_id, salary);
 
--- Create index with specific order
-CREATE INDEX idx_salary_desc ON employees(salary DESC);
-
--- Drop index
-DROP INDEX idx_employee_name;
-DROP INDEX idx_employee_name ON employees;  -- MySQL
-
--- View indexes
--- PostgreSQL:
-SELECT * FROM pg_indexes WHERE tablename = 'employees';
--- MySQL:
-SHOW INDEX FROM employees;
--- SQL Server:
-SELECT * FROM sys.indexes WHERE object_id = OBJECT_ID('employees');</pre>
-                        </div>
-                    </div>
-                </div>
-                <div id="types" class="tab-content">
-                    <div class="code-container">
-                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
-                        <div class="code-block">
-<pre>-- B-Tree Index (default, most common)
-CREATE INDEX idx_btree ON employees(last_name);
-
--- Hash Index (equality only, PostgreSQL)
-CREATE INDEX idx_hash ON employees USING HASH (employee_id);
-
--- GiST Index (geometric, full-text, PostgreSQL)
-CREATE INDEX idx_gist ON locations USING GIST (coordinates);
-
--- GIN Index (arrays, full-text, PostgreSQL)
-CREATE INDEX idx_gin ON documents USING GIN (tags);
-
--- Full-text Index (MySQL)
-CREATE FULLTEXT INDEX idx_fulltext ON articles(title, content);
-
--- Partial/Filtered Index
-CREATE INDEX idx_active ON employees(last_name) WHERE status = 'Active';
-
--- Covering Index (includes all needed columns)
-CREATE INDEX idx_covering ON employees(department_id) INCLUDE (first_name, salary);
-
--- Clustered Index (physical order, one per table)
-CREATE CLUSTERED INDEX idx_clustered ON employees(employee_id);  -- SQL Server</pre>
-                        </div>
-                    </div>
-                </div>
-                <div id="optimize" class="tab-content">
-                    <div class="code-container">
-                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
-                        <div class="code-block">
-<pre>-- EXPLAIN query plan
+-- EXPLAIN query plan
 EXPLAIN SELECT * FROM employees WHERE last_name = 'Smith';
 EXPLAIN ANALYZE SELECT * FROM employees WHERE department_id = 10;
 
 -- Index usage tips:
 -- 1. Index columns used in WHERE, JOIN, ORDER BY
 -- 2. Put most selective column first in composite index
--- 3. Avoid indexing small tables
--- 4. Avoid indexing frequently updated columns
-
--- Queries that DON'T use indexes:
-SELECT * FROM employees WHERE UPPER(last_name) = 'SMITH';  -- Function on column
-SELECT * FROM employees WHERE last_name LIKE '%mith';      -- Leading wildcard
-SELECT * FROM employees WHERE salary + 1000 > 50000;       -- Expression
-
--- Fix: Function-based index
-CREATE INDEX idx_upper_name ON employees(UPPER(last_name));
-
--- Statistics for optimizer
-ANALYZE employees;                    -- PostgreSQL
-ANALYZE TABLE employees;              -- MySQL
-UPDATE STATISTICS employees;          -- SQL Server
-
--- Query hints (use sparingly)
-SELECT /*+ INDEX(employees idx_name) */ * FROM employees;  -- Oracle
-SELECT * FROM employees WITH (INDEX(idx_name));            -- SQL Server</pre>
+-- 3. Avoid functions on indexed columns in WHERE</pre>
                         </div>
                     </div>
                 </div>
+                <div id="pyspark-df" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (PySpark DataFrame API)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, broadcast
+
+spark = SparkSession.builder.appName("Performance").getOrCreate()
+
+# Create sample DataFrame
+data = [(i, f"Name{i}", i * 1000, i % 10) for i in range(1, 1001)]
+df = spark.createDataFrame(data, ["id", "name", "salary", "dept_id"])
+
+# EXPLAIN - View query execution plan
+df.filter(col("name") == "Name100").explain()
+df.filter(col("name") == "Name100").explain(True)  # Extended plan
+df.filter(col("name") == "Name100").explain("formatted")  # Formatted plan
+
+# Performance optimization techniques:
+
+# 1. Partitioning - organize data by column
+df.write.partitionBy("dept_id").parquet("/tmp/employees_partitioned")
+# Reading partitioned data is faster for filtered queries
+spark.read.parquet("/tmp/employees_partitioned").filter(col("dept_id") == 5).explain()
+
+# 2. Bucketing - hash-based distribution
+df.write.bucketBy(10, "dept_id").sortBy("salary").saveAsTable("employees_bucketed")
+
+# 3. Caching - keep data in memory
+df.cache()  # or df.persist()
+df.count()  # Trigger caching
+df.filter(col("salary") > 50000).show()  # Uses cached data
+df.unpersist()  # Release cache
+
+# 4. Broadcast join - for small tables
+small_df = spark.createDataFrame([(1, "IT"), (2, "HR")], ["dept_id", "dept_name"])
+df.join(broadcast(small_df), "dept_id").explain()
+
+# 5. Repartition vs Coalesce
+df.repartition(10)  # Shuffle to 10 partitions
+df.coalesce(2)  # Reduce to 2 partitions (no shuffle)
+
+# 6. Filter pushdown - filter early
+df.filter(col("salary") > 50000).select("name", "salary").explain()
+
+# 7. Column pruning - select only needed columns
+df.select("name", "salary").explain()</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="pyspark-sql" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (PySpark SQL)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("Performance").getOrCreate()
+
+# Create and register temp view
+data = [(i, f"Name{i}", i * 1000, i % 10) for i in range(1, 1001)]
+df = spark.createDataFrame(data, ["id", "name", "salary", "dept_id"])
+df.createOrReplaceTempView("employees")
+
+# EXPLAIN query plan
+spark.sql("EXPLAIN SELECT * FROM employees WHERE name = 'Name100'").show(truncate=False)
+spark.sql("EXPLAIN EXTENDED SELECT * FROM employees WHERE dept_id = 5").show(truncate=False)
+
+# Performance optimization with SQL:
+
+# 1. Cache table
+spark.sql("CACHE TABLE employees")
+spark.sql("SELECT * FROM employees WHERE salary > 50000").show()
+spark.sql("UNCACHE TABLE employees")
+
+# 2. Broadcast hint for joins
+small_df = spark.createDataFrame([(1, "IT"), (2, "HR")], ["dept_id", "dept_name"])
+small_df.createOrReplaceTempView("departments")
+
+spark.sql("""
+    SELECT /*+ BROADCAST(departments) */ e.*, d.dept_name
+    FROM employees e
+    JOIN departments d ON e.dept_id = d.dept_id
+""").explain()
+
+# 3. Repartition hint
+spark.sql("""
+    SELECT /*+ REPARTITION(10) */ * FROM employees
+""").explain()
+
+# 4. Coalesce hint
+spark.sql("""
+    SELECT /*+ COALESCE(2) */ * FROM employees
+""").explain()
+
+# 5. Analyze table for statistics
+spark.sql("ANALYZE TABLE employees COMPUTE STATISTICS")
+spark.sql("ANALYZE TABLE employees COMPUTE STATISTICS FOR COLUMNS salary, dept_id")
+
+# 6. Describe table
+spark.sql("DESCRIBE EXTENDED employees").show(truncate=False)</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="comparison" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Side-by-Side Comparison</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre># ============================================
+# PERFORMANCE: DataFrame API vs SQL
+# ============================================
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, broadcast
+
+spark = SparkSession.builder.appName("Comparison").getOrCreate()
+
+data = [(i, f"Name{i}", i * 1000) for i in range(1, 101)]
+df = spark.createDataFrame(data, ["id", "name", "salary"])
+df.createOrReplaceTempView("employees")
+
+# EXPLAIN
+# DataFrame API:
+df.filter(col("salary") > 50000).explain()
+# PySpark SQL:
+spark.sql("EXPLAIN SELECT * FROM employees WHERE salary > 50000").show(truncate=False)
+
+# CACHE
+# DataFrame API:
+df.cache()
+# PySpark SQL:
+spark.sql("CACHE TABLE employees")
+
+# BROADCAST JOIN
+small = spark.createDataFrame([(1, "A")], ["id", "val"])
+small.createOrReplaceTempView("small_table")
+# DataFrame API:
+df.join(broadcast(small), "id").explain()
+# PySpark SQL:
+spark.sql("SELECT /*+ BROADCAST(small_table) */ * FROM employees e JOIN small_table s ON e.id = s.id").explain()
+
+# Note: PySpark doesn't use traditional indexes like databases
+# Instead, it uses partitioning, bucketing, and caching for optimization</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../12_null_handling/index.html" style="color: var(--text-muted);">&larr; Previous: NULL Handling</a>
+                <a href="../14_views/index.html" style="color: var(--accent-primary);">Next: Views &rarr;</a>
             </div>
         </section>
     </main>

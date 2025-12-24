@@ -17,7 +17,7 @@
     <main class="container">
         <section class="section">
             <h1>WHERE & Filtering</h1>
-            <p>The WHERE clause filters rows based on specified conditions. It supports comparison operators, logical operators, and pattern matching.</p>
+            <p>The WHERE clause filters rows based on specified conditions. Learn filtering using standard SQL, PySpark DataFrame API, and PySpark SQL.</p>
             <div id="visualization" class="visualization-container"></div>
             <div class="visualization-controls">
                 <button class="viz-btn" onclick="showFilter()">Filter</button>
@@ -26,12 +26,13 @@
             </div>
             <h2>Code Examples</h2>
             <div class="tabs">
-                <button class="tab active" data-tab="comparison">Comparison</button>
-                <button class="tab" data-tab="logical">Logical</button>
-                <button class="tab" data-tab="pattern">Pattern Matching</button>
+                <button class="tab active" data-tab="sql">Standard SQL</button>
+                <button class="tab" data-tab="pyspark-df">PySpark DataFrame</button>
+                <button class="tab" data-tab="pyspark-sql">PySpark SQL</button>
+                <button class="tab" data-tab="comparison">Side-by-Side</button>
             </div>
             <div class="tab-contents">
-                <div id="comparison" class="tab-content active">
+                <div id="sql" class="tab-content active">
                     <div class="code-container">
                         <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
@@ -40,101 +41,188 @@ SELECT * FROM employees WHERE department_id = 10;
 
 -- Not equal
 SELECT * FROM employees WHERE department_id != 10;
-SELECT * FROM employees WHERE department_id <> 10;
 
 -- Greater/Less than
 SELECT * FROM employees WHERE salary > 50000;
 SELECT * FROM employees WHERE salary >= 50000;
-SELECT * FROM employees WHERE salary < 50000;
-SELECT * FROM employees WHERE salary <= 50000;
 
 -- BETWEEN (inclusive)
-SELECT * FROM employees 
-WHERE salary BETWEEN 40000 AND 60000;
+SELECT * FROM employees WHERE salary BETWEEN 40000 AND 60000;
 
 -- IN (multiple values)
-SELECT * FROM employees 
-WHERE department_id IN (10, 20, 30);
-
--- NOT IN
-SELECT * FROM employees 
-WHERE department_id NOT IN (10, 20);
+SELECT * FROM employees WHERE department_id IN (10, 20, 30);
 
 -- NULL checks
 SELECT * FROM employees WHERE manager_id IS NULL;
-SELECT * FROM employees WHERE manager_id IS NOT NULL;</pre>
+SELECT * FROM employees WHERE manager_id IS NOT NULL;
+
+-- AND / OR
+SELECT * FROM employees WHERE department_id = 10 AND salary > 50000;
+SELECT * FROM employees WHERE department_id = 10 OR department_id = 20;
+
+-- LIKE pattern matching
+SELECT * FROM employees WHERE last_name LIKE 'S%';
+SELECT * FROM employees WHERE last_name LIKE '%son';</pre>
                         </div>
                     </div>
                 </div>
-                <div id="logical" class="tab-content">
+                <div id="pyspark-df" class="tab-content">
                     <div class="code-container">
-                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-header"><span class="code-language">Python (PySpark DataFrame API)</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
-<pre>-- AND (both conditions must be true)
-SELECT * FROM employees 
-WHERE department_id = 10 AND salary > 50000;
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
 
--- OR (either condition can be true)
-SELECT * FROM employees 
-WHERE department_id = 10 OR department_id = 20;
+spark = SparkSession.builder.appName("WhereFiltering").getOrCreate()
 
--- NOT
-SELECT * FROM employees 
-WHERE NOT department_id = 10;
+# Create sample DataFrame
+data = [
+    (1, "Alice", "Smith", 50000, 10, 100),
+    (2, "Bob", "Johnson", 60000, 20, 100),
+    (3, "Charlie", "Brown", 75000, 10, None),
+    (4, "Diana", "Prince", 55000, 30, 101)
+]
+df = spark.createDataFrame(data, ["id", "first_name", "last_name", "salary", "dept_id", "manager_id"])
 
--- Complex conditions with parentheses
-SELECT * FROM employees 
-WHERE (department_id = 10 OR department_id = 20)
-  AND salary > 50000;
+# Equality
+df.filter(col("dept_id") == 10).show()
+df.where(col("dept_id") == 10).show()  # where() is alias for filter()
 
--- Multiple AND conditions
-SELECT * FROM employees 
-WHERE department_id = 10 
-  AND salary > 50000 
-  AND hire_date > '2020-01-01';
+# Not equal
+df.filter(col("dept_id") != 10).show()
 
--- Combining AND, OR, NOT
-SELECT * FROM employees 
-WHERE (department_id = 10 AND salary > 50000)
-   OR (department_id = 20 AND salary > 60000);</pre>
+# Greater/Less than
+df.filter(col("salary") > 50000).show()
+df.filter(col("salary") >= 50000).show()
+
+# BETWEEN
+df.filter(col("salary").between(40000, 60000)).show()
+
+# IN (multiple values)
+df.filter(col("dept_id").isin(10, 20, 30)).show()
+
+# NULL checks
+df.filter(col("manager_id").isNull()).show()
+df.filter(col("manager_id").isNotNull()).show()
+
+# AND / OR
+df.filter((col("dept_id") == 10) & (col("salary") > 50000)).show()
+df.filter((col("dept_id") == 10) | (col("dept_id") == 20)).show()
+
+# LIKE pattern matching
+df.filter(col("last_name").like("S%")).show()
+df.filter(col("last_name").like("%son")).show()
+df.filter(col("last_name").contains("mi")).show()
+df.filter(col("last_name").startswith("S")).show()
+df.filter(col("last_name").endswith("son")).show()</pre>
                         </div>
                     </div>
                 </div>
-                <div id="pattern" class="tab-content">
+                <div id="pyspark-sql" class="tab-content">
                     <div class="code-container">
-                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-header"><span class="code-language">Python (PySpark SQL)</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
-<pre>-- LIKE with wildcards
--- % matches any sequence of characters
-SELECT * FROM employees WHERE last_name LIKE 'S%';     -- Starts with S
-SELECT * FROM employees WHERE last_name LIKE '%son';   -- Ends with son
-SELECT * FROM employees WHERE last_name LIKE '%mi%';   -- Contains mi
+<pre>from pyspark.sql import SparkSession
 
--- _ matches exactly one character
-SELECT * FROM employees WHERE last_name LIKE '_mith';  -- ?mith
-SELECT * FROM employees WHERE last_name LIKE 'Sm___';  -- Sm + 3 chars
+spark = SparkSession.builder.appName("WhereFiltering").getOrCreate()
 
--- Case insensitive (varies by database)
--- PostgreSQL:
-SELECT * FROM employees WHERE last_name ILIKE 's%';
--- MySQL (default is case insensitive)
--- SQL Server:
-SELECT * FROM employees WHERE last_name LIKE 's%' COLLATE SQL_Latin1_General_CP1_CI_AS;
+# Create DataFrame and register as temp view
+data = [
+    (1, "Alice", "Smith", 50000, 10, 100),
+    (2, "Bob", "Johnson", 60000, 20, 100),
+    (3, "Charlie", "Brown", 75000, 10, None),
+    (4, "Diana", "Prince", 55000, 30, 101)
+]
+df = spark.createDataFrame(data, ["id", "first_name", "last_name", "salary", "dept_id", "manager_id"])
+df.createOrReplaceTempView("employees")
 
--- NOT LIKE
-SELECT * FROM employees WHERE last_name NOT LIKE 'S%';
+# Equality
+spark.sql("SELECT * FROM employees WHERE dept_id = 10").show()
 
--- ESCAPE character for literal % or _
-SELECT * FROM products WHERE name LIKE '%\%%' ESCAPE '\';
+# Not equal
+spark.sql("SELECT * FROM employees WHERE dept_id != 10").show()
 
--- Regular expressions (PostgreSQL)
-SELECT * FROM employees WHERE last_name ~ '^[A-M]';
+# Greater/Less than
+spark.sql("SELECT * FROM employees WHERE salary > 50000").show()
 
--- REGEXP (MySQL)
-SELECT * FROM employees WHERE last_name REGEXP '^[A-M]';</pre>
+# BETWEEN
+spark.sql("SELECT * FROM employees WHERE salary BETWEEN 40000 AND 60000").show()
+
+# IN
+spark.sql("SELECT * FROM employees WHERE dept_id IN (10, 20, 30)").show()
+
+# NULL checks
+spark.sql("SELECT * FROM employees WHERE manager_id IS NULL").show()
+spark.sql("SELECT * FROM employees WHERE manager_id IS NOT NULL").show()
+
+# AND / OR
+spark.sql("SELECT * FROM employees WHERE dept_id = 10 AND salary > 50000").show()
+spark.sql("SELECT * FROM employees WHERE dept_id = 10 OR dept_id = 20").show()
+
+# LIKE pattern matching
+spark.sql("SELECT * FROM employees WHERE last_name LIKE 'S%'").show()
+spark.sql("SELECT * FROM employees WHERE last_name LIKE '%son'").show()</pre>
                         </div>
                     </div>
                 </div>
+                <div id="comparison" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Side-by-Side Comparison</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre># ============================================
+# WHERE FILTERING: DataFrame API vs SQL
+# ============================================
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
+
+spark = SparkSession.builder.appName("Comparison").getOrCreate()
+
+data = [(1, "Alice", 50000, 10), (2, "Bob", 60000, 20), (3, "Charlie", 75000, 10)]
+df = spark.createDataFrame(data, ["id", "name", "salary", "dept_id"])
+df.createOrReplaceTempView("employees")
+
+# EQUALITY FILTER
+# DataFrame API:
+df.filter(col("dept_id") == 10).show()
+# PySpark SQL:
+spark.sql("SELECT * FROM employees WHERE dept_id = 10").show()
+
+# GREATER THAN
+# DataFrame API:
+df.filter(col("salary") > 50000).show()
+# PySpark SQL:
+spark.sql("SELECT * FROM employees WHERE salary > 50000").show()
+
+# BETWEEN
+# DataFrame API:
+df.filter(col("salary").between(50000, 70000)).show()
+# PySpark SQL:
+spark.sql("SELECT * FROM employees WHERE salary BETWEEN 50000 AND 70000").show()
+
+# IN LIST
+# DataFrame API:
+df.filter(col("dept_id").isin(10, 20)).show()
+# PySpark SQL:
+spark.sql("SELECT * FROM employees WHERE dept_id IN (10, 20)").show()
+
+# AND CONDITION
+# DataFrame API:
+df.filter((col("dept_id") == 10) & (col("salary") > 50000)).show()
+# PySpark SQL:
+spark.sql("SELECT * FROM employees WHERE dept_id = 10 AND salary > 50000").show()
+
+# OR CONDITION
+# DataFrame API:
+df.filter((col("dept_id") == 10) | (col("dept_id") == 20)).show()
+# PySpark SQL:
+spark.sql("SELECT * FROM employees WHERE dept_id = 10 OR dept_id = 20").show()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../01_select_basics/index.html" style="color: var(--text-muted);">&larr; Previous: SELECT Basics</a>
+                <a href="../03_joins/index.html" style="color: var(--accent-primary);">Next: JOINs &rarr;</a>
             </div>
         </section>
     </main>

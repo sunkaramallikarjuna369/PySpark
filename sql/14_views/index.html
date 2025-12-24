@@ -17,7 +17,7 @@
     <main class="container">
         <section class="section">
             <h1>Views</h1>
-            <p>Views are virtual tables based on SELECT queries. They simplify complex queries, provide security by limiting data access, and create logical data abstractions.</p>
+            <p>Views are virtual tables based on SELECT queries. Learn views using standard SQL, PySpark DataFrame API, and PySpark SQL.</p>
             <div id="visualization" class="visualization-container"></div>
             <div class="visualization-controls">
                 <button class="viz-btn" onclick="showView()">View</button>
@@ -25,132 +25,218 @@
             </div>
             <h2>Code Examples</h2>
             <div class="tabs">
-                <button class="tab active" data-tab="basic">Basic Views</button>
-                <button class="tab" data-tab="advanced">Advanced Views</button>
-                <button class="tab" data-tab="materialized">Materialized Views</button>
+                <button class="tab active" data-tab="sql">Standard SQL</button>
+                <button class="tab" data-tab="pyspark-df">PySpark DataFrame</button>
+                <button class="tab" data-tab="pyspark-sql">PySpark SQL</button>
+                <button class="tab" data-tab="comparison">Side-by-Side</button>
             </div>
             <div class="tab-contents">
-                <div id="basic" class="tab-content active">
+                <div id="sql" class="tab-content active">
                     <div class="code-container">
                         <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
 <pre>-- Create simple view
 CREATE VIEW active_employees AS
 SELECT employee_id, first_name, last_name, department_id
-FROM employees
-WHERE status = 'Active';
+FROM employees WHERE status = 'Active';
 
 -- Use view like a table
 SELECT * FROM active_employees;
-SELECT * FROM active_employees WHERE department_id = 10;
-
--- Create view with column aliases
-CREATE VIEW emp_summary (id, name, dept) AS
-SELECT employee_id, first_name || ' ' || last_name, department_id
-FROM employees;
 
 -- Create or replace view
 CREATE OR REPLACE VIEW active_employees AS
 SELECT employee_id, first_name, last_name, department_id, hire_date
-FROM employees
-WHERE status = 'Active';
+FROM employees WHERE status = 'Active';
+
+-- View with aggregation
+CREATE VIEW dept_stats AS
+SELECT department_id, COUNT(*) AS emp_count, AVG(salary) AS avg_salary
+FROM employees GROUP BY department_id;
 
 -- Drop view
-DROP VIEW active_employees;
-DROP VIEW IF EXISTS active_employees;
-
--- View with joins
-CREATE VIEW employee_details AS
-SELECT e.first_name, e.last_name, d.department_name, l.city
-FROM employees e
-JOIN departments d ON e.department_id = d.department_id
-JOIN locations l ON d.location_id = l.location_id;</pre>
+DROP VIEW IF EXISTS active_employees;</pre>
                         </div>
                     </div>
                 </div>
-                <div id="advanced" class="tab-content">
+                <div id="pyspark-df" class="tab-content">
                     <div class="code-container">
-                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-header"><span class="code-language">Python (PySpark DataFrame API)</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
-<pre>-- View with aggregation
-CREATE VIEW dept_stats AS
-SELECT 
-    department_id,
-    COUNT(*) AS employee_count,
-    AVG(salary) AS avg_salary,
-    SUM(salary) AS total_salary
-FROM employees
-GROUP BY department_id;
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, count, avg, sum
 
--- Updatable view (simple views)
-CREATE VIEW it_employees AS
-SELECT * FROM employees WHERE department_id = 10;
+spark = SparkSession.builder.appName("Views").getOrCreate()
 
--- Insert through view
-INSERT INTO it_employees (first_name, last_name, department_id)
-VALUES ('John', 'Doe', 10);
+# Create sample DataFrame
+data = [
+    (1, "Alice", "Smith", 50000, 10, "Active"),
+    (2, "Bob", "Johnson", 60000, 20, "Active"),
+    (3, "Charlie", "Brown", 75000, 10, "Inactive"),
+    (4, "Diana", "Wilson", 55000, 20, "Active")
+]
+df = spark.createDataFrame(data, ["id", "first_name", "last_name", "salary", "dept_id", "status"])
 
--- WITH CHECK OPTION (enforce view condition)
-CREATE VIEW it_employees AS
-SELECT * FROM employees WHERE department_id = 10
-WITH CHECK OPTION;
--- Now INSERT with department_id != 10 will fail
+# Create temporary view (session-scoped)
+df.createOrReplaceTempView("employees")
 
--- View with security (hide sensitive columns)
-CREATE VIEW public_employees AS
-SELECT employee_id, first_name, last_name, department_id
-FROM employees;  -- Excludes salary, SSN, etc.
+# Create view from filtered DataFrame
+active_employees = df.filter(col("status") == "Active")
+active_employees.createOrReplaceTempView("active_employees")
 
--- Nested views
-CREATE VIEW high_earners AS
-SELECT * FROM active_employees WHERE salary > 100000;</pre>
+# Use view
+spark.sql("SELECT * FROM active_employees").show()
+
+# Create global temporary view (application-scoped)
+df.createOrReplaceGlobalTempView("global_employees")
+# Access with global_temp prefix
+spark.sql("SELECT * FROM global_temp.global_employees").show()
+
+# View with aggregation
+dept_stats = df.groupBy("dept_id").agg(
+    count("*").alias("emp_count"),
+    avg("salary").alias("avg_salary"),
+    sum("salary").alias("total_salary")
+)
+dept_stats.createOrReplaceTempView("dept_stats")
+
+# View with joins
+departments = spark.createDataFrame([(10, "IT"), (20, "HR")], ["dept_id", "dept_name"])
+departments.createOrReplaceTempView("departments")
+
+employee_details = df.join(departments, "dept_id")
+employee_details.createOrReplaceTempView("employee_details")
+
+# List all views
+spark.catalog.listTables()
+
+# Drop view
+spark.catalog.dropTempView("active_employees")
+spark.catalog.dropGlobalTempView("global_employees")
+
+# Check if view exists
+spark.catalog.tableExists("employees")</pre>
                         </div>
                     </div>
                 </div>
-                <div id="materialized" class="tab-content">
+                <div id="pyspark-sql" class="tab-content">
                     <div class="code-container">
-                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-header"><span class="code-language">Python (PySpark SQL)</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
-<pre>-- Materialized View (stores data physically)
--- PostgreSQL:
-CREATE MATERIALIZED VIEW sales_summary AS
-SELECT 
-    product_id,
-    SUM(quantity) AS total_quantity,
-    SUM(amount) AS total_amount
-FROM sales
-GROUP BY product_id;
+<pre>from pyspark.sql import SparkSession
 
--- Refresh materialized view
-REFRESH MATERIALIZED VIEW sales_summary;
+spark = SparkSession.builder.appName("Views").getOrCreate()
 
--- Refresh concurrently (no lock)
-REFRESH MATERIALIZED VIEW CONCURRENTLY sales_summary;
+# Create base table
+data = [
+    (1, "Alice", "Smith", 50000, 10, "Active"),
+    (2, "Bob", "Johnson", 60000, 20, "Active"),
+    (3, "Charlie", "Brown", 75000, 10, "Inactive")
+]
+df = spark.createDataFrame(data, ["id", "first_name", "last_name", "salary", "dept_id", "status"])
+df.createOrReplaceTempView("employees")
 
--- Create with no data initially
-CREATE MATERIALIZED VIEW sales_summary AS
-SELECT * FROM sales_data
-WITH NO DATA;
+# Create view using SQL
+spark.sql("""
+    CREATE OR REPLACE TEMP VIEW active_employees AS
+    SELECT id, first_name, last_name, dept_id
+    FROM employees
+    WHERE status = 'Active'
+""")
 
--- Oracle Materialized View
-CREATE MATERIALIZED VIEW sales_mv
-BUILD IMMEDIATE
-REFRESH FAST ON COMMIT
-AS SELECT * FROM sales;
+# Use view
+spark.sql("SELECT * FROM active_employees").show()
 
--- SQL Server Indexed View
-CREATE VIEW sales_summary WITH SCHEMABINDING AS
-SELECT product_id, SUM(amount) AS total
-FROM dbo.sales GROUP BY product_id;
+# Create view with aggregation
+spark.sql("""
+    CREATE OR REPLACE TEMP VIEW dept_stats AS
+    SELECT dept_id, COUNT(*) AS emp_count, AVG(salary) AS avg_salary
+    FROM employees
+    GROUP BY dept_id
+""")
+spark.sql("SELECT * FROM dept_stats").show()
 
-CREATE UNIQUE CLUSTERED INDEX idx_sales_summary 
-ON sales_summary(product_id);
+# Create global temporary view
+spark.sql("""
+    CREATE OR REPLACE GLOBAL TEMP VIEW global_active AS
+    SELECT * FROM employees WHERE status = 'Active'
+""")
+spark.sql("SELECT * FROM global_temp.global_active").show()
 
--- Drop materialized view
-DROP MATERIALIZED VIEW sales_summary;</pre>
+# View with joins
+spark.sql("""
+    CREATE OR REPLACE TEMP VIEW departments AS
+    SELECT 10 AS dept_id, 'IT' AS dept_name
+    UNION ALL
+    SELECT 20, 'HR'
+""")
+
+spark.sql("""
+    CREATE OR REPLACE TEMP VIEW employee_details AS
+    SELECT e.*, d.dept_name
+    FROM employees e
+    JOIN departments d ON e.dept_id = d.dept_id
+""")
+
+# Show all tables/views
+spark.sql("SHOW TABLES").show()
+spark.sql("SHOW VIEWS").show()
+
+# Describe view
+spark.sql("DESCRIBE active_employees").show()
+
+# Drop view
+spark.sql("DROP VIEW IF EXISTS active_employees")</pre>
                         </div>
                     </div>
                 </div>
+                <div id="comparison" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Side-by-Side Comparison</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre># ============================================
+# VIEWS: DataFrame API vs SQL
+# ============================================
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
+
+spark = SparkSession.builder.appName("Comparison").getOrCreate()
+
+data = [(1, "Alice", 50000, "Active"), (2, "Bob", 60000, "Inactive")]
+df = spark.createDataFrame(data, ["id", "name", "salary", "status"])
+
+# CREATE TEMP VIEW
+# DataFrame API:
+df.createOrReplaceTempView("employees")
+# PySpark SQL:
+spark.sql("CREATE OR REPLACE TEMP VIEW employees_sql AS SELECT * FROM employees")
+
+# CREATE VIEW FROM FILTERED DATA
+# DataFrame API:
+df.filter(col("status") == "Active").createOrReplaceTempView("active_df")
+# PySpark SQL:
+spark.sql("CREATE OR REPLACE TEMP VIEW active_sql AS SELECT * FROM employees WHERE status = 'Active'")
+
+# CREATE GLOBAL TEMP VIEW
+# DataFrame API:
+df.createOrReplaceGlobalTempView("global_df")
+# PySpark SQL:
+spark.sql("CREATE OR REPLACE GLOBAL TEMP VIEW global_sql AS SELECT * FROM employees")
+
+# DROP VIEW
+# DataFrame API:
+spark.catalog.dropTempView("active_df")
+# PySpark SQL:
+spark.sql("DROP VIEW IF EXISTS active_sql")
+
+# Note: PySpark views are temporary by default (session or app scoped)
+# For persistent views, use Hive metastore or Delta Lake</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../13_indexes_performance/index.html" style="color: var(--text-muted);">&larr; Previous: Indexes & Performance</a>
+                <a href="../15_stored_procedures/index.html" style="color: var(--accent-primary);">Next: Stored Procedures &rarr;</a>
             </div>
         </section>
     </main>

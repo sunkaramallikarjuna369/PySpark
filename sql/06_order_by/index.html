@@ -17,7 +17,7 @@
     <main class="container">
         <section class="section">
             <h1>ORDER BY</h1>
-            <p>ORDER BY sorts the result set by one or more columns in ascending (ASC) or descending (DESC) order.</p>
+            <p>ORDER BY sorts the result set by one or more columns. Learn sorting using standard SQL, PySpark DataFrame API, and PySpark SQL.</p>
             <div id="visualization" class="visualization-container"></div>
             <div class="visualization-controls">
                 <button class="viz-btn" onclick="showAsc()">ASC</button>
@@ -25,11 +25,13 @@
             </div>
             <h2>Code Examples</h2>
             <div class="tabs">
-                <button class="tab active" data-tab="basic">Basic ORDER BY</button>
-                <button class="tab" data-tab="advanced">Advanced Sorting</button>
+                <button class="tab active" data-tab="sql">Standard SQL</button>
+                <button class="tab" data-tab="pyspark-df">PySpark DataFrame</button>
+                <button class="tab" data-tab="pyspark-sql">PySpark SQL</button>
+                <button class="tab" data-tab="comparison">Side-by-Side</button>
             </div>
             <div class="tab-contents">
-                <div id="basic" class="tab-content active">
+                <div id="sql" class="tab-content active">
                     <div class="code-container">
                         <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
@@ -41,18 +43,13 @@ SELECT * FROM employees ORDER BY salary ASC;
 SELECT * FROM employees ORDER BY salary DESC;
 
 -- Multiple columns
-SELECT * FROM employees 
-ORDER BY department_id ASC, salary DESC;
+SELECT * FROM employees ORDER BY department_id ASC, salary DESC;
 
--- Order by column position
-SELECT first_name, salary FROM employees ORDER BY 2 DESC;
+-- LIMIT with ORDER BY
+SELECT * FROM employees ORDER BY salary DESC LIMIT 10;
 
--- Order by alias
-SELECT first_name, salary * 12 AS annual
-FROM employees ORDER BY annual DESC;
-
--- Order by expression
-SELECT * FROM employees ORDER BY salary * 1.1 DESC;
+-- OFFSET for pagination
+SELECT * FROM employees ORDER BY salary DESC LIMIT 10 OFFSET 20;
 
 -- NULLS handling
 SELECT * FROM employees ORDER BY commission NULLS FIRST;
@@ -60,43 +57,139 @@ SELECT * FROM employees ORDER BY commission NULLS LAST;</pre>
                         </div>
                     </div>
                 </div>
-                <div id="advanced" class="tab-content">
+                <div id="pyspark-df" class="tab-content">
                     <div class="code-container">
-                        <div class="code-header"><span class="code-language">SQL</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-header"><span class="code-language">Python (PySpark DataFrame API)</span><button class="copy-btn">Copy</button></div>
                         <div class="code-block">
-<pre>-- LIMIT with ORDER BY
-SELECT * FROM employees ORDER BY salary DESC LIMIT 10;
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, desc, asc, asc_nulls_first, desc_nulls_last, rand
 
--- OFFSET for pagination
-SELECT * FROM employees ORDER BY salary DESC LIMIT 10 OFFSET 20;
+spark = SparkSession.builder.appName("OrderBy").getOrCreate()
 
--- Top N per group (using window functions)
-SELECT * FROM (
-    SELECT *, ROW_NUMBER() OVER (
-        PARTITION BY department_id ORDER BY salary DESC
-    ) AS rn
-    FROM employees
-) t WHERE rn <= 3;
+# Create sample DataFrame
+data = [
+    (1, "Alice", 50000, 10, 500),
+    (2, "Bob", 60000, 20, None),
+    (3, "Charlie", 75000, 10, 1000),
+    (4, "Diana", 55000, 20, 750)
+]
+df = spark.createDataFrame(data, ["id", "name", "salary", "dept_id", "commission"])
 
--- Custom sort order with CASE
-SELECT * FROM employees
-ORDER BY 
-    CASE status
-        WHEN 'Active' THEN 1
-        WHEN 'Pending' THEN 2
-        WHEN 'Inactive' THEN 3
-    END;
+# Ascending order (default)
+df.orderBy("salary").show()
+df.orderBy(col("salary").asc()).show()
 
--- Collation for string sorting
-SELECT * FROM employees 
-ORDER BY last_name COLLATE utf8_general_ci;
+# Descending order
+df.orderBy(col("salary").desc()).show()
+df.orderBy(desc("salary")).show()
 
--- Random order
-SELECT * FROM employees ORDER BY RANDOM();  -- PostgreSQL
-SELECT * FROM employees ORDER BY RAND();    -- MySQL</pre>
+# Multiple columns
+df.orderBy(col("dept_id").asc(), col("salary").desc()).show()
+
+# LIMIT with ORDER BY
+df.orderBy(col("salary").desc()).limit(10).show()
+
+# NULLS handling
+df.orderBy(asc_nulls_first("commission")).show()
+df.orderBy(desc_nulls_last("commission")).show()
+df.orderBy(col("commission").asc_nulls_first()).show()
+df.orderBy(col("commission").desc_nulls_last()).show()
+
+# Random order
+df.orderBy(rand()).show()
+
+# Sort (alias for orderBy)
+df.sort("salary").show()
+df.sort(col("salary").desc()).show()</pre>
                         </div>
                     </div>
                 </div>
+                <div id="pyspark-sql" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (PySpark SQL)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("OrderBy").getOrCreate()
+
+# Create and register temp view
+data = [
+    (1, "Alice", 50000, 10, 500),
+    (2, "Bob", 60000, 20, None),
+    (3, "Charlie", 75000, 10, 1000),
+    (4, "Diana", 55000, 20, 750)
+]
+df = spark.createDataFrame(data, ["id", "name", "salary", "dept_id", "commission"])
+df.createOrReplaceTempView("employees")
+
+# Ascending order
+spark.sql("SELECT * FROM employees ORDER BY salary").show()
+spark.sql("SELECT * FROM employees ORDER BY salary ASC").show()
+
+# Descending order
+spark.sql("SELECT * FROM employees ORDER BY salary DESC").show()
+
+# Multiple columns
+spark.sql("SELECT * FROM employees ORDER BY dept_id ASC, salary DESC").show()
+
+# LIMIT with ORDER BY
+spark.sql("SELECT * FROM employees ORDER BY salary DESC LIMIT 10").show()
+
+# NULLS handling
+spark.sql("SELECT * FROM employees ORDER BY commission NULLS FIRST").show()
+spark.sql("SELECT * FROM employees ORDER BY commission NULLS LAST").show()
+
+# Random order
+spark.sql("SELECT * FROM employees ORDER BY rand()").show()</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="comparison" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Side-by-Side Comparison</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre># ============================================
+# ORDER BY: DataFrame API vs SQL
+# ============================================
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, desc
+
+spark = SparkSession.builder.appName("Comparison").getOrCreate()
+
+data = [(1, "Alice", 50000), (2, "Bob", 60000), (3, "Charlie", 45000)]
+df = spark.createDataFrame(data, ["id", "name", "salary"])
+df.createOrReplaceTempView("employees")
+
+# ASCENDING ORDER
+# DataFrame API:
+df.orderBy("salary").show()
+# PySpark SQL:
+spark.sql("SELECT * FROM employees ORDER BY salary").show()
+
+# DESCENDING ORDER
+# DataFrame API:
+df.orderBy(col("salary").desc()).show()
+# PySpark SQL:
+spark.sql("SELECT * FROM employees ORDER BY salary DESC").show()
+
+# MULTIPLE COLUMNS
+# DataFrame API:
+df.orderBy(col("name").asc(), col("salary").desc()).show()
+# PySpark SQL:
+spark.sql("SELECT * FROM employees ORDER BY name ASC, salary DESC").show()
+
+# LIMIT
+# DataFrame API:
+df.orderBy(col("salary").desc()).limit(2).show()
+# PySpark SQL:
+spark.sql("SELECT * FROM employees ORDER BY salary DESC LIMIT 2").show()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../05_having/index.html" style="color: var(--text-muted);">&larr; Previous: HAVING</a>
+                <a href="../07_subqueries/index.html" style="color: var(--accent-primary);">Next: Subqueries &rarr;</a>
             </div>
         </section>
     </main>
