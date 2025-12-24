@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unit Testing PySpark - Data Quality</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#quality" class="nav-link active">Data Quality</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Unit Testing PySpark Transformations</h1>
+            <p>Learn how to write effective unit tests for PySpark transformations using pytest and chispa. Testing data pipelines is crucial for maintaining data quality and catching regressions early.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="setup">Test Setup</button>
+                <button class="tab" data-tab="chispa">Chispa Library</button>
+                <button class="tab" data-tab="patterns">Test Patterns</button>
+                <button class="tab" data-tab="fixtures">Fixtures</button>
+                <button class="tab" data-tab="ci">CI Integration</button>
+            </div>
+            <div class="tab-contents">
+                <div id="setup" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Test Setup)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Setting up PySpark Unit Tests
+- pytest configuration
+- SparkSession management
+- Test isolation
+"""
+# requirements.txt
+# pyspark==3.5.0
+# pytest==7.4.0
+# chispa==0.9.4
+# pytest-spark==0.6.0
+
+# conftest.py - Shared fixtures
+import pytest
+from pyspark.sql import SparkSession
+
+@pytest.fixture(scope="session")
+def spark():
+    """Create SparkSession for testing"""
+    spark = SparkSession.builder \
+        .master("local[2]") \
+        .appName("pytest-spark") \
+        .config("spark.sql.shuffle.partitions", "2") \
+        .config("spark.default.parallelism", "2") \
+        .config("spark.sql.execution.arrow.pyspark.enabled", "true") \
+        .config("spark.driver.memory", "2g") \
+        .getOrCreate()
+    
+    yield spark
+    spark.stop()
+
+@pytest.fixture(scope="function")
+def spark_session(spark):
+    """Per-test SparkSession with cleanup"""
+    yield spark
+    # Clear any cached DataFrames
+    spark.catalog.clearCache()
+
+# ============================================
+# BASIC TEST STRUCTURE
+# ============================================
+# test_transformations.py
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, upper
+import pytest
+
+def test_simple_transformation(spark):
+    """Test a simple transformation"""
+    # Arrange
+    data = [("alice", 100), ("bob", 200)]
+    df = spark.createDataFrame(data, ["name", "amount"])
+    
+    # Act
+    result = df.withColumn("name_upper", upper(col("name")))
+    
+    # Assert
+    assert result.count() == 2
+    assert "name_upper" in result.columns
+    
+    row = result.filter(col("name") == "alice").first()
+    assert row["name_upper"] == "ALICE"
+
+# ============================================
+# TESTING TRANSFORMATION FUNCTIONS
+# ============================================
+# transformations.py
+from pyspark.sql import DataFrame
+from pyspark.sql.functions import col, when, sum as spark_sum
+
+def calculate_tax(df: DataFrame, rate: float = 0.1) -> DataFrame:
+    """Calculate tax on amount"""
+    return df.withColumn("tax", col("amount") * rate)
+
+def categorize_amount(df: DataFrame) -> DataFrame:
+    """Categorize amounts into buckets"""
+    return df.withColumn("category",
+        when(col("amount") < 100, "low")
+        .when(col("amount") < 500, "medium")
+        .otherwise("high")
+    )
+
+def aggregate_by_category(df: DataFrame) -> DataFrame:
+    """Aggregate amounts by category"""
+    return df.groupBy("category").agg(
+        spark_sum("amount").alias("total_amount")
+    )
+
+# test_transformations.py
+from transformations import calculate_tax, categorize_amount, aggregate_by_category
+
+def test_calculate_tax(spark):
+    """Test tax calculation"""
+    df = spark.createDataFrame([(100,), (200,)], ["amount"])
+    
+    result = calculate_tax(df, rate=0.1)
+    
+    taxes = [row["tax"] for row in result.collect()]
+    assert taxes == [10.0, 20.0]
+
+def test_categorize_amount(spark):
+    """Test amount categorization"""
+    df = spark.createDataFrame([(50,), (250,), (1000,)], ["amount"])
+    
+    result = categorize_amount(df)
+    
+    categories = {row["amount"]: row["category"] for row in result.collect()}
+    assert categories[50] == "low"
+    assert categories[250] == "medium"
+    assert categories[1000] == "high"
+
+def test_aggregate_by_category(spark):
+    """Test aggregation"""
+    df = spark.createDataFrame([
+        ("low", 50), ("low", 30), ("high", 500)
+    ], ["category", "amount"])
+    
+    result = aggregate_by_category(df)
+    
+    totals = {row["category"]: row["total_amount"] for row in result.collect()}
+    assert totals["low"] == 80
+    assert totals["high"] == 500</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="chispa" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Chispa Library)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Chispa - DataFrame Equality Testing
+- Compare DataFrames with meaningful error messages
+- Handle floating point precision
+- Ignore column order
+"""
+from chispa import assert_df_equality, assert_column_equality
+from chispa.dataframe_comparer import DataFramesNotEqualError
+import pytest
+
+# ============================================
+# BASIC DATAFRAME EQUALITY
+# ============================================
+def test_df_equality(spark):
+    """Test DataFrame equality with chispa"""
+    data = [("alice", 100), ("bob", 200)]
+    
+    df1 = spark.createDataFrame(data, ["name", "amount"])
+    df2 = spark.createDataFrame(data, ["name", "amount"])
+    
+    # This will pass
+    assert_df_equality(df1, df2)
+
+def test_df_inequality(spark):
+    """Test that different DataFrames are detected"""
+    df1 = spark.createDataFrame([("alice", 100)], ["name", "amount"])
+    df2 = spark.createDataFrame([("alice", 101)], ["name", "amount"])
+    
+    with pytest.raises(DataFramesNotEqualError):
+        assert_df_equality(df1, df2)
+
+# ============================================
+# IGNORE ROW ORDER
+# ============================================
+def test_ignore_row_order(spark):
+    """Test equality ignoring row order"""
+    df1 = spark.createDataFrame([("a", 1), ("b", 2)], ["name", "value"])
+    df2 = spark.createDataFrame([("b", 2), ("a", 1)], ["name", "value"])
+    
+    # Would fail without ignore_row_order
+    assert_df_equality(df1, df2, ignore_row_order=True)
+
+# ============================================
+# IGNORE COLUMN ORDER
+# ============================================
+def test_ignore_column_order(spark):
+    """Test equality ignoring column order"""
+    df1 = spark.createDataFrame([(1, "a")], ["value", "name"])
+    df2 = spark.createDataFrame([("a", 1)], ["name", "value"])
+    
+    assert_df_equality(df1, df2, ignore_column_order=True)
+
+# ============================================
+# FLOATING POINT PRECISION
+# ============================================
+def test_float_precision(spark):
+    """Handle floating point comparison"""
+    df1 = spark.createDataFrame([(1.0000001,)], ["value"])
+    df2 = spark.createDataFrame([(1.0000002,)], ["value"])
+    
+    # Allow small differences
+    assert_df_equality(df1, df2, precision=0.0001)
+
+# ============================================
+# IGNORE NULLABLE
+# ============================================
+def test_ignore_nullable(spark):
+    """Ignore nullable differences in schema"""
+    from pyspark.sql.types import StructType, StructField, StringType
+    
+    schema1 = StructType([StructField("name", StringType(), True)])
+    schema2 = StructType([StructField("name", StringType(), False)])
+    
+    df1 = spark.createDataFrame([("alice",)], schema1)
+    df2 = spark.createDataFrame([("alice",)], schema2)
+    
+    assert_df_equality(df1, df2, ignore_nullable=True)
+
+# ============================================
+# COLUMN EQUALITY
+# ============================================
+def test_column_equality(spark):
+    """Test specific column equality"""
+    df = spark.createDataFrame([
+        ("alice", 100, 10.0),
+        ("bob", 200, 20.0)
+    ], ["name", "amount", "tax"])
+    
+    # Verify tax is 10% of amount
+    expected = spark.createDataFrame([
+        (10.0,), (20.0,)
+    ], ["expected_tax"])
+    
+    assert_column_equality(df, expected, "tax", "expected_tax")
+
+# ============================================
+# CUSTOM COMPARISONS
+# ============================================
+def assert_schema_equal(df1, df2):
+    """Assert schemas are equal"""
+    assert df1.schema == df2.schema, f"Schemas differ:\n{df1.schema}\nvs\n{df2.schema}"
+
+def assert_row_count_equal(df1, df2):
+    """Assert row counts are equal"""
+    count1, count2 = df1.count(), df2.count()
+    assert count1 == count2, f"Row counts differ: {count1} vs {count2}"
+
+def assert_no_nulls(df, columns):
+    """Assert no null values in specified columns"""
+    for col_name in columns:
+        null_count = df.filter(col(col_name).isNull()).count()
+        assert null_count == 0, f"Found {null_count} nulls in column {col_name}"
+
+# ============================================
+# TESTING WITH EXPECTED OUTPUT
+# ============================================
+def test_transformation_with_expected(spark):
+    """Test transformation against expected output"""
+    from transformations import calculate_tax
+    
+    # Input
+    input_df = spark.createDataFrame([
+        ("alice", 100),
+        ("bob", 200)
+    ], ["name", "amount"])
+    
+    # Expected output
+    expected_df = spark.createDataFrame([
+        ("alice", 100, 10.0),
+        ("bob", 200, 20.0)
+    ], ["name", "amount", "tax"])
+    
+    # Act
+    result_df = calculate_tax(input_df, rate=0.1)
+    
+    # Assert
+    assert_df_equality(result_df, expected_df, ignore_row_order=True)</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="patterns" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Test Patterns)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Common Testing Patterns for PySpark
+"""
+import pytest
+from pyspark.sql.functions import col
+
+# ============================================
+# PATTERN 1: PARAMETERIZED TESTS
+# ============================================
+@pytest.mark.parametrize("input_amount,expected_category", [
+    (50, "low"),
+    (99, "low"),
+    (100, "medium"),
+    (499, "medium"),
+    (500, "high"),
+    (1000, "high"),
+])
+def test_categorize_parameterized(spark, input_amount, expected_category):
+    """Test categorization with multiple inputs"""
+    from transformations import categorize_amount
+    
+    df = spark.createDataFrame([(input_amount,)], ["amount"])
+    result = categorize_amount(df)
+    
+    actual = result.first()["category"]
+    assert actual == expected_category
+
+# ============================================
+# PATTERN 2: EDGE CASES
+# ============================================
+def test_empty_dataframe(spark):
+    """Test handling of empty DataFrame"""
+    from transformations import calculate_tax
+    
+    empty_df = spark.createDataFrame([], "amount: int")
+    result = calculate_tax(empty_df)
+    
+    assert result.count() == 0
+    assert "tax" in result.columns
+
+def test_null_handling(spark):
+    """Test handling of null values"""
+    df = spark.createDataFrame([(100,), (None,)], ["amount"])
+    
+    result = df.withColumn("tax", col("amount") * 0.1)
+    
+    # Null amount should produce null tax
+    null_tax = result.filter(col("amount").isNull()).first()["tax"]
+    assert null_tax is None
+
+def test_negative_values(spark):
+    """Test handling of negative values"""
+    from transformations import calculate_tax
+    
+    df = spark.createDataFrame([(-100,)], ["amount"])
+    result = calculate_tax(df, rate=0.1)
+    
+    assert result.first()["tax"] == -10.0
+
+# ============================================
+# PATTERN 3: SCHEMA VALIDATION
+# ============================================
+def test_output_schema(spark):
+    """Verify output schema matches expected"""
+    from pyspark.sql.types import StructType, StructField, StringType, DoubleType
+    
+    expected_schema = StructType([
+        StructField("name", StringType(), True),
+        StructField("amount", DoubleType(), True),
+        StructField("tax", DoubleType(), True)
+    ])
+    
+    df = spark.createDataFrame([("alice", 100.0)], ["name", "amount"])
+    result = df.withColumn("tax", col("amount") * 0.1)
+    
+    assert result.schema == expected_schema
+
+# ============================================
+# PATTERN 4: DATA QUALITY ASSERTIONS
+# ============================================
+def test_no_duplicates(spark):
+    """Verify no duplicate keys after transformation"""
+    df = spark.createDataFrame([
+        ("a", 1), ("a", 2), ("b", 3)
+    ], ["key", "value"])
+    
+    # Aggregation should produce unique keys
+    result = df.groupBy("key").sum("value")
+    
+    total_rows = result.count()
+    unique_keys = result.select("key").distinct().count()
+    
+    assert total_rows == unique_keys
+
+def test_referential_integrity(spark):
+    """Verify foreign key references exist"""
+    orders = spark.createDataFrame([
+        (1, "C1"), (2, "C2"), (3, "C1")
+    ], ["order_id", "customer_id"])
+    
+    customers = spark.createDataFrame([
+        ("C1", "Alice"), ("C2", "Bob")
+    ], ["customer_id", "name"])
+    
+    # Find orphan orders
+    orphans = orders.join(customers, "customer_id", "left_anti")
+    
+    assert orphans.count() == 0, f"Found {orphans.count()} orphan orders"
+
+# ============================================
+# PATTERN 5: PERFORMANCE ASSERTIONS
+# ============================================
+def test_partition_count(spark):
+    """Verify output has expected partition count"""
+    df = spark.range(1000).repartition(10)
+    
+    assert df.rdd.getNumPartitions() == 10
+
+def test_no_shuffle(spark):
+    """Verify operation doesn't cause shuffle"""
+    df = spark.range(1000)
+    
+    # Filter should not shuffle
+    result = df.filter(col("id") > 500)
+    
+    # Check execution plan for Exchange
+    plan = result._jdf.queryExecution().executedPlan().toString()
+    assert "Exchange" not in plan
+
+# ============================================
+# PATTERN 6: MOCK EXTERNAL DEPENDENCIES
+# ============================================
+from unittest.mock import Mock, patch
+
+def test_with_mocked_read(spark):
+    """Test with mocked data source"""
+    mock_df = spark.createDataFrame([("test", 100)], ["name", "amount"])
+    
+    with patch.object(spark.read, 'parquet', return_value=mock_df):
+        # Your code that reads parquet
+        df = spark.read.parquet("/fake/path")
+        assert df.count() == 1</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="fixtures" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Test Fixtures)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Test Fixtures for PySpark
+- Reusable test data
+- Factory functions
+- Temporary directories
+"""
+import pytest
+from pyspark.sql import SparkSession
+from pyspark.sql.types import *
+import tempfile
+import shutil
+
+# ============================================
+# DATA FIXTURES
+# ============================================
+@pytest.fixture
+def sample_orders(spark):
+    """Sample orders DataFrame"""
+    data = [
+        (1, "C001", "2024-01-01", 100.0),
+        (2, "C001", "2024-01-02", 150.0),
+        (3, "C002", "2024-01-01", 200.0),
+        (4, "C003", "2024-01-03", 75.0),
+    ]
+    schema = ["order_id", "customer_id", "order_date", "amount"]
+    return spark.createDataFrame(data, schema)
+
+@pytest.fixture
+def sample_customers(spark):
+    """Sample customers DataFrame"""
+    data = [
+        ("C001", "Alice", "NY"),
+        ("C002", "Bob", "CA"),
+        ("C003", "Charlie", "TX"),
+    ]
+    schema = ["customer_id", "name", "state"]
+    return spark.createDataFrame(data, schema)
+
+@pytest.fixture
+def sample_products(spark):
+    """Sample products DataFrame"""
+    data = [
+        ("P001", "Widget", "Electronics", 29.99),
+        ("P002", "Gadget", "Electronics", 49.99),
+        ("P003", "Tool", "Hardware", 19.99),
+    ]
+    schema = ["product_id", "name", "category", "price"]
+    return spark.createDataFrame(data, schema)
+
+# ============================================
+# FACTORY FIXTURES
+# ============================================
+@pytest.fixture
+def create_df(spark):
+    """Factory fixture for creating DataFrames"""
+    def _create_df(data, schema):
+        return spark.createDataFrame(data, schema)
+    return _create_df
+
+def test_with_factory(create_df):
+    """Use factory fixture"""
+    df = create_df([("a", 1), ("b", 2)], ["name", "value"])
+    assert df.count() == 2
+
+@pytest.fixture
+def create_orders(spark):
+    """Factory for creating orders with defaults"""
+    def _create_orders(count=10, customer_id="C001"):
+        data = [
+            (i, customer_id, f"2024-01-{i:02d}", float(i * 100))
+            for i in range(1, count + 1)
+        ]
+        return spark.createDataFrame(data, 
+            ["order_id", "customer_id", "order_date", "amount"])
+    return _create_orders
+
+def test_with_order_factory(create_orders):
+    """Use order factory"""
+    df = create_orders(count=5, customer_id="C002")
+    assert df.count() == 5
+    assert df.filter(col("customer_id") == "C002").count() == 5
+
+# ============================================
+# TEMPORARY FILE FIXTURES
+# ============================================
+@pytest.fixture
+def temp_dir():
+    """Create temporary directory for test files"""
+    dir_path = tempfile.mkdtemp()
+    yield dir_path
+    shutil.rmtree(dir_path)
+
+@pytest.fixture
+def parquet_file(spark, temp_dir, sample_orders):
+    """Create temporary parquet file"""
+    path = f"{temp_dir}/orders.parquet"
+    sample_orders.write.parquet(path)
+    return path
+
+def test_read_parquet(spark, parquet_file):
+    """Test reading from parquet file"""
+    df = spark.read.parquet(parquet_file)
+    assert df.count() == 4
+
+# ============================================
+# SCHEMA FIXTURES
+# ============================================
+@pytest.fixture
+def order_schema():
+    """Standard order schema"""
+    return StructType([
+        StructField("order_id", IntegerType(), False),
+        StructField("customer_id", StringType(), False),
+        StructField("order_date", StringType(), True),
+        StructField("amount", DoubleType(), True),
+    ])
+
+@pytest.fixture
+def customer_schema():
+    """Standard customer schema"""
+    return StructType([
+        StructField("customer_id", StringType(), False),
+        StructField("name", StringType(), True),
+        StructField("state", StringType(), True),
+    ])
+
+# ============================================
+# COMBINED FIXTURES
+# ============================================
+@pytest.fixture
+def test_data(sample_orders, sample_customers, sample_products):
+    """Bundle of test data"""
+    return {
+        "orders": sample_orders,
+        "customers": sample_customers,
+        "products": sample_products
+    }
+
+def test_with_bundled_data(test_data):
+    """Use bundled test data"""
+    orders = test_data["orders"]
+    customers = test_data["customers"]
+    
+    joined = orders.join(customers, "customer_id")
+    assert joined.count() == 4</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="ci" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">YAML (CI Integration)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre># .github/workflows/test.yml
+name: PySpark Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Set up Java
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'temurin'
+        java-version: '11'
+    
+    - name: Install dependencies
+      run: |
+        pip install pyspark==3.5.0 pytest chispa pytest-cov
+    
+    - name: Run tests
+      run: |
+        pytest tests/ -v --cov=src --cov-report=xml
+    
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./coverage.xml
+
+# ============================================
+# pytest.ini
+# ============================================
+# pytest.ini
+[pytest]
+testpaths = tests
+python_files = test_*.py
+python_functions = test_*
+addopts = -v --tb=short
+filterwarnings =
+    ignore::DeprecationWarning
+markers =
+    slow: marks tests as slow
+    integration: marks tests as integration tests
+
+# ============================================
+# RUNNING TESTS
+# ============================================
+# Run all tests
+# pytest
+
+# Run with coverage
+# pytest --cov=src --cov-report=html
+
+# Run specific test file
+# pytest tests/test_transformations.py
+
+# Run specific test
+# pytest tests/test_transformations.py::test_calculate_tax
+
+# Run with markers
+# pytest -m "not slow"
+# pytest -m integration
+
+# Parallel execution
+# pytest -n auto  # requires pytest-xdist
+
+# ============================================
+# TEST ORGANIZATION
+# ============================================
+"""
+project/
+├── src/
+│   ├── __init__.py
+│   ├── transformations.py
+│   ├── aggregations.py
+│   └── utils.py
+├── tests/
+│   ├── __init__.py
+│   ├── conftest.py          # Shared fixtures
+│   ├── test_transformations.py
+│   ├── test_aggregations.py
+│   ├── test_utils.py
+│   └── integration/
+│       ├── __init__.py
+│       └── test_pipeline.py
+├── pytest.ini
+└── requirements-test.txt
+"""
+
+# ============================================
+# COVERAGE CONFIGURATION
+# ============================================
+# .coveragerc
+[run]
+source = src
+omit = 
+    tests/*
+    */__init__.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise NotImplementedError
+    if __name__ == .__main__.:
+
+[html]
+directory = htmlcov</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../../index.html#quality" style="color: var(--text-muted);">&larr; Back to Data Quality</a>
+                <a href="../02_data_validation/index.html" style="color: var(--accent-primary);">Next: Data Validation &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showTesting();
+        });
+        
+        function showTesting() {
+            viz.clear();
+            
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x51cf66, position: { x: -2, y: 0.4, z: 0 } });
+            viz.createLabel('Input', { x: -2, y: 1.2, z: 0 });
+            
+            viz.createDataNode({ type: 'sphere', size: 0.5, color: 0x4dabf7, position: { x: 0, y: 0.4, z: 0 } });
+            viz.createLabel('Transform', { x: 0, y: 1.2, z: 0 });
+            
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x51cf66, position: { x: 2, y: 0.4, z: 0 } });
+            viz.createLabel('Expected', { x: 2, y: 1.2, z: 0 });
+            
+            viz.createArrow({ x: -1.3, y: 0.4, z: 0 }, { x: -0.6, y: 0.4, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.6, y: 0.4, z: 0 }, { x: 1.3, y: 0.4, z: 0 }, { color: 0x888888 });
+            
+            viz.createLabel('Unit Testing: Input -> Transform -> Assert', { x: 0, y: -1, z: 0 });
+            viz.createGrid(8, 8);
+        }
+    </script>
+</body>
+</html>

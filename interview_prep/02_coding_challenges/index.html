@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coding Challenges - Interview Prep</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#interview" class="nav-link active">Interview Prep</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>PySpark Coding Challenges</h1>
+            <p>Practice common coding challenges asked in data engineering interviews. Each challenge includes the problem statement, hints, and a detailed solution.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Challenges</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="dedup">Deduplication</button>
+                <button class="tab" data-tab="window">Window Functions</button>
+                <button class="tab" data-tab="sessionize">Sessionization</button>
+                <button class="tab" data-tab="pivot">Pivot/Unpivot</button>
+                <button class="tab" data-tab="gap">Gap Detection</button>
+            </div>
+            <div class="tab-contents">
+                <div id="dedup" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+<h3>Challenge: Remove Duplicates Keeping Latest Record</h3>
+<p><strong>Problem:</strong> Given a DataFrame with duplicate records, keep only the most recent record for each key based on a timestamp column.</p>
+
+<p><strong>Sample Data:</strong></p>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
++----+-------+-------------------+
+| id |  name |     updated_at    |
++----+-------+-------------------+
+|  1 | Alice | 2024-01-01 10:00  |
+|  1 | Alice | 2024-01-02 11:00  |  <- Keep this
+|  2 |  Bob  | 2024-01-01 09:00  |  <- Keep this
+|  3 | Carol | 2024-01-01 08:00  |
+|  3 | Carol | 2024-01-03 12:00  |  <- Keep this
++----+-------+-------------------+
+</pre>
+
+<p><strong>Hint:</strong> Use window functions with row_number()</p>
+                        </div>
+                        <div class="code-header"><span class="code-language">Python (Solution)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, row_number
+from pyspark.sql.window import Window
+
+spark = SparkSession.builder.appName("Deduplication").getOrCreate()
+
+# Sample data
+data = [
+    (1, "Alice", "2024-01-01 10:00"),
+    (1, "Alice", "2024-01-02 11:00"),
+    (2, "Bob", "2024-01-01 09:00"),
+    (3, "Carol", "2024-01-01 08:00"),
+    (3, "Carol", "2024-01-03 12:00"),
+]
+df = spark.createDataFrame(data, ["id", "name", "updated_at"])
+
+# Solution 1: Using Window Function
+window_spec = Window.partitionBy("id").orderBy(col("updated_at").desc())
+
+df_deduped = df \
+    .withColumn("row_num", row_number().over(window_spec)) \
+    .filter(col("row_num") == 1) \
+    .drop("row_num")
+
+df_deduped.show()
+
+# Solution 2: Using groupBy with max (if you only need the key and timestamp)
+df_latest = df.groupBy("id").agg(
+    max("updated_at").alias("latest_updated_at")
+)
+
+# Join back to get full record
+df_deduped_v2 = df.join(
+    df_latest,
+    (df["id"] == df_latest["id"]) & 
+    (df["updated_at"] == df_latest["latest_updated_at"])
+).select(df["*"])
+
+# Solution 3: Using dropDuplicates (keeps first occurrence)
+df_sorted = df.orderBy(col("updated_at").desc())
+df_deduped_v3 = df_sorted.dropDuplicates(["id"])</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="window" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+<h3>Challenge: Calculate Running Total and Moving Average</h3>
+<p><strong>Problem:</strong> For each customer, calculate the running total of purchases and a 3-day moving average.</p>
+
+<p><strong>Sample Data:</strong></p>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
++-------------+------------+--------+
+| customer_id |    date    | amount |
++-------------+------------+--------+
+|      1      | 2024-01-01 |  100   |
+|      1      | 2024-01-02 |  150   |
+|      1      | 2024-01-03 |  200   |
+|      1      | 2024-01-04 |   50   |
+|      2      | 2024-01-01 |  300   |
++-------------+------------+--------+
+</pre>
+
+<p><strong>Expected Output:</strong></p>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
++-------------+------------+--------+-------------+------------+
+| customer_id |    date    | amount | running_sum | moving_avg |
++-------------+------------+--------+-------------+------------+
+|      1      | 2024-01-01 |  100   |     100     |    100.0   |
+|      1      | 2024-01-02 |  150   |     250     |    125.0   |
+|      1      | 2024-01-03 |  200   |     450     |    150.0   |
+|      1      | 2024-01-04 |   50   |     500     |    133.3   |
++-------------+------------+--------+-------------+------------+
+</pre>
+                        </div>
+                        <div class="code-header"><span class="code-language">Python (Solution)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, sum as spark_sum, avg, round
+from pyspark.sql.window import Window
+
+spark = SparkSession.builder.appName("WindowFunctions").getOrCreate()
+
+# Sample data
+data = [
+    (1, "2024-01-01", 100),
+    (1, "2024-01-02", 150),
+    (1, "2024-01-03", 200),
+    (1, "2024-01-04", 50),
+    (2, "2024-01-01", 300),
+    (2, "2024-01-02", 200),
+]
+df = spark.createDataFrame(data, ["customer_id", "date", "amount"])
+
+# Window for running total (all rows up to current)
+running_window = Window \
+    .partitionBy("customer_id") \
+    .orderBy("date") \
+    .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+
+# Window for 3-day moving average (current row and 2 preceding)
+moving_window = Window \
+    .partitionBy("customer_id") \
+    .orderBy("date") \
+    .rowsBetween(-2, Window.currentRow)
+
+df_result = df \
+    .withColumn("running_sum", spark_sum("amount").over(running_window)) \
+    .withColumn("moving_avg", round(avg("amount").over(moving_window), 2))
+
+df_result.show()
+
+# Additional window functions commonly asked:
+# - lag/lead: Access previous/next row values
+# - rank/dense_rank/row_number: Ranking within partition
+# - first/last: First/last value in window
+# - ntile: Divide into buckets
+
+from pyspark.sql.functions import lag, lead, rank, dense_rank
+
+df_advanced = df \
+    .withColumn("prev_amount", lag("amount", 1).over(
+        Window.partitionBy("customer_id").orderBy("date")
+    )) \
+    .withColumn("next_amount", lead("amount", 1).over(
+        Window.partitionBy("customer_id").orderBy("date")
+    )) \
+    .withColumn("amount_rank", rank().over(
+        Window.partitionBy("customer_id").orderBy(col("amount").desc())
+    ))</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="sessionize" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+<h3>Challenge: Sessionize User Events</h3>
+<p><strong>Problem:</strong> Group user events into sessions. A new session starts if there's more than 30 minutes gap between events.</p>
+
+<p><strong>Sample Data:</strong></p>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
++---------+-------------------+--------+
+| user_id |    event_time     | action |
++---------+-------------------+--------+
+|    1    | 2024-01-01 10:00  |  view  |
+|    1    | 2024-01-01 10:15  |  click |
+|    1    | 2024-01-01 11:00  |  view  |  <- New session (45 min gap)
+|    1    | 2024-01-01 11:10  |  buy   |
++---------+-------------------+--------+
+</pre>
+                        </div>
+                        <div class="code-header"><span class="code-language">Python (Solution)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import (
+    col, lag, when, sum as spark_sum, 
+    unix_timestamp, to_timestamp
+)
+from pyspark.sql.window import Window
+
+spark = SparkSession.builder.appName("Sessionization").getOrCreate()
+
+# Sample data
+data = [
+    (1, "2024-01-01 10:00:00", "view"),
+    (1, "2024-01-01 10:15:00", "click"),
+    (1, "2024-01-01 11:00:00", "view"),
+    (1, "2024-01-01 11:10:00", "buy"),
+    (2, "2024-01-01 09:00:00", "view"),
+    (2, "2024-01-01 09:20:00", "click"),
+]
+df = spark.createDataFrame(data, ["user_id", "event_time", "action"])
+df = df.withColumn("event_time", to_timestamp("event_time"))
+
+# Session timeout in seconds (30 minutes)
+SESSION_TIMEOUT = 30 * 60
+
+# Window to get previous event time
+user_window = Window.partitionBy("user_id").orderBy("event_time")
+
+# Step 1: Calculate time since previous event
+df_with_gap = df.withColumn(
+    "prev_event_time",
+    lag("event_time").over(user_window)
+).withColumn(
+    "time_gap_seconds",
+    unix_timestamp("event_time") - unix_timestamp("prev_event_time")
+)
+
+# Step 2: Mark new session starts
+df_with_session_start = df_with_gap.withColumn(
+    "is_new_session",
+    when(
+        col("prev_event_time").isNull() | 
+        (col("time_gap_seconds") > SESSION_TIMEOUT),
+        1
+    ).otherwise(0)
+)
+
+# Step 3: Create session ID using cumulative sum
+df_sessionized = df_with_session_start.withColumn(
+    "session_id",
+    spark_sum("is_new_session").over(user_window)
+)
+
+# Clean up and show results
+df_result = df_sessionized.select(
+    "user_id", "event_time", "action", "session_id"
+)
+df_result.show()
+
+# Calculate session metrics
+session_metrics = df_result.groupBy("user_id", "session_id").agg(
+    count("*").alias("events_in_session"),
+    min("event_time").alias("session_start"),
+    max("event_time").alias("session_end")
+)
+session_metrics.show()</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="pivot" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+<h3>Challenge: Pivot and Unpivot Data</h3>
+<p><strong>Problem 1 (Pivot):</strong> Transform row-based sales data into a column-based format with months as columns.</p>
+<p><strong>Problem 2 (Unpivot):</strong> Transform the pivoted data back to row format.</p>
+                        </div>
+                        <div class="code-header"><span class="code-language">Python (Solution)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, sum as spark_sum, expr
+
+spark = SparkSession.builder.appName("PivotUnpivot").getOrCreate()
+
+# Sample data (row format)
+data = [
+    ("Product A", "Jan", 100),
+    ("Product A", "Feb", 150),
+    ("Product A", "Mar", 200),
+    ("Product B", "Jan", 300),
+    ("Product B", "Feb", 250),
+    ("Product B", "Mar", 400),
+]
+df = spark.createDataFrame(data, ["product", "month", "sales"])
+
+# ============================================
+# PIVOT: Rows to Columns
+# ============================================
+df_pivoted = df.groupBy("product").pivot("month").agg(
+    spark_sum("sales")
+)
+df_pivoted.show()
+# Output:
+# +---------+----+----+----+
+# |  product| Feb| Jan| Mar|
+# +---------+----+----+----+
+# |Product A| 150| 100| 200|
+# |Product B| 250| 300| 400|
+# +---------+----+----+----+
+
+# Pivot with specific values (more efficient)
+months = ["Jan", "Feb", "Mar"]
+df_pivoted_v2 = df.groupBy("product").pivot("month", months).agg(
+    spark_sum("sales")
+)
+
+# ============================================
+# UNPIVOT: Columns to Rows
+# ============================================
+# Method 1: Using stack()
+df_unpivoted = df_pivoted.select(
+    "product",
+    expr("stack(3, 'Jan', Jan, 'Feb', Feb, 'Mar', Mar) as (month, sales)")
+)
+df_unpivoted.show()
+
+# Method 2: Using selectExpr with explode
+df_unpivoted_v2 = df_pivoted.selectExpr(
+    "product",
+    "stack(3, 'Jan', Jan, 'Feb', Feb, 'Mar', Mar) as (month, sales)"
+).filter(col("sales").isNotNull())
+
+# Method 3: Using melt-like approach (union)
+def unpivot(df, id_cols, value_cols, var_name="variable", value_name="value"):
+    """Unpivot DataFrame similar to pandas melt"""
+    stack_expr = f"stack({len(value_cols)}, " + \
+        ", ".join([f"'{c}', `{c}`" for c in value_cols]) + \
+        f") as ({var_name}, {value_name})"
+    
+    return df.select(*id_cols, expr(stack_expr))
+
+df_melted = unpivot(df_pivoted, ["product"], ["Jan", "Feb", "Mar"], "month", "sales")
+df_melted.show()</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="gap" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+<h3>Challenge: Find Gaps in Sequential Data</h3>
+<p><strong>Problem:</strong> Given a table of order IDs, find any gaps in the sequence.</p>
+
+<p><strong>Sample Data:</strong></p>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
++----------+
+| order_id |
++----------+
+|    1     |
+|    2     |
+|    3     |
+|    5     |  <- Gap: 4 is missing
+|    6     |
+|    9     |  <- Gap: 7, 8 are missing
+|   10     |
++----------+
+</pre>
+                        </div>
+                        <div class="code-header"><span class="code-language">Python (Solution)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, lead, lit, explode, sequence
+from pyspark.sql.window import Window
+
+spark = SparkSession.builder.appName("GapDetection").getOrCreate()
+
+# Sample data
+data = [(1,), (2,), (3,), (5,), (6,), (9,), (10,)]
+df = spark.createDataFrame(data, ["order_id"])
+
+# ============================================
+# Solution 1: Using lead() to find gaps
+# ============================================
+window_spec = Window.orderBy("order_id")
+
+df_with_next = df.withColumn(
+    "next_order_id",
+    lead("order_id", 1).over(window_spec)
+)
+
+# Find where gap exists
+df_gaps = df_with_next.filter(
+    col("next_order_id") - col("order_id") > 1
+).select(
+    (col("order_id") + 1).alias("gap_start"),
+    (col("next_order_id") - 1).alias("gap_end")
+)
+
+df_gaps.show()
+# Output:
+# +---------+-------+
+# |gap_start|gap_end|
+# +---------+-------+
+# |        4|      4|
+# |        7|      8|
+# +---------+-------+
+
+# ============================================
+# Solution 2: Generate all missing IDs
+# ============================================
+# Get min and max
+bounds = df.agg({"order_id": "min", "order_id": "max"}).collect()[0]
+min_id, max_id = bounds[0], bounds[1]
+
+# Generate complete sequence
+df_complete = spark.range(min_id, max_id + 1).toDF("order_id")
+
+# Find missing IDs using left anti join
+df_missing = df_complete.join(df, "order_id", "left_anti")
+df_missing.show()
+# Output:
+# +--------+
+# |order_id|
+# +--------+
+# |       4|
+# |       7|
+# |       8|
+# +--------+
+
+# ============================================
+# Solution 3: Expand gaps into individual IDs
+# ============================================
+df_expanded_gaps = df_gaps.select(
+    explode(sequence(col("gap_start"), col("gap_end"))).alias("missing_id")
+)
+df_expanded_gaps.show()
+
+# ============================================
+# Bonus: Find consecutive sequences (islands)
+# ============================================
+df_islands = df.withColumn(
+    "grp",
+    col("order_id") - row_number().over(Window.orderBy("order_id"))
+)
+
+df_sequences = df_islands.groupBy("grp").agg(
+    min("order_id").alias("sequence_start"),
+    max("order_id").alias("sequence_end"),
+    count("*").alias("sequence_length")
+).drop("grp")
+
+df_sequences.show()
+# Output:
+# +--------------+------------+---------------+
+# |sequence_start|sequence_end|sequence_length|
+# +--------------+------------+---------------+
+# |             1|           3|              3|
+# |             5|           6|              2|
+# |             9|          10|              2|
+# +--------------+------------+---------------+</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../01_concepts/index.html" style="color: var(--text-muted);">&larr; Previous: Core Concepts</a>
+                <a href="../03_system_design/index.html" style="color: var(--accent-primary);">Next: System Design &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showCoding();
+        });
+        
+        function showCoding() {
+            viz.clear();
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x4dabf7, position: { x: -1.5, y: 0.4, z: 0 } });
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x4dabf7, position: { x: 0, y: 0.4, z: 0 } });
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x4dabf7, position: { x: 1.5, y: 0.4, z: 0 } });
+            viz.createLabel('Coding Challenges', { x: 0, y: 1.5, z: 0 });
+            viz.createGrid(6, 6);
+        }
+    </script>
+</body>
+</html>

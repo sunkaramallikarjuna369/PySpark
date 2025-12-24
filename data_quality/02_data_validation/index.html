@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Validation - Data Quality</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#quality" class="nav-link active">Data Quality</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Data Validation Patterns</h1>
+            <p>Implement robust data validation checks to ensure data quality throughout your pipelines. Learn validation patterns, assertion frameworks, and how to handle validation failures gracefully.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="basic">Basic Validation</button>
+                <button class="tab" data-tab="framework">Validation Framework</button>
+                <button class="tab" data-tab="great">Great Expectations</button>
+                <button class="tab" data-tab="custom">Custom Validators</button>
+            </div>
+            <div class="tab-contents">
+                <div id="basic" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Basic Validation)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Basic Data Validation Patterns
+"""
+from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql.functions import col, count, when, isnan, isnull, sum as spark_sum
+from typing import List, Dict, Any
+from dataclasses import dataclass
+
+spark = SparkSession.builder.appName("DataValidation").getOrCreate()
+
+# ============================================
+# NULL CHECKS
+# ============================================
+def check_nulls(df: DataFrame, columns: List[str]) -> Dict[str, int]:
+    """Check for null values in specified columns"""
+    null_counts = {}
+    for column in columns:
+        null_count = df.filter(col(column).isNull() | isnan(column)).count()
+        null_counts[column] = null_count
+    return null_counts
+
+def assert_no_nulls(df: DataFrame, columns: List[str]):
+    """Assert no null values in columns"""
+    null_counts = check_nulls(df, columns)
+    for column, count in null_counts.items():
+        assert count == 0, f"Found {count} nulls in column {column}"
+
+# ============================================
+# UNIQUENESS CHECKS
+# ============================================
+def check_uniqueness(df: DataFrame, columns: List[str]) -> bool:
+    """Check if columns form a unique key"""
+    total = df.count()
+    distinct = df.select(columns).distinct().count()
+    return total == distinct
+
+def get_duplicates(df: DataFrame, columns: List[str]) -> DataFrame:
+    """Get duplicate records"""
+    return df.groupBy(columns).count().filter(col("count") > 1)
+
+# ============================================
+# RANGE CHECKS
+# ============================================
+def check_range(df: DataFrame, column: str, min_val=None, max_val=None) -> int:
+    """Count values outside specified range"""
+    conditions = []
+    if min_val is not None:
+        conditions.append(col(column) < min_val)
+    if max_val is not None:
+        conditions.append(col(column) > max_val)
+    
+    if not conditions:
+        return 0
+    
+    combined = conditions[0]
+    for cond in conditions[1:]:
+        combined = combined | cond
+    
+    return df.filter(combined).count()
+
+# ============================================
+# REFERENTIAL INTEGRITY
+# ============================================
+def check_referential_integrity(child_df: DataFrame, parent_df: DataFrame,
+                                 child_key: str, parent_key: str) -> int:
+    """Check foreign key references exist in parent"""
+    orphans = child_df.join(
+        parent_df.select(parent_key).distinct(),
+        child_df[child_key] == parent_df[parent_key],
+        "left_anti"
+    )
+    return orphans.count()
+
+# ============================================
+# PATTERN MATCHING
+# ============================================
+def check_pattern(df: DataFrame, column: str, pattern: str) -> int:
+    """Count values not matching regex pattern"""
+    return df.filter(~col(column).rlike(pattern)).count()
+
+# Email validation
+def validate_emails(df: DataFrame, column: str) -> int:
+    email_pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+    return check_pattern(df, column, email_pattern)
+
+# ============================================
+# COMPLETENESS CHECK
+# ============================================
+def check_completeness(df: DataFrame) -> Dict[str, float]:
+    """Calculate completeness percentage for each column"""
+    total = df.count()
+    completeness = {}
+    
+    for column in df.columns:
+        non_null = df.filter(col(column).isNotNull()).count()
+        completeness[column] = (non_null / total * 100) if total > 0 else 0
+    
+    return completeness
+
+# ============================================
+# EXAMPLE USAGE
+# ============================================
+df = spark.read.parquet("/data/orders")
+
+# Run validations
+null_counts = check_nulls(df, ["customer_id", "amount"])
+is_unique = check_uniqueness(df, ["order_id"])
+out_of_range = check_range(df, "amount", min_val=0, max_val=10000)
+completeness = check_completeness(df)
+
+print(f"Null counts: {null_counts}")
+print(f"Order ID unique: {is_unique}")
+print(f"Out of range amounts: {out_of_range}")
+print(f"Completeness: {completeness}")</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="framework" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Validation Framework)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Custom Data Validation Framework
+"""
+from pyspark.sql import DataFrame
+from pyspark.sql.functions import col, count, when
+from dataclasses import dataclass, field
+from typing import List, Callable, Optional, Any
+from enum import Enum
+from datetime import datetime
+
+class ValidationSeverity(Enum):
+    ERROR = "error"      # Fail pipeline
+    WARNING = "warning"  # Log but continue
+    INFO = "info"        # Informational only
+
+@dataclass
+class ValidationResult:
+    name: str
+    passed: bool
+    severity: ValidationSeverity
+    message: str
+    details: dict = field(default_factory=dict)
+    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+
+@dataclass
+class ValidationRule:
+    name: str
+    check_fn: Callable[[DataFrame], bool]
+    severity: ValidationSeverity = ValidationSeverity.ERROR
+    description: str = ""
+
+class DataValidator:
+    def __init__(self, df: DataFrame):
+        self.df = df
+        self.rules: List[ValidationRule] = []
+        self.results: List[ValidationResult] = []
+    
+    def add_rule(self, rule: ValidationRule) -> 'DataValidator':
+        self.rules.append(rule)
+        return self
+    
+    def not_null(self, columns: List[str], severity=ValidationSeverity.ERROR):
+        """Add not-null validation for columns"""
+        for column in columns:
+            def check(df, col_name=column):
+                return df.filter(col(col_name).isNull()).count() == 0
+            
+            self.add_rule(ValidationRule(
+                name=f"not_null_{column}",
+                check_fn=check,
+                severity=severity,
+                description=f"Column {column} should not contain nulls"
+            ))
+        return self
+    
+    def unique(self, columns: List[str], severity=ValidationSeverity.ERROR):
+        """Add uniqueness validation"""
+        def check(df):
+            return df.count() == df.select(columns).distinct().count()
+        
+        self.add_rule(ValidationRule(
+            name=f"unique_{'-'.join(columns)}",
+            check_fn=check,
+            severity=severity,
+            description=f"Columns {columns} should be unique"
+        ))
+        return self
+    
+    def in_range(self, column: str, min_val=None, max_val=None, 
+                 severity=ValidationSeverity.ERROR):
+        """Add range validation"""
+        def check(df):
+            conditions = []
+            if min_val is not None:
+                conditions.append(col(column) >= min_val)
+            if max_val is not None:
+                conditions.append(col(column) <= max_val)
+            
+            if not conditions:
+                return True
+            
+            combined = conditions[0]
+            for cond in conditions[1:]:
+                combined = combined & cond
+            
+            return df.filter(~combined).count() == 0
+        
+        self.add_rule(ValidationRule(
+            name=f"range_{column}",
+            check_fn=check,
+            severity=severity,
+            description=f"Column {column} should be in range [{min_val}, {max_val}]"
+        ))
+        return self
+    
+    def row_count(self, min_rows=None, max_rows=None, 
+                  severity=ValidationSeverity.ERROR):
+        """Add row count validation"""
+        def check(df):
+            count = df.count()
+            if min_rows and count < min_rows:
+                return False
+            if max_rows and count > max_rows:
+                return False
+            return True
+        
+        self.add_rule(ValidationRule(
+            name="row_count",
+            check_fn=check,
+            severity=severity,
+            description=f"Row count should be in range [{min_rows}, {max_rows}]"
+        ))
+        return self
+    
+    def custom(self, name: str, check_fn: Callable[[DataFrame], bool],
+               severity=ValidationSeverity.ERROR, description=""):
+        """Add custom validation rule"""
+        self.add_rule(ValidationRule(
+            name=name,
+            check_fn=check_fn,
+            severity=severity,
+            description=description
+        ))
+        return self
+    
+    def validate(self) -> List[ValidationResult]:
+        """Run all validations"""
+        self.results = []
+        
+        for rule in self.rules:
+            try:
+                passed = rule.check_fn(self.df)
+                result = ValidationResult(
+                    name=rule.name,
+                    passed=passed,
+                    severity=rule.severity,
+                    message="Passed" if passed else f"Failed: {rule.description}"
+                )
+            except Exception as e:
+                result = ValidationResult(
+                    name=rule.name,
+                    passed=False,
+                    severity=rule.severity,
+                    message=f"Error: {str(e)}"
+                )
+            
+            self.results.append(result)
+        
+        return self.results
+    
+    def get_summary(self) -> dict:
+        """Get validation summary"""
+        return {
+            "total": len(self.results),
+            "passed": sum(1 for r in self.results if r.passed),
+            "failed": sum(1 for r in self.results if not r.passed),
+            "errors": sum(1 for r in self.results 
+                         if not r.passed and r.severity == ValidationSeverity.ERROR),
+            "warnings": sum(1 for r in self.results 
+                          if not r.passed and r.severity == ValidationSeverity.WARNING)
+        }
+    
+    def raise_on_errors(self):
+        """Raise exception if any ERROR severity validations failed"""
+        errors = [r for r in self.results 
+                  if not r.passed and r.severity == ValidationSeverity.ERROR]
+        if errors:
+            error_msgs = [f"{r.name}: {r.message}" for r in errors]
+            raise ValueError(f"Validation errors:\n" + "\n".join(error_msgs))
+
+# ============================================
+# USAGE EXAMPLE
+# ============================================
+df = spark.read.parquet("/data/orders")
+
+validator = DataValidator(df) \
+    .not_null(["order_id", "customer_id", "amount"]) \
+    .unique(["order_id"]) \
+    .in_range("amount", min_val=0, max_val=100000) \
+    .row_count(min_rows=1) \
+    .custom(
+        name="valid_dates",
+        check_fn=lambda df: df.filter(col("order_date") > "2020-01-01").count() == df.count(),
+        description="All orders should be after 2020"
+    )
+
+results = validator.validate()
+summary = validator.get_summary()
+
+print(f"Validation Summary: {summary}")
+validator.raise_on_errors()  # Raises if any errors</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="great" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Great Expectations)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Great Expectations Integration with PySpark
+pip install great_expectations
+"""
+import great_expectations as gx
+from great_expectations.dataset import SparkDFDataset
+
+# ============================================
+# BASIC SETUP
+# ============================================
+# Convert PySpark DataFrame to GE Dataset
+df = spark.read.parquet("/data/orders")
+ge_df = SparkDFDataset(df)
+
+# ============================================
+# COLUMN EXPECTATIONS
+# ============================================
+# Not null
+ge_df.expect_column_values_to_not_be_null("order_id")
+ge_df.expect_column_values_to_not_be_null("customer_id")
+
+# Unique
+ge_df.expect_column_values_to_be_unique("order_id")
+
+# In set
+ge_df.expect_column_values_to_be_in_set(
+    "status", 
+    ["pending", "completed", "cancelled"]
+)
+
+# Range
+ge_df.expect_column_values_to_be_between(
+    "amount", 
+    min_value=0, 
+    max_value=100000
+)
+
+# Pattern
+ge_df.expect_column_values_to_match_regex(
+    "email",
+    r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+)
+
+# ============================================
+# TABLE EXPECTATIONS
+# ============================================
+# Row count
+ge_df.expect_table_row_count_to_be_between(
+    min_value=1000, 
+    max_value=1000000
+)
+
+# Column count
+ge_df.expect_table_column_count_to_equal(10)
+
+# Columns exist
+ge_df.expect_table_columns_to_match_ordered_list([
+    "order_id", "customer_id", "amount", "status", "order_date"
+])
+
+# ============================================
+# STATISTICAL EXPECTATIONS
+# ============================================
+# Mean
+ge_df.expect_column_mean_to_be_between(
+    "amount",
+    min_value=100,
+    max_value=500
+)
+
+# Standard deviation
+ge_df.expect_column_stdev_to_be_between(
+    "amount",
+    min_value=10,
+    max_value=200
+)
+
+# Quantile
+ge_df.expect_column_quantile_values_to_be_between(
+    "amount",
+    quantile_ranges={
+        "quantiles": [0.25, 0.5, 0.75],
+        "value_ranges": [[50, 150], [100, 300], [200, 500]]
+    }
+)
+
+# ============================================
+# GET VALIDATION RESULTS
+# ============================================
+results = ge_df.validate()
+
+print(f"Success: {results.success}")
+print(f"Statistics: {results.statistics}")
+
+for result in results.results:
+    if not result.success:
+        print(f"Failed: {result.expectation_config.expectation_type}")
+        print(f"  Details: {result.result}")
+
+# ============================================
+# EXPECTATION SUITE
+# ============================================
+# Create reusable expectation suite
+context = gx.get_context()
+
+suite = context.add_expectation_suite("orders_suite")
+
+# Add expectations to suite
+suite.add_expectation(
+    gx.expectations.ExpectColumnValuesToNotBeNull(column="order_id")
+)
+suite.add_expectation(
+    gx.expectations.ExpectColumnValuesToBeUnique(column="order_id")
+)
+suite.add_expectation(
+    gx.expectations.ExpectColumnValuesToBeBetween(
+        column="amount", min_value=0, max_value=100000
+    )
+)
+
+# Save suite
+context.save_expectation_suite(suite)
+
+# Run validation with suite
+validator = context.get_validator(
+    batch_request=batch_request,
+    expectation_suite_name="orders_suite"
+)
+results = validator.validate()
+
+# ============================================
+# DATA DOCS
+# ============================================
+# Build data documentation
+context.build_data_docs()
+
+# Open in browser
+context.open_data_docs()</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="custom" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Custom Validators)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Custom Domain-Specific Validators
+"""
+from pyspark.sql import DataFrame
+from pyspark.sql.functions import col, when, sum as spark_sum, count
+from abc import ABC, abstractmethod
+from typing import List, Tuple
+
+# ============================================
+# ABSTRACT VALIDATOR
+# ============================================
+class BaseValidator(ABC):
+    @abstractmethod
+    def validate(self, df: DataFrame) -> Tuple[bool, str]:
+        """Return (passed, message)"""
+        pass
+
+# ============================================
+# FINANCIAL DATA VALIDATORS
+# ============================================
+class BalanceValidator(BaseValidator):
+    """Validate that debits equal credits"""
+    
+    def __init__(self, debit_col: str, credit_col: str, tolerance: float = 0.01):
+        self.debit_col = debit_col
+        self.credit_col = credit_col
+        self.tolerance = tolerance
+    
+    def validate(self, df: DataFrame) -> Tuple[bool, str]:
+        totals = df.agg(
+            spark_sum(self.debit_col).alias("total_debit"),
+            spark_sum(self.credit_col).alias("total_credit")
+        ).first()
+        
+        diff = abs(totals["total_debit"] - totals["total_credit"])
+        passed = diff <= self.tolerance
+        
+        return passed, f"Balance diff: {diff}"
+
+class TransactionSequenceValidator(BaseValidator):
+    """Validate transaction sequence has no gaps"""
+    
+    def __init__(self, sequence_col: str):
+        self.sequence_col = sequence_col
+    
+    def validate(self, df: DataFrame) -> Tuple[bool, str]:
+        from pyspark.sql.functions import min as spark_min, max as spark_max
+        
+        stats = df.agg(
+            spark_min(self.sequence_col).alias("min_seq"),
+            spark_max(self.sequence_col).alias("max_seq"),
+            count("*").alias("count")
+        ).first()
+        
+        expected_count = stats["max_seq"] - stats["min_seq"] + 1
+        actual_count = stats["count"]
+        
+        passed = expected_count == actual_count
+        return passed, f"Expected {expected_count}, got {actual_count}"
+
+# ============================================
+# TIME SERIES VALIDATORS
+# ============================================
+class TimeSeriesCompletenessValidator(BaseValidator):
+    """Validate no missing time periods"""
+    
+    def __init__(self, date_col: str, expected_freq: str = "day"):
+        self.date_col = date_col
+        self.expected_freq = expected_freq
+    
+    def validate(self, df: DataFrame) -> Tuple[bool, str]:
+        from pyspark.sql.functions import datediff, min as spark_min, max as spark_max
+        
+        stats = df.agg(
+            spark_min(self.date_col).alias("min_date"),
+            spark_max(self.date_col).alias("max_date"),
+            count("*").alias("count")
+        ).first()
+        
+        if self.expected_freq == "day":
+            expected = (stats["max_date"] - stats["min_date"]).days + 1
+        else:
+            expected = stats["count"]  # Simplified
+        
+        actual = df.select(self.date_col).distinct().count()
+        passed = expected == actual
+        
+        return passed, f"Expected {expected} periods, got {actual}"
+
+# ============================================
+# CROSS-TABLE VALIDATORS
+# ============================================
+class ReferentialIntegrityValidator(BaseValidator):
+    """Validate foreign key relationships"""
+    
+    def __init__(self, parent_df: DataFrame, child_key: str, parent_key: str):
+        self.parent_df = parent_df
+        self.child_key = child_key
+        self.parent_key = parent_key
+    
+    def validate(self, df: DataFrame) -> Tuple[bool, str]:
+        orphans = df.join(
+            self.parent_df.select(self.parent_key).distinct(),
+            df[self.child_key] == self.parent_df[self.parent_key],
+            "left_anti"
+        )
+        
+        orphan_count = orphans.count()
+        passed = orphan_count == 0
+        
+        return passed, f"Found {orphan_count} orphan records"
+
+# ============================================
+# COMPOSITE VALIDATOR
+# ============================================
+class CompositeValidator:
+    """Run multiple validators"""
+    
+    def __init__(self):
+        self.validators: List[Tuple[str, BaseValidator]] = []
+    
+    def add(self, name: str, validator: BaseValidator) -> 'CompositeValidator':
+        self.validators.append((name, validator))
+        return self
+    
+    def validate(self, df: DataFrame) -> dict:
+        results = {}
+        all_passed = True
+        
+        for name, validator in self.validators:
+            passed, message = validator.validate(df)
+            results[name] = {"passed": passed, "message": message}
+            if not passed:
+                all_passed = False
+        
+        return {
+            "all_passed": all_passed,
+            "results": results
+        }
+
+# ============================================
+# USAGE
+# ============================================
+df_transactions = spark.read.parquet("/data/transactions")
+df_accounts = spark.read.parquet("/data/accounts")
+
+validator = CompositeValidator() \
+    .add("balance", BalanceValidator("debit", "credit")) \
+    .add("sequence", TransactionSequenceValidator("transaction_id")) \
+    .add("accounts_exist", ReferentialIntegrityValidator(
+        df_accounts, "account_id", "account_id"
+    ))
+
+results = validator.validate(df_transactions)
+print(results)</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../01_unit_testing/index.html" style="color: var(--text-muted);">&larr; Previous: Unit Testing</a>
+                <a href="../03_schema_evolution/index.html" style="color: var(--accent-primary);">Next: Schema Evolution &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showValidation();
+        });
+        
+        function showValidation() {
+            viz.clear();
+            
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0x4dabf7, position: { x: -2, y: 0.4, z: 0 } });
+            viz.createLabel('Data', { x: -2, y: 1.3, z: 0 });
+            
+            viz.createDataNode({ type: 'sphere', size: 0.5, color: 0xffd43b, position: { x: 0, y: 0.4, z: 0 } });
+            viz.createLabel('Validate', { x: 0, y: 1.2, z: 0 });
+            
+            viz.createDataNode({ type: 'cube', size: 0.4, color: 0x51cf66, position: { x: 2, y: 0.6, z: -0.5 } });
+            viz.createLabel('Valid', { x: 2, y: 1.3, z: -0.5 });
+            
+            viz.createDataNode({ type: 'cube', size: 0.4, color: 0xff6b6b, position: { x: 2, y: 0.3, z: 0.5 } });
+            viz.createLabel('Invalid', { x: 2, y: 1, z: 0.5 });
+            
+            viz.createArrow({ x: -1.2, y: 0.4, z: 0 }, { x: -0.6, y: 0.4, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.6, y: 0.5, z: 0 }, { x: 1.4, y: 0.6, z: -0.3 }, { color: 0x51cf66 });
+            viz.createArrow({ x: 0.6, y: 0.3, z: 0 }, { x: 1.4, y: 0.3, z: 0.3 }, { color: 0xff6b6b });
+            
+            viz.createGrid(8, 8);
+        }
+    </script>
+</body>
+</html>

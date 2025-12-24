@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Design - Interview Prep</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#interview" class="nav-link active">Interview Prep</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Data Engineering System Design</h1>
+            <p>Practice designing data systems at scale. These scenarios are commonly asked in senior data engineering interviews and require understanding of distributed systems, data modeling, and trade-offs.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Design Scenarios</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="realtime">Real-time Analytics</button>
+                <button class="tab" data-tab="lakehouse">Data Lakehouse</button>
+                <button class="tab" data-tab="streaming">Event Streaming</button>
+                <button class="tab" data-tab="etl">ETL Pipeline</button>
+            </div>
+            <div class="tab-contents">
+                <div id="realtime" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+<h3>Design: Real-time Analytics Dashboard</h3>
+<p><strong>Problem:</strong> Design a system to provide real-time analytics for an e-commerce platform showing metrics like orders per minute, revenue, top products, and conversion rates.</p>
+
+<h4>Requirements:</h4>
+<ul>
+    <li>Handle 100K events/second at peak</li>
+    <li>Dashboard refresh every 5 seconds</li>
+    <li>Support historical queries (last 24 hours with 1-minute granularity)</li>
+    <li>99.9% availability</li>
+</ul>
+
+<h4>Solution Architecture:</h4>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px; font-family: monospace; white-space: pre;">
+┌─────────────┐     ┌─────────────┐     ┌─────────────────┐
+│   Events    │────▶│    Kafka    │────▶│ Spark Streaming │
+│  (Sources)  │     │   Cluster   │     │   (Processing)  │
+└─────────────┘     └─────────────┘     └────────┬────────┘
+                                                 │
+                    ┌────────────────────────────┼────────────────────────────┐
+                    │                            │                            │
+                    ▼                            ▼                            ▼
+           ┌───────────────┐           ┌───────────────┐           ┌───────────────┐
+           │     Redis     │           │   ClickHouse  │           │  Delta Lake   │
+           │  (Real-time)  │           │  (Analytics)  │           │   (Archive)   │
+           └───────┬───────┘           └───────┬───────┘           └───────────────┘
+                   │                           │
+                   └───────────┬───────────────┘
+                               ▼
+                      ┌───────────────┐
+                      │   Dashboard   │
+                      │    (Grafana)  │
+                      └───────────────┘
+</pre>
+
+<h4>Key Components:</h4>
+<p><strong>1. Ingestion Layer (Kafka):</strong></p>
+<ul>
+    <li>Partitioned by event_type for parallel processing</li>
+    <li>Retention: 7 days for replay capability</li>
+    <li>Replication factor: 3 for durability</li>
+</ul>
+
+<p><strong>2. Processing Layer (Spark Streaming):</strong></p>
+<ul>
+    <li>Micro-batch processing (5-second intervals)</li>
+    <li>Windowed aggregations (1-minute tumbling windows)</li>
+    <li>Watermarking for late data (10-minute threshold)</li>
+    <li>Checkpointing for exactly-once semantics</li>
+</ul>
+
+<p><strong>3. Serving Layer:</strong></p>
+<ul>
+    <li><strong>Redis:</strong> Current metrics (last 5 minutes), sub-millisecond reads</li>
+    <li><strong>ClickHouse:</strong> Historical queries, columnar storage for fast aggregations</li>
+    <li><strong>Delta Lake:</strong> Raw event archive, supports time travel</li>
+</ul>
+
+<h4>Trade-offs Discussed:</h4>
+<ul>
+    <li><strong>Latency vs Accuracy:</strong> 5-second batches balance freshness with processing efficiency</li>
+    <li><strong>Cost vs Performance:</strong> Redis for hot data, ClickHouse for warm, S3 for cold</li>
+    <li><strong>Complexity vs Features:</strong> Multiple stores add complexity but optimize for different access patterns</li>
+</ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="lakehouse" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+<h3>Design: Data Lakehouse Architecture</h3>
+<p><strong>Problem:</strong> Design a unified data platform that supports both BI/reporting and ML workloads for a financial services company.</p>
+
+<h4>Requirements:</h4>
+<ul>
+    <li>Ingest data from 50+ sources (databases, APIs, files)</li>
+    <li>Support ACID transactions</li>
+    <li>Enable both SQL analytics and ML feature engineering</li>
+    <li>Comply with data governance and lineage requirements</li>
+    <li>Handle 10TB daily ingestion</li>
+</ul>
+
+<h4>Solution Architecture (Medallion):</h4>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px; font-family: monospace; white-space: pre;">
+┌──────────────────────────────────────────────────────────────────┐
+│                        DATA SOURCES                               │
+│  ┌────────┐  ┌────────┐  ┌────────┐  ┌────────┐  ┌────────┐     │
+│  │  RDBMS │  │  APIs  │  │  Files │  │ Streams│  │  SaaS  │     │
+│  └────┬───┘  └────┬───┘  └────┬───┘  └────┬───┘  └────┬───┘     │
+└───────┼───────────┼───────────┼───────────┼───────────┼──────────┘
+        │           │           │           │           │
+        └───────────┴───────────┴─────┬─────┴───────────┘
+                                      ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  BRONZE LAYER (Raw)                                              │
+│  - Raw data as-is from sources                                   │
+│  - Append-only, immutable                                        │
+│  - Schema-on-read                                                │
+│  - Partitioned by ingestion_date                                 │
+└─────────────────────────────┬────────────────────────────────────┘
+                              ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  SILVER LAYER (Cleansed)                                         │
+│  - Deduplicated, validated                                       │
+│  - Standardized schemas                                          │
+│  - Conformed dimensions                                          │
+│  - Partitioned by business date                                  │
+└─────────────────────────────┬────────────────────────────────────┘
+                              ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  GOLD LAYER (Business)                                           │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
+│  │  Dim Tables │  │ Fact Tables │  │ ML Features │              │
+│  │   (SCD2)    │  │ (Aggregated)│  │   (Store)   │              │
+│  └─────────────┘  └─────────────┘  └─────────────┘              │
+└──────────────────────────────────────────────────────────────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        ▼                     ▼                     ▼
+┌───────────────┐    ┌───────────────┐    ┌───────────────┐
+│   BI Tools    │    │  ML Platform  │    │  Data Apps    │
+│  (Tableau)    │    │  (MLflow)     │    │  (APIs)       │
+└───────────────┘    └───────────────┘    └───────────────┘
+</pre>
+
+<h4>Technology Choices:</h4>
+<ul>
+    <li><strong>Storage:</strong> Delta Lake on S3 (ACID, time travel, schema evolution)</li>
+    <li><strong>Compute:</strong> Databricks/EMR Spark clusters (auto-scaling)</li>
+    <li><strong>Orchestration:</strong> Apache Airflow (DAG-based scheduling)</li>
+    <li><strong>Catalog:</strong> Unity Catalog / AWS Glue (metadata, lineage)</li>
+    <li><strong>Quality:</strong> Great Expectations (data validation)</li>
+</ul>
+
+<h4>Key Design Decisions:</h4>
+<ul>
+    <li><strong>Delta Lake over Parquet:</strong> ACID transactions, MERGE support, time travel</li>
+    <li><strong>Medallion Architecture:</strong> Clear data quality progression, easier debugging</li>
+    <li><strong>Separate ML Feature Store:</strong> Consistent features across training and serving</li>
+</ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="streaming" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+<h3>Design: Event-Driven Data Platform</h3>
+<p><strong>Problem:</strong> Design a system to process user activity events for a social media platform, supporting real-time recommendations and batch analytics.</p>
+
+<h4>Requirements:</h4>
+<ul>
+    <li>1M events/second peak load</li>
+    <li>Real-time personalization (< 100ms latency)</li>
+    <li>Event replay for ML model retraining</li>
+    <li>Multi-region deployment</li>
+</ul>
+
+<h4>Solution Architecture:</h4>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px; font-family: monospace; white-space: pre;">
+┌─────────────────────────────────────────────────────────────────┐
+│                     EVENT PRODUCERS                              │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐            │
+│  │  Web    │  │ Mobile  │  │  IoT    │  │ Backend │            │
+│  └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘            │
+└───────┼────────────┼────────────┼────────────┼──────────────────┘
+        └────────────┴────────────┴────────────┘
+                           │
+                           ▼
+              ┌────────────────────────┐
+              │    API Gateway         │
+              │  (Schema Validation)   │
+              └───────────┬────────────┘
+                          │
+                          ▼
+              ┌────────────────────────┐
+              │      Kafka Cluster     │
+              │  (Partitioned Topics)  │
+              └───────────┬────────────┘
+                          │
+        ┌─────────────────┼─────────────────┐
+        │                 │                 │
+        ▼                 ▼                 ▼
+┌───────────────┐ ┌───────────────┐ ┌───────────────┐
+│    Flink      │ │ Spark Stream  │ │   Kafka       │
+│  (Real-time)  │ │   (Batch)     │ │  Connect      │
+└───────┬───────┘ └───────┬───────┘ └───────┬───────┘
+        │                 │                 │
+        ▼                 ▼                 ▼
+┌───────────────┐ ┌───────────────┐ ┌───────────────┐
+│    Redis      │ │  Delta Lake   │ │  Elasticsearch│
+│  (Features)   │ │  (Archive)    │ │   (Search)    │
+└───────────────┘ └───────────────┘ └───────────────┘
+</pre>
+
+<h4>Stream Processing Patterns:</h4>
+<ul>
+    <li><strong>Event Sourcing:</strong> Store all events as immutable log</li>
+    <li><strong>CQRS:</strong> Separate read/write models for different access patterns</li>
+    <li><strong>Exactly-Once:</strong> Idempotent writes + transactional producers</li>
+</ul>
+
+<h4>Handling Scale:</h4>
+<ul>
+    <li><strong>Partitioning:</strong> By user_id for locality, 1000+ partitions</li>
+    <li><strong>Backpressure:</strong> Kafka consumer lag monitoring, auto-scaling</li>
+    <li><strong>Multi-region:</strong> MirrorMaker 2 for cross-DC replication</li>
+</ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="etl" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+<h3>Design: Scalable ETL Pipeline</h3>
+<p><strong>Problem:</strong> Design an ETL system to process daily data from multiple source systems into a data warehouse for a retail company.</p>
+
+<h4>Requirements:</h4>
+<ul>
+    <li>Process 500GB daily from 20 source systems</li>
+    <li>Complete within 4-hour SLA</li>
+    <li>Support incremental and full loads</li>
+    <li>Handle schema changes gracefully</li>
+    <li>Provide data lineage and quality metrics</li>
+</ul>
+
+<h4>Solution Architecture:</h4>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px; font-family: monospace; white-space: pre;">
+┌──────────────────────────────────────────────────────────────────┐
+│                      ORCHESTRATION (Airflow)                      │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │  DAG: daily_etl_pipeline                                    │ │
+│  │  ┌────────┐  ┌────────┐  ┌────────┐  ┌────────┐  ┌────────┐│ │
+│  │  │Extract │─▶│Validate│─▶│Transform│─▶│  Load  │─▶│ Notify ││ │
+│  │  └────────┘  └────────┘  └────────┘  └────────┘  └────────┘│ │
+│  └─────────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────┘
+
+EXTRACT                    TRANSFORM                    LOAD
+┌─────────────┐           ┌─────────────┐           ┌─────────────┐
+│  CDC from   │           │   Spark     │           │  Delta Lake │
+│  Databases  │──────────▶│  Cluster    │──────────▶│  (Target)   │
+│  (Debezium) │           │             │           │             │
+├─────────────┤           │  - Cleanse  │           ├─────────────┤
+│  API Pulls  │──────────▶│  - Join     │──────────▶│  Snowflake  │
+│  (Airbyte)  │           │  - Aggregate│           │  (DW)       │
+├─────────────┤           │  - SCD      │           └─────────────┘
+│  File Drops │──────────▶│             │
+│  (S3)       │           └─────────────┘
+└─────────────┘
+</pre>
+
+<h4>Key Design Patterns:</h4>
+<p><strong>1. Incremental Processing:</strong></p>
+<ul>
+    <li>Use watermarks/timestamps for change detection</li>
+    <li>CDC for database sources (Debezium)</li>
+    <li>Merge (upsert) for idempotent loads</li>
+</ul>
+
+<p><strong>2. Idempotency:</strong></p>
+<ul>
+    <li>Partition by processing date</li>
+    <li>Overwrite partition on rerun</li>
+    <li>Use MERGE instead of INSERT</li>
+</ul>
+
+<p><strong>3. Error Handling:</strong></p>
+<ul>
+    <li>Dead letter queue for failed records</li>
+    <li>Retry with exponential backoff</li>
+    <li>Alerting on SLA breach</li>
+</ul>
+
+<p><strong>4. Data Quality:</strong></p>
+<ul>
+    <li>Schema validation at ingestion</li>
+    <li>Row count reconciliation</li>
+    <li>Business rule validation</li>
+    <li>Quarantine bad records</li>
+</ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../02_coding_challenges/index.html" style="color: var(--text-muted);">&larr; Previous: Coding Challenges</a>
+                <a href="../04_troubleshooting/index.html" style="color: var(--accent-primary);">Next: Troubleshooting &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 8, y: 5, z: 8 } });
+            showSystemDesign();
+        });
+        
+        function showSystemDesign() {
+            viz.clear();
+            
+            // Sources
+            for (let i = 0; i < 3; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.3, color: 0x868e96, position: { x: -3, y: 0.3 + i * 0.8, z: 0 } });
+            }
+            viz.createLabel('Sources', { x: -3, y: 2.8, z: 0 });
+            
+            // Processing
+            viz.createDataNode({ type: 'sphere', size: 0.5, color: 0x4dabf7, position: { x: 0, y: 1, z: 0 } });
+            viz.createLabel('Processing', { x: 0, y: 2, z: 0 });
+            
+            // Storage
+            viz.createDataNode({ type: 'cylinder', size: 0.4, color: 0x51cf66, position: { x: 3, y: 0.8, z: -0.5 } });
+            viz.createDataNode({ type: 'cylinder', size: 0.4, color: 0x51cf66, position: { x: 3, y: 0.8, z: 0.5 } });
+            viz.createLabel('Storage', { x: 3, y: 2, z: 0 });
+            
+            // Arrows
+            viz.createArrow({ x: -2.5, y: 1, z: 0 }, { x: -0.7, y: 1, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.7, y: 1, z: 0 }, { x: 2.3, y: 0.8, z: 0 }, { color: 0x888888 });
+            
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

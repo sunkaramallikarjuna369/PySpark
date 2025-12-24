@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cache Optimization - Performance Lab</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#performance" class="nav-link active">Performance Lab</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Cache Optimization</h1>
+            <p>Caching is a powerful optimization technique, but misuse can lead to memory issues and slower performance. Learn when to cache, which storage level to use, and how to monitor cache effectiveness.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="basics">Cache Basics</button>
+                <button class="tab" data-tab="levels">Storage Levels</button>
+                <button class="tab" data-tab="when">When to Cache</button>
+                <button class="tab" data-tab="monitor">Monitoring</button>
+                <button class="tab" data-tab="pitfalls">Common Pitfalls</button>
+            </div>
+            <div class="tab-contents">
+                <div id="basics" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Cache Basics)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Cache and Persist Basics
+- cache() vs persist()
+- Lazy evaluation with caching
+- Unpersist to free memory
+"""
+from pyspark.sql import SparkSession
+from pyspark import StorageLevel
+
+spark = SparkSession.builder.appName("CacheOptimization").getOrCreate()
+
+df = spark.read.parquet("/data/sales")
+
+# ============================================
+# CACHE (Memory only, deserialized)
+# ============================================
+df_cached = df.cache()  # Equivalent to persist(StorageLevel.MEMORY_ONLY)
+
+# Cache is LAZY - nothing happens until action
+df_cached.count()  # Now data is cached
+
+# ============================================
+# PERSIST (More control over storage)
+# ============================================
+df_persisted = df.persist(StorageLevel.MEMORY_AND_DISK)
+
+# ============================================
+# UNPERSIST (Free memory)
+# ============================================
+df_cached.unpersist()  # Remove from cache
+df_cached.unpersist(blocking=True)  # Wait for completion
+
+# ============================================
+# CHECK IF CACHED
+# ============================================
+print(f"Is cached: {df_cached.is_cached}")
+print(f"Storage level: {df_cached.storageLevel}")
+
+# ============================================
+# CACHE SQL TABLES
+# ============================================
+df.createOrReplaceTempView("sales")
+spark.sql("CACHE TABLE sales")
+spark.sql("UNCACHE TABLE sales")
+
+# Lazy cache
+spark.sql("CACHE LAZY TABLE sales")
+
+# ============================================
+# BEST PRACTICE: Cache after transformations
+# ============================================
+df_transformed = df \
+    .filter(col("amount") > 100) \
+    .withColumn("tax", col("amount") * 0.1) \
+    .cache()
+
+# First action triggers caching
+df_transformed.count()
+
+# Subsequent actions use cache
+df_transformed.groupBy("category").sum("amount").show()
+df_transformed.groupBy("region").avg("amount").show()</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="levels" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Storage Levels)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Storage Levels Explained
+- Memory vs Disk
+- Serialized vs Deserialized
+- Replication
+"""
+from pyspark import StorageLevel
+
+# ============================================
+# STORAGE LEVEL OPTIONS
+# ============================================
+"""
+MEMORY_ONLY (default for cache())
+- Store as deserialized Java objects in JVM
+- Fast access, high memory usage
+- Partitions that don't fit are recomputed
+
+MEMORY_AND_DISK
+- Spill to disk if memory is full
+- Good balance of speed and reliability
+- RECOMMENDED for most use cases
+
+MEMORY_ONLY_SER
+- Store as serialized bytes
+- More memory efficient (2-5x less)
+- Slower access (serialization overhead)
+
+MEMORY_AND_DISK_SER
+- Serialized with disk spillover
+- Best for large datasets
+
+DISK_ONLY
+- Store only on disk
+- Slowest but uses no executor memory
+
+OFF_HEAP
+- Store in off-heap memory (Tungsten)
+- Reduces GC pressure
+- Requires spark.memory.offHeap.enabled=true
+
+_2 suffix (e.g., MEMORY_AND_DISK_2)
+- Replicate to 2 nodes
+- Fault tolerance for critical data
+"""
+
+# ============================================
+# CHOOSING THE RIGHT LEVEL
+# ============================================
+df = spark.read.parquet("/data/large_dataset")
+
+# Small dataset, reused many times -> MEMORY_ONLY
+df_small = df.filter(col("type") == "premium").persist(StorageLevel.MEMORY_ONLY)
+
+# Large dataset -> MEMORY_AND_DISK_SER
+df_large = df.persist(StorageLevel.MEMORY_AND_DISK_SER)
+
+# Critical intermediate result -> with replication
+df_critical = df.persist(StorageLevel.MEMORY_AND_DISK_2)
+
+# ============================================
+# MEMORY ESTIMATION
+# ============================================
+def estimate_cache_size(df):
+    """Estimate memory needed to cache DataFrame"""
+    # Sample-based estimation
+    sample = df.sample(0.01).cache()
+    sample.count()
+    
+    # Get cached size from Spark UI or:
+    catalog = spark._jsparkSession.sharedState().cacheManager()
+    # Check Storage tab in Spark UI for actual size
+    
+    sample.unpersist()
+
+# ============================================
+# SERIALIZATION COMPARISON
+# ============================================
+"""
+Deserialized (MEMORY_ONLY):
+- Faster access (no deserialization)
+- ~2-5x more memory
+- Better for CPU-bound operations
+
+Serialized (MEMORY_ONLY_SER):
+- Slower access
+- Much less memory
+- Better for memory-constrained environments
+- Use Kryo serialization for best performance
+"""
+
+# Enable Kryo serialization
+spark.conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+spark.conf.set("spark.kryo.registrationRequired", "false")</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="when" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (When to Cache)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+When to Cache (and When NOT to)
+- Decision framework
+- Cost-benefit analysis
+"""
+
+# ============================================
+# CACHE WHEN:
+# ============================================
+"""
+1. DataFrame is reused multiple times
+2. DataFrame is expensive to compute (complex joins, aggregations)
+3. DataFrame is used in iterative algorithms (ML training)
+4. You need consistent results across actions
+"""
+
+# Example: Reused DataFrame
+df_base = spark.read.parquet("/data/events") \
+    .filter(col("event_type") == "purchase") \
+    .cache()
+
+# Used multiple times
+total_revenue = df_base.agg(sum("amount")).collect()[0][0]
+by_category = df_base.groupBy("category").sum("amount")
+by_region = df_base.groupBy("region").sum("amount")
+by_date = df_base.groupBy("date").count()
+
+# Example: Iterative algorithm
+df_features = prepare_features(df).cache()
+for i in range(10):
+    model = train_iteration(df_features, model)
+
+# ============================================
+# DON'T CACHE WHEN:
+# ============================================
+"""
+1. DataFrame is used only once
+2. DataFrame is too large for memory
+3. Source data is already fast (e.g., cached in Parquet)
+4. Transformations are simple (filter, select)
+5. In streaming jobs (use checkpointing instead)
+"""
+
+# BAD: Cache used only once
+df_bad = spark.read.parquet("/data/events").cache()
+df_bad.write.parquet("/output")  # Only one action!
+
+# BAD: Cache everything
+df1 = spark.read.parquet("/data/a").cache()
+df2 = spark.read.parquet("/data/b").cache()
+df3 = df1.join(df2, "key").cache()  # Too much caching!
+
+# ============================================
+# DECISION FRAMEWORK
+# ============================================
+def should_cache(df, num_actions, compute_cost, data_size_gb, available_memory_gb):
+    """
+    Simple heuristic for caching decision
+    
+    Cache if:
+    - num_actions > 1 AND
+    - compute_cost is HIGH AND
+    - data_size < available_memory * 0.6
+    """
+    memory_fits = data_size_gb < available_memory_gb * 0.6
+    worth_caching = num_actions > 1 and compute_cost == "HIGH"
+    
+    return memory_fits and worth_caching
+
+# ============================================
+# CHECKPOINT VS CACHE
+# ============================================
+"""
+CACHE:
+- Keeps lineage (can recompute if lost)
+- Faster for short jobs
+- Memory-based
+
+CHECKPOINT:
+- Breaks lineage (writes to reliable storage)
+- Better for long lineages (prevents stack overflow)
+- Required for streaming
+- Slower but more reliable
+"""
+
+# Set checkpoint directory
+spark.sparkContext.setCheckpointDir("/checkpoints")
+
+# Checkpoint for long lineage
+df_long_lineage = df
+for i in range(100):
+    df_long_lineage = df_long_lineage.withColumn(f"col_{i}", col("value") * i)
+
+df_long_lineage.checkpoint()  # Break lineage</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="monitor" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Monitoring Cache)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Monitoring Cache Usage
+- Spark UI Storage tab
+- Programmatic access
+- Cache hit/miss analysis
+"""
+
+# ============================================
+# CHECK CACHE STATUS
+# ============================================
+df_cached = df.cache()
+df_cached.count()
+
+# Check if cached
+print(f"Is cached: {df_cached.is_cached}")
+print(f"Storage level: {df_cached.storageLevel}")
+
+# ============================================
+# SPARK UI STORAGE TAB
+# ============================================
+"""
+In Spark UI -> Storage tab, look for:
+- RDD Name
+- Storage Level
+- Cached Partitions
+- Fraction Cached
+- Size in Memory
+- Size on Disk
+
+Key metrics:
+- Fraction Cached < 100%: Memory pressure, some partitions spilled
+- Size in Memory: Actual memory used
+- Size on Disk: Spilled data
+"""
+
+# ============================================
+# PROGRAMMATIC CACHE MONITORING
+# ============================================
+def get_cache_info():
+    """Get information about cached DataFrames"""
+    
+    # Access Spark's internal cache manager
+    sc = spark.sparkContext
+    
+    # Get storage info for all RDDs
+    for rdd_id, rdd in sc._jsc.sc().getPersistentRDDs().items():
+        name = rdd.name() if rdd.name() else f"RDD-{rdd_id}"
+        storage_level = str(rdd.getStorageLevel())
+        num_partitions = rdd.getNumPartitions()
+        
+        print(f"{name}: {storage_level}, {num_partitions} partitions")
+
+# ============================================
+# MEMORY USAGE MONITORING
+# ============================================
+def get_executor_memory_usage():
+    """Get memory usage across executors"""
+    
+    # This requires accessing Spark's internal APIs
+    # Better to use Spark UI or metrics system
+    
+    # Via REST API (if enabled)
+    # GET http://spark-master:4040/api/v1/applications/{app_id}/executors
+    pass
+
+# ============================================
+# CACHE EFFECTIVENESS
+# ============================================
+def measure_cache_benefit(df, actions):
+    """Measure time saved by caching"""
+    import time
+    
+    # Without cache
+    start = time.time()
+    for action in actions:
+        action(df)
+    time_without_cache = time.time() - start
+    
+    # With cache
+    df_cached = df.cache()
+    start = time.time()
+    for action in actions:
+        action(df_cached)
+    time_with_cache = time.time() - start
+    
+    df_cached.unpersist()
+    
+    print(f"Without cache: {time_without_cache:.2f}s")
+    print(f"With cache: {time_with_cache:.2f}s")
+    print(f"Speedup: {time_without_cache/time_with_cache:.2f}x")
+
+# ============================================
+# AUTOMATIC CACHE CLEANUP
+# ============================================
+# Configure automatic unpersist
+spark.conf.set("spark.cleaner.periodicGC.interval", "15min")
+spark.conf.set("spark.cleaner.referenceTracking.cleanCheckpoints", "true")
+
+# Context manager for automatic cleanup
+from contextlib import contextmanager
+
+@contextmanager
+def cached(df):
+    """Context manager for automatic cache cleanup"""
+    df_cached = df.cache()
+    try:
+        yield df_cached
+    finally:
+        df_cached.unpersist()
+
+# Usage
+with cached(df.filter(col("type") == "A")) as df_filtered:
+    result1 = df_filtered.count()
+    result2 = df_filtered.agg(sum("amount")).collect()
+# Automatically unpersisted here</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="pitfalls" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Common Pitfalls)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Common Cache Pitfalls and How to Avoid Them
+"""
+
+# ============================================
+# PITFALL 1: Caching without action
+# ============================================
+# BAD: Cache is lazy, nothing happens
+df_cached = df.cache()
+df_result = df_cached.filter(col("x") > 0)  # Still not cached!
+
+# GOOD: Trigger caching with action
+df_cached = df.cache()
+df_cached.count()  # Now cached
+df_result = df_cached.filter(col("x") > 0)
+
+# ============================================
+# PITFALL 2: Caching too early
+# ============================================
+# BAD: Cache before filter (caches too much data)
+df_cached = df.cache()
+df_filtered = df_cached.filter(col("status") == "active")
+
+# GOOD: Cache after filter
+df_filtered = df.filter(col("status") == "active").cache()
+df_filtered.count()
+
+# ============================================
+# PITFALL 3: Not unpersisting
+# ============================================
+# BAD: Memory leak
+for date in dates:
+    df_day = df.filter(col("date") == date).cache()
+    process(df_day)
+    # df_day stays in memory!
+
+# GOOD: Unpersist when done
+for date in dates:
+    df_day = df.filter(col("date") == date).cache()
+    df_day.count()
+    process(df_day)
+    df_day.unpersist()
+
+# ============================================
+# PITFALL 4: Caching derived DataFrames
+# ============================================
+# BAD: Original cache becomes useless
+df_cached = df.cache()
+df_cached.count()
+df_new = df_cached.withColumn("new_col", lit(1))  # New DataFrame!
+df_new.show()  # Doesn't use cache efficiently
+
+# GOOD: Cache the final DataFrame you'll use
+df_final = df.withColumn("new_col", lit(1)).cache()
+df_final.count()
+
+# ============================================
+# PITFALL 5: Over-caching
+# ============================================
+# BAD: Cache everything
+df1 = spark.read.parquet("/a").cache()
+df2 = spark.read.parquet("/b").cache()
+df3 = df1.join(df2, "key").cache()
+df4 = df3.groupBy("x").count().cache()
+# Memory exhausted!
+
+# GOOD: Cache strategically
+df1 = spark.read.parquet("/a")
+df2 = spark.read.parquet("/b")
+df3 = df1.join(df2, "key").cache()  # Only cache reused result
+df3.count()
+
+# ============================================
+# PITFALL 6: Wrong storage level
+# ============================================
+# BAD: MEMORY_ONLY for large data
+df_large = spark.read.parquet("/huge_data").cache()  # OOM!
+
+# GOOD: Use appropriate level
+df_large = spark.read.parquet("/huge_data") \
+    .persist(StorageLevel.MEMORY_AND_DISK_SER)
+
+# ============================================
+# PITFALL 7: Caching in loops
+# ============================================
+# BAD: Accumulating cached DataFrames
+result = initial_df
+for i in range(100):
+    result = result.withColumn(f"col_{i}", some_transform()).cache()
+# 100 cached DataFrames!
+
+# GOOD: Checkpoint periodically, unpersist old
+result = initial_df
+for i in range(100):
+    result = result.withColumn(f"col_{i}", some_transform())
+    if i % 10 == 0:
+        result = result.checkpoint()
+
+# ============================================
+# PITFALL 8: Ignoring serialization
+# ============================================
+# BAD: Default Java serialization
+df.persist(StorageLevel.MEMORY_ONLY_SER)  # Slow serialization
+
+# GOOD: Use Kryo
+spark.conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+df.persist(StorageLevel.MEMORY_ONLY_SER)  # Much faster</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../02_skewed_joins/index.html" style="color: var(--text-muted);">&larr; Previous: Skewed Joins</a>
+                <a href="../04_execution_plans/index.html" style="color: var(--accent-primary);">Next: Execution Plans &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showCache();
+        });
+        
+        function showCache() {
+            viz.clear();
+            
+            // Memory representation
+            viz.createDataNode({ type: 'cube', size: 1.2, color: 0x4dabf7, position: { x: -2, y: 0.7, z: 0 } });
+            viz.createLabel('Memory Cache', { x: -2, y: 1.8, z: 0 });
+            
+            // Disk representation
+            viz.createDataNode({ type: 'cylinder', size: 0.8, color: 0x868e96, position: { x: 2, y: 0.5, z: 0 } });
+            viz.createLabel('Disk Spillover', { x: 2, y: 1.5, z: 0 });
+            
+            // Arrow for spillover
+            viz.createArrow({ x: -0.5, y: 0.5, z: 0 }, { x: 1, y: 0.5, z: 0 }, { color: 0xff6b6b });
+            
+            viz.createLabel('MEMORY_AND_DISK Storage Level', { x: 0, y: -1.2, z: 0 });
+            viz.createGrid(8, 8);
+        }
+    </script>
+</body>
+</html>

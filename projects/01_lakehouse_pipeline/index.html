@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lakehouse Pipeline Project - Data Engineering Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#projects" class="nav-link active">Projects</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>End-to-End Lakehouse Pipeline (Bronze/Silver/Gold)</h1>
+            <p>Build a production-grade data lakehouse pipeline implementing the medallion architecture with PySpark. This project covers data ingestion, transformation, quality checks, and dimensional modeling.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+            
+            <h2>Business Problem</h2>
+            <div class="code-container">
+                <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+                    <p><strong>Scenario:</strong> An e-commerce company needs to build a data lakehouse to analyze sales performance, customer behavior, and inventory management. Raw data arrives from multiple sources (transactions, customers, products) and needs to be processed through Bronze, Silver, and Gold layers for analytics and reporting.</p>
+                    <p><strong>Requirements:</strong></p>
+                    <ul>
+                        <li>Ingest raw CSV/JSON data into Bronze layer (raw, immutable)</li>
+                        <li>Clean, validate, and deduplicate in Silver layer (curated)</li>
+                        <li>Create dimensional model with SCD Type 2 in Gold layer (business-ready)</li>
+                        <li>Implement data quality checks at each layer</li>
+                        <li>Handle late-arriving data and schema evolution</li>
+                    </ul>
+                </div>
+            </div>
+
+            <h2>Architecture Diagram</h2>
+            <div class="code-container">
+                <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px; font-family: monospace; white-space: pre;">
++------------------+     +------------------+     +------------------+     +------------------+
+|   DATA SOURCES   |     |   BRONZE LAYER   |     |   SILVER LAYER   |     |    GOLD LAYER    |
++------------------+     +------------------+     +------------------+     +------------------+
+|                  |     |                  |     |                  |     |                  |
+| transactions.csv |---->| raw_transactions |---->| clean_transactions|---->| fact_sales       |
+| customers.json   |---->| raw_customers    |---->| clean_customers  |---->| dim_customer(SCD2)|
+| products.csv     |---->| raw_products     |---->| clean_products   |---->| dim_product      |
+| inventory.csv    |---->| raw_inventory    |---->| clean_inventory  |---->| dim_date         |
+|                  |     |                  |     |                  |     | agg_daily_sales  |
++------------------+     +------------------+     +------------------+     +------------------+
+                         |                  |     |                  |     |                  |
+                         | - Raw ingestion  |     | - Deduplication  |     | - Star schema    |
+                         | - Add metadata   |     | - Type casting   |     | - SCD Type 2     |
+                         | - Partitioned    |     | - Null handling  |     | - Aggregations   |
+                         | - Immutable      |     | - Validation     |     | - Business KPIs  |
+                         +------------------+     +------------------+     +------------------+
+                </div>
+            </div>
+
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="bronze">Bronze Layer</button>
+                <button class="tab" data-tab="silver">Silver Layer</button>
+                <button class="tab" data-tab="gold">Gold Layer</button>
+                <button class="tab" data-tab="quality">Data Quality</button>
+                <button class="tab" data-tab="orchestration">Orchestration</button>
+            </div>
+            <div class="tab-contents">
+                <div id="bronze" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Bronze Layer - Raw Ingestion)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Bronze Layer: Raw Data Ingestion
+- Ingest data as-is from source systems
+- Add metadata columns (ingestion timestamp, source file, batch id)
+- Partition by ingestion date for efficient querying
+- Data is immutable - never update, only append
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import (
+    col, lit, current_timestamp, input_file_name, 
+    to_date, year, month, dayofmonth
+)
+from pyspark.sql.types import *
+from datetime import datetime
+import uuid
+
+spark = SparkSession.builder \
+    .appName("LakehousePipeline-Bronze") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .getOrCreate()
+
+# Configuration
+BRONZE_PATH = "/lakehouse/bronze"
+SOURCE_PATH = "/data/raw"
+BATCH_ID = str(uuid.uuid4())[:8]
+
+# ============================================
+# TRANSACTIONS INGESTION
+# ============================================
+def ingest_transactions(source_path: str, bronze_path: str, batch_id: str):
+    """Ingest raw transaction data into Bronze layer"""
+    
+    # Define schema for type safety (optional but recommended)
+    transactions_schema = StructType([
+        StructField("transaction_id", StringType(), True),
+        StructField("customer_id", StringType(), True),
+        StructField("product_id", StringType(), True),
+        StructField("quantity", StringType(), True),  # Keep as string in bronze
+        StructField("unit_price", StringType(), True),
+        StructField("transaction_date", StringType(), True),
+        StructField("store_id", StringType(), True),
+        StructField("payment_method", StringType(), True)
+    ])
+    
+    # Read raw data
+    df_raw = spark.read \
+        .option("header", "true") \
+        .option("inferSchema", "false") \
+        .schema(transactions_schema) \
+        .csv(f"{source_path}/transactions/*.csv")
+    
+    # Add metadata columns
+    df_bronze = df_raw \
+        .withColumn("_ingestion_timestamp", current_timestamp()) \
+        .withColumn("_source_file", input_file_name()) \
+        .withColumn("_batch_id", lit(batch_id)) \
+        .withColumn("_ingestion_date", to_date(current_timestamp()))
+    
+    # Write to Bronze layer (partitioned by ingestion date)
+    df_bronze.write \
+        .mode("append") \
+        .partitionBy("_ingestion_date") \
+        .parquet(f"{bronze_path}/transactions")
+    
+    print(f"Ingested {df_bronze.count()} transactions to Bronze layer")
+    return df_bronze
+
+# ============================================
+# CUSTOMERS INGESTION (JSON)
+# ============================================
+def ingest_customers(source_path: str, bronze_path: str, batch_id: str):
+    """Ingest raw customer data from JSON into Bronze layer"""
+    
+    # Read JSON with schema inference
+    df_raw = spark.read \
+        .option("multiLine", "true") \
+        .json(f"{source_path}/customers/*.json")
+    
+    # Add metadata columns
+    df_bronze = df_raw \
+        .withColumn("_ingestion_timestamp", current_timestamp()) \
+        .withColumn("_source_file", input_file_name()) \
+        .withColumn("_batch_id", lit(batch_id)) \
+        .withColumn("_ingestion_date", to_date(current_timestamp()))
+    
+    # Write to Bronze layer
+    df_bronze.write \
+        .mode("append") \
+        .partitionBy("_ingestion_date") \
+        .parquet(f"{bronze_path}/customers")
+    
+    print(f"Ingested {df_bronze.count()} customers to Bronze layer")
+    return df_bronze
+
+# ============================================
+# PRODUCTS INGESTION
+# ============================================
+def ingest_products(source_path: str, bronze_path: str, batch_id: str):
+    """Ingest raw product data into Bronze layer"""
+    
+    df_raw = spark.read \
+        .option("header", "true") \
+        .csv(f"{source_path}/products/*.csv")
+    
+    df_bronze = df_raw \
+        .withColumn("_ingestion_timestamp", current_timestamp()) \
+        .withColumn("_source_file", input_file_name()) \
+        .withColumn("_batch_id", lit(batch_id)) \
+        .withColumn("_ingestion_date", to_date(current_timestamp()))
+    
+    df_bronze.write \
+        .mode("append") \
+        .partitionBy("_ingestion_date") \
+        .parquet(f"{bronze_path}/products")
+    
+    print(f"Ingested {df_bronze.count()} products to Bronze layer")
+    return df_bronze
+
+# ============================================
+# MAIN BRONZE INGESTION PIPELINE
+# ============================================
+def run_bronze_ingestion():
+    """Run complete Bronze layer ingestion"""
+    print(f"Starting Bronze ingestion - Batch ID: {BATCH_ID}")
+    
+    ingest_transactions(SOURCE_PATH, BRONZE_PATH, BATCH_ID)
+    ingest_customers(SOURCE_PATH, BRONZE_PATH, BATCH_ID)
+    ingest_products(SOURCE_PATH, BRONZE_PATH, BATCH_ID)
+    
+    print("Bronze ingestion complete!")
+
+if __name__ == "__main__":
+    run_bronze_ingestion()</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="silver" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Silver Layer - Cleansed Data)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Silver Layer: Cleansed and Validated Data
+- Type casting and standardization
+- Deduplication
+- Null handling and default values
+- Data validation and quality checks
+- Quarantine bad records
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import (
+    col, lit, when, trim, upper, lower, coalesce,
+    to_date, to_timestamp, regexp_replace, row_number,
+    current_timestamp, md5, concat_ws
+)
+from pyspark.sql.window import Window
+from pyspark.sql.types import *
+
+spark = SparkSession.builder \
+    .appName("LakehousePipeline-Silver") \
+    .getOrCreate()
+
+BRONZE_PATH = "/lakehouse/bronze"
+SILVER_PATH = "/lakehouse/silver"
+QUARANTINE_PATH = "/lakehouse/quarantine"
+
+# ============================================
+# TRANSACTIONS CLEANSING
+# ============================================
+def cleanse_transactions(bronze_path: str, silver_path: str):
+    """Cleanse and validate transaction data"""
+    
+    # Read from Bronze
+    df_bronze = spark.read.parquet(f"{bronze_path}/transactions")
+    
+    # Type casting and cleansing
+    df_cleansed = df_bronze \
+        .withColumn("transaction_id", trim(col("transaction_id"))) \
+        .withColumn("customer_id", trim(col("customer_id"))) \
+        .withColumn("product_id", trim(col("product_id"))) \
+        .withColumn("quantity", col("quantity").cast(IntegerType())) \
+        .withColumn("unit_price", col("unit_price").cast(DecimalType(10, 2))) \
+        .withColumn("transaction_date", to_date(col("transaction_date"), "yyyy-MM-dd")) \
+        .withColumn("store_id", trim(col("store_id"))) \
+        .withColumn("payment_method", upper(trim(col("payment_method"))))
+    
+    # Calculate derived columns
+    df_cleansed = df_cleansed \
+        .withColumn("total_amount", col("quantity") * col("unit_price")) \
+        .withColumn("transaction_year", year(col("transaction_date"))) \
+        .withColumn("transaction_month", month(col("transaction_date")))
+    
+    # Data validation - identify bad records
+    df_valid = df_cleansed.filter(
+        col("transaction_id").isNotNull() &
+        col("customer_id").isNotNull() &
+        col("product_id").isNotNull() &
+        (col("quantity") > 0) &
+        (col("unit_price") > 0) &
+        col("transaction_date").isNotNull()
+    )
+    
+    df_invalid = df_cleansed.filter(
+        col("transaction_id").isNull() |
+        col("customer_id").isNull() |
+        col("product_id").isNull() |
+        (col("quantity") <= 0) |
+        (col("unit_price") <= 0) |
+        col("transaction_date").isNull()
+    )
+    
+    # Deduplication - keep latest record per transaction_id
+    window_spec = Window.partitionBy("transaction_id").orderBy(col("_ingestion_timestamp").desc())
+    df_deduped = df_valid \
+        .withColumn("row_num", row_number().over(window_spec)) \
+        .filter(col("row_num") == 1) \
+        .drop("row_num")
+    
+    # Add Silver metadata
+    df_silver = df_deduped \
+        .withColumn("_silver_timestamp", current_timestamp()) \
+        .withColumn("_record_hash", md5(concat_ws("||", 
+            col("transaction_id"), col("customer_id"), col("product_id"),
+            col("quantity"), col("unit_price"), col("transaction_date")
+        )))
+    
+    # Write valid records to Silver
+    df_silver.write \
+        .mode("overwrite") \
+        .partitionBy("transaction_year", "transaction_month") \
+        .parquet(f"{silver_path}/transactions")
+    
+    # Write invalid records to Quarantine
+    if df_invalid.count() > 0:
+        df_invalid \
+            .withColumn("_quarantine_reason", lit("validation_failed")) \
+            .withColumn("_quarantine_timestamp", current_timestamp()) \
+            .write \
+            .mode("append") \
+            .parquet(f"{QUARANTINE_PATH}/transactions")
+    
+    print(f"Silver transactions: {df_silver.count()} valid, {df_invalid.count()} quarantined")
+    return df_silver
+
+# ============================================
+# CUSTOMERS CLEANSING
+# ============================================
+def cleanse_customers(bronze_path: str, silver_path: str):
+    """Cleanse and validate customer data"""
+    
+    df_bronze = spark.read.parquet(f"{bronze_path}/customers")
+    
+    # Cleansing transformations
+    df_cleansed = df_bronze \
+        .withColumn("customer_id", trim(col("customer_id"))) \
+        .withColumn("first_name", trim(col("first_name"))) \
+        .withColumn("last_name", trim(col("last_name"))) \
+        .withColumn("email", lower(trim(col("email")))) \
+        .withColumn("phone", regexp_replace(col("phone"), "[^0-9]", "")) \
+        .withColumn("registration_date", to_date(col("registration_date"))) \
+        .withColumn("city", trim(col("city"))) \
+        .withColumn("state", upper(trim(col("state")))) \
+        .withColumn("country", upper(trim(col("country"))))
+    
+    # Handle nulls with defaults
+    df_cleansed = df_cleansed \
+        .withColumn("city", coalesce(col("city"), lit("UNKNOWN"))) \
+        .withColumn("state", coalesce(col("state"), lit("UNKNOWN"))) \
+        .withColumn("country", coalesce(col("country"), lit("US")))
+    
+    # Create full name
+    df_cleansed = df_cleansed \
+        .withColumn("full_name", concat_ws(" ", col("first_name"), col("last_name")))
+    
+    # Validation
+    df_valid = df_cleansed.filter(
+        col("customer_id").isNotNull() &
+        col("email").isNotNull() &
+        col("email").rlike("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$")
+    )
+    
+    # Deduplication
+    window_spec = Window.partitionBy("customer_id").orderBy(col("_ingestion_timestamp").desc())
+    df_deduped = df_valid \
+        .withColumn("row_num", row_number().over(window_spec)) \
+        .filter(col("row_num") == 1) \
+        .drop("row_num")
+    
+    # Add Silver metadata
+    df_silver = df_deduped \
+        .withColumn("_silver_timestamp", current_timestamp()) \
+        .withColumn("_record_hash", md5(concat_ws("||",
+            col("customer_id"), col("email"), col("first_name"), col("last_name")
+        )))
+    
+    df_silver.write \
+        .mode("overwrite") \
+        .parquet(f"{silver_path}/customers")
+    
+    print(f"Silver customers: {df_silver.count()} records")
+    return df_silver
+
+# ============================================
+# PRODUCTS CLEANSING
+# ============================================
+def cleanse_products(bronze_path: str, silver_path: str):
+    """Cleanse and validate product data"""
+    
+    df_bronze = spark.read.parquet(f"{bronze_path}/products")
+    
+    df_cleansed = df_bronze \
+        .withColumn("product_id", trim(col("product_id"))) \
+        .withColumn("product_name", trim(col("product_name"))) \
+        .withColumn("category", upper(trim(col("category")))) \
+        .withColumn("subcategory", upper(trim(col("subcategory")))) \
+        .withColumn("brand", trim(col("brand"))) \
+        .withColumn("unit_cost", col("unit_cost").cast(DecimalType(10, 2))) \
+        .withColumn("unit_price", col("unit_price").cast(DecimalType(10, 2)))
+    
+    # Calculate profit margin
+    df_cleansed = df_cleansed \
+        .withColumn("profit_margin", 
+            (col("unit_price") - col("unit_cost")) / col("unit_price") * 100)
+    
+    # Deduplication
+    window_spec = Window.partitionBy("product_id").orderBy(col("_ingestion_timestamp").desc())
+    df_silver = df_cleansed \
+        .withColumn("row_num", row_number().over(window_spec)) \
+        .filter(col("row_num") == 1) \
+        .drop("row_num") \
+        .withColumn("_silver_timestamp", current_timestamp())
+    
+    df_silver.write \
+        .mode("overwrite") \
+        .parquet(f"{silver_path}/products")
+    
+    print(f"Silver products: {df_silver.count()} records")
+    return df_silver
+
+# ============================================
+# MAIN SILVER PIPELINE
+# ============================================
+def run_silver_cleansing():
+    """Run complete Silver layer cleansing"""
+    print("Starting Silver layer cleansing...")
+    
+    cleanse_transactions(BRONZE_PATH, SILVER_PATH)
+    cleanse_customers(BRONZE_PATH, SILVER_PATH)
+    cleanse_products(BRONZE_PATH, SILVER_PATH)
+    
+    print("Silver cleansing complete!")
+
+if __name__ == "__main__":
+    run_silver_cleansing()</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="gold" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Gold Layer - Business Ready)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Gold Layer: Business-Ready Data
+- Dimensional modeling (Star Schema)
+- SCD Type 2 for slowly changing dimensions
+- Pre-aggregated tables for reporting
+- Business KPIs and metrics
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import (
+    col, lit, when, coalesce, current_timestamp, current_date,
+    to_date, year, month, dayofmonth, quarter, dayofweek,
+    sum, count, avg, min, max, countDistinct,
+    row_number, lead, md5, concat_ws
+)
+from pyspark.sql.window import Window
+from pyspark.sql.types import *
+from datetime import datetime, timedelta
+
+spark = SparkSession.builder \
+    .appName("LakehousePipeline-Gold") \
+    .getOrCreate()
+
+SILVER_PATH = "/lakehouse/silver"
+GOLD_PATH = "/lakehouse/gold"
+
+# ============================================
+# DIMENSION: DATE (Type 0 - Static)
+# ============================================
+def create_dim_date(start_date: str, end_date: str, gold_path: str):
+    """Create date dimension table"""
+    
+    from pyspark.sql.functions import sequence, explode, date_format
+    
+    # Generate date range
+    df_dates = spark.sql(f"""
+        SELECT explode(sequence(
+            to_date('{start_date}'), 
+            to_date('{end_date}'), 
+            interval 1 day
+        )) as date_key
+    """)
+    
+    # Add date attributes
+    df_dim_date = df_dates \
+        .withColumn("date_id", date_format(col("date_key"), "yyyyMMdd").cast(IntegerType())) \
+        .withColumn("year", year(col("date_key"))) \
+        .withColumn("quarter", quarter(col("date_key"))) \
+        .withColumn("month", month(col("date_key"))) \
+        .withColumn("month_name", date_format(col("date_key"), "MMMM")) \
+        .withColumn("day", dayofmonth(col("date_key"))) \
+        .withColumn("day_of_week", dayofweek(col("date_key"))) \
+        .withColumn("day_name", date_format(col("date_key"), "EEEE")) \
+        .withColumn("week_of_year", date_format(col("date_key"), "w").cast(IntegerType())) \
+        .withColumn("is_weekend", when(dayofweek(col("date_key")).isin(1, 7), True).otherwise(False)) \
+        .withColumn("is_holiday", lit(False))  # Would be populated from holiday calendar
+    
+    df_dim_date.write \
+        .mode("overwrite") \
+        .parquet(f"{gold_path}/dim_date")
+    
+    print(f"Created dim_date with {df_dim_date.count()} records")
+    return df_dim_date
+
+# ============================================
+# DIMENSION: CUSTOMER (SCD Type 2)
+# ============================================
+def create_dim_customer_scd2(silver_path: str, gold_path: str):
+    """Create customer dimension with SCD Type 2"""
+    
+    # Read current Silver data
+    df_silver = spark.read.parquet(f"{silver_path}/customers")
+    
+    # Try to read existing Gold dimension
+    try:
+        df_existing = spark.read.parquet(f"{gold_path}/dim_customer")
+        has_existing = True
+    except:
+        has_existing = False
+    
+    if not has_existing:
+        # First load - all records are new
+        df_dim = df_silver \
+            .withColumn("customer_sk", row_number().over(Window.orderBy("customer_id"))) \
+            .withColumn("effective_date", current_date()) \
+            .withColumn("end_date", lit("9999-12-31").cast(DateType())) \
+            .withColumn("is_current", lit(True)) \
+            .withColumn("_scd_hash", md5(concat_ws("||",
+                col("email"), col("city"), col("state"), col("country")
+            )))
+        
+        df_dim.write \
+            .mode("overwrite") \
+            .parquet(f"{gold_path}/dim_customer")
+        
+        print(f"Created dim_customer (initial load): {df_dim.count()} records")
+        return df_dim
+    
+    # SCD Type 2 merge logic
+    # Get current records from existing dimension
+    df_current = df_existing.filter(col("is_current") == True)
+    
+    # Calculate hash for incoming records
+    df_incoming = df_silver \
+        .withColumn("_scd_hash", md5(concat_ws("||",
+            col("email"), col("city"), col("state"), col("country")
+        )))
+    
+    # Find changed records
+    df_joined = df_incoming.alias("new").join(
+        df_current.alias("old"),
+        col("new.customer_id") == col("old.customer_id"),
+        "left"
+    )
+    
+    # Unchanged records - keep as is
+    df_unchanged = df_joined.filter(
+        col("old.customer_sk").isNotNull() & 
+        (col("new._scd_hash") == col("old._scd_hash"))
+    ).select("old.*")
+    
+    # Changed records - close old, create new
+    df_changed_old = df_joined.filter(
+        col("old.customer_sk").isNotNull() & 
+        (col("new._scd_hash") != col("old._scd_hash"))
+    ).select("old.*") \
+        .withColumn("end_date", current_date()) \
+        .withColumn("is_current", lit(False))
+    
+    # Get max surrogate key
+    max_sk = df_existing.agg(max("customer_sk")).collect()[0][0] or 0
+    
+    # New versions of changed records + brand new records
+    df_new = df_joined.filter(
+        col("old.customer_sk").isNull() |
+        (col("new._scd_hash") != col("old._scd_hash"))
+    ).select("new.*") \
+        .withColumn("customer_sk", row_number().over(Window.orderBy("customer_id")) + max_sk) \
+        .withColumn("effective_date", current_date()) \
+        .withColumn("end_date", lit("9999-12-31").cast(DateType())) \
+        .withColumn("is_current", lit(True))
+    
+    # Historical records (already closed)
+    df_historical = df_existing.filter(col("is_current") == False)
+    
+    # Union all
+    df_final = df_unchanged.union(df_changed_old).union(df_new).union(df_historical)
+    
+    df_final.write \
+        .mode("overwrite") \
+        .parquet(f"{gold_path}/dim_customer")
+    
+    print(f"Updated dim_customer (SCD2): {df_final.count()} total records")
+    return df_final
+
+# ============================================
+# DIMENSION: PRODUCT (SCD Type 1)
+# ============================================
+def create_dim_product(silver_path: str, gold_path: str):
+    """Create product dimension (SCD Type 1 - overwrite)"""
+    
+    df_silver = spark.read.parquet(f"{silver_path}/products")
+    
+    df_dim = df_silver \
+        .withColumn("product_sk", row_number().over(Window.orderBy("product_id"))) \
+        .withColumn("_load_timestamp", current_timestamp())
+    
+    df_dim.write \
+        .mode("overwrite") \
+        .parquet(f"{gold_path}/dim_product")
+    
+    print(f"Created dim_product: {df_dim.count()} records")
+    return df_dim
+
+# ============================================
+# FACT: SALES
+# ============================================
+def create_fact_sales(silver_path: str, gold_path: str):
+    """Create sales fact table with dimension keys"""
+    
+    # Read Silver transactions
+    df_transactions = spark.read.parquet(f"{silver_path}/transactions")
+    
+    # Read dimensions for key lookup
+    df_dim_customer = spark.read.parquet(f"{gold_path}/dim_customer") \
+        .filter(col("is_current") == True) \
+        .select("customer_sk", "customer_id")
+    
+    df_dim_product = spark.read.parquet(f"{gold_path}/dim_product") \
+        .select("product_sk", "product_id")
+    
+    df_dim_date = spark.read.parquet(f"{gold_path}/dim_date") \
+        .select("date_id", "date_key")
+    
+    # Join to get surrogate keys
+    df_fact = df_transactions \
+        .join(df_dim_customer, "customer_id", "left") \
+        .join(df_dim_product, "product_id", "left") \
+        .join(df_dim_date, df_transactions.transaction_date == df_dim_date.date_key, "left")
+    
+    # Select fact columns
+    df_fact = df_fact.select(
+        col("transaction_id").alias("sale_id"),
+        col("date_id").alias("date_key"),
+        col("customer_sk").alias("customer_key"),
+        col("product_sk").alias("product_key"),
+        col("store_id"),
+        col("quantity"),
+        col("unit_price"),
+        col("total_amount"),
+        col("payment_method"),
+        current_timestamp().alias("_load_timestamp")
+    )
+    
+    df_fact.write \
+        .mode("overwrite") \
+        .partitionBy("date_key") \
+        .parquet(f"{gold_path}/fact_sales")
+    
+    print(f"Created fact_sales: {df_fact.count()} records")
+    return df_fact
+
+# ============================================
+# AGGREGATE: DAILY SALES SUMMARY
+# ============================================
+def create_agg_daily_sales(gold_path: str):
+    """Create pre-aggregated daily sales summary"""
+    
+    df_fact = spark.read.parquet(f"{gold_path}/fact_sales")
+    df_dim_date = spark.read.parquet(f"{gold_path}/dim_date")
+    df_dim_product = spark.read.parquet(f"{gold_path}/dim_product")
+    
+    # Daily aggregation
+    df_agg = df_fact \
+        .join(df_dim_date, df_fact.date_key == df_dim_date.date_id) \
+        .join(df_dim_product, df_fact.product_key == df_dim_product.product_sk) \
+        .groupBy(
+            df_dim_date.date_key,
+            df_dim_date.year,
+            df_dim_date.month,
+            df_dim_date.day_name,
+            df_dim_product.category
+        ).agg(
+            count("*").alias("transaction_count"),
+            countDistinct("customer_key").alias("unique_customers"),
+            sum("quantity").alias("total_quantity"),
+            sum("total_amount").alias("total_revenue"),
+            avg("total_amount").alias("avg_transaction_value"),
+            min("total_amount").alias("min_transaction"),
+            max("total_amount").alias("max_transaction")
+        )
+    
+    df_agg.write \
+        .mode("overwrite") \
+        .partitionBy("year", "month") \
+        .parquet(f"{gold_path}/agg_daily_sales")
+    
+    print(f"Created agg_daily_sales: {df_agg.count()} records")
+    return df_agg
+
+# ============================================
+# MAIN GOLD PIPELINE
+# ============================================
+def run_gold_modeling():
+    """Run complete Gold layer modeling"""
+    print("Starting Gold layer modeling...")
+    
+    # Create dimensions
+    create_dim_date("2020-01-01", "2025-12-31", GOLD_PATH)
+    create_dim_customer_scd2(SILVER_PATH, GOLD_PATH)
+    create_dim_product(SILVER_PATH, GOLD_PATH)
+    
+    # Create facts
+    create_fact_sales(SILVER_PATH, GOLD_PATH)
+    
+    # Create aggregates
+    create_agg_daily_sales(GOLD_PATH)
+    
+    print("Gold modeling complete!")
+
+if __name__ == "__main__":
+    run_gold_modeling()</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="quality" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Data Quality Checks)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Data Quality Framework
+- Row count validation
+- Null checks
+- Uniqueness validation
+- Referential integrity
+- Business rule validation
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, count, countDistinct, sum, when, lit
+from dataclasses import dataclass
+from typing import List, Dict, Any
+from datetime import datetime
+
+spark = SparkSession.builder.appName("DataQuality").getOrCreate()
+
+@dataclass
+class QualityCheckResult:
+    check_name: str
+    table_name: str
+    passed: bool
+    expected: Any
+    actual: Any
+    timestamp: str
+    details: str = ""
+
+class DataQualityChecker:
+    def __init__(self, spark_session):
+        self.spark = spark_session
+        self.results: List[QualityCheckResult] = []
+    
+    def check_row_count(self, df, table_name: str, min_rows: int, max_rows: int = None):
+        """Validate row count is within expected range"""
+        actual_count = df.count()
+        passed = actual_count >= min_rows
+        if max_rows:
+            passed = passed and actual_count <= max_rows
+        
+        result = QualityCheckResult(
+            check_name="row_count",
+            table_name=table_name,
+            passed=passed,
+            expected=f"{min_rows}-{max_rows or 'unlimited'}",
+            actual=actual_count,
+            timestamp=datetime.now().isoformat()
+        )
+        self.results.append(result)
+        return result
+    
+    def check_null_percentage(self, df, table_name: str, column: str, max_null_pct: float):
+        """Validate null percentage is below threshold"""
+        total = df.count()
+        null_count = df.filter(col(column).isNull()).count()
+        null_pct = (null_count / total * 100) if total > 0 else 0
+        
+        result = QualityCheckResult(
+            check_name="null_percentage",
+            table_name=table_name,
+            passed=null_pct <= max_null_pct,
+            expected=f"<= {max_null_pct}%",
+            actual=f"{null_pct:.2f}%",
+            timestamp=datetime.now().isoformat(),
+            details=f"Column: {column}"
+        )
+        self.results.append(result)
+        return result
+    
+    def check_uniqueness(self, df, table_name: str, columns: List[str]):
+        """Validate uniqueness of column(s)"""
+        total = df.count()
+        distinct = df.select(columns).distinct().count()
+        
+        result = QualityCheckResult(
+            check_name="uniqueness",
+            table_name=table_name,
+            passed=total == distinct,
+            expected=total,
+            actual=distinct,
+            timestamp=datetime.now().isoformat(),
+            details=f"Columns: {columns}, Duplicates: {total - distinct}"
+        )
+        self.results.append(result)
+        return result
+    
+    def check_referential_integrity(self, df_child, df_parent, 
+                                     child_key: str, parent_key: str,
+                                     child_table: str, parent_table: str):
+        """Validate foreign key references exist in parent table"""
+        orphans = df_child.join(
+            df_parent.select(parent_key).distinct(),
+            df_child[child_key] == df_parent[parent_key],
+            "left_anti"
+        ).count()
+        
+        result = QualityCheckResult(
+            check_name="referential_integrity",
+            table_name=f"{child_table} -> {parent_table}",
+            passed=orphans == 0,
+            expected=0,
+            actual=orphans,
+            timestamp=datetime.now().isoformat(),
+            details=f"Orphan records: {orphans}"
+        )
+        self.results.append(result)
+        return result
+    
+    def check_value_range(self, df, table_name: str, column: str, 
+                          min_val: float = None, max_val: float = None):
+        """Validate values are within expected range"""
+        stats = df.agg(
+            min(column).alias("min_val"),
+            max(column).alias("max_val")
+        ).collect()[0]
+        
+        actual_min, actual_max = stats["min_val"], stats["max_val"]
+        passed = True
+        if min_val is not None and actual_min < min_val:
+            passed = False
+        if max_val is not None and actual_max > max_val:
+            passed = False
+        
+        result = QualityCheckResult(
+            check_name="value_range",
+            table_name=table_name,
+            passed=passed,
+            expected=f"[{min_val}, {max_val}]",
+            actual=f"[{actual_min}, {actual_max}]",
+            timestamp=datetime.now().isoformat(),
+            details=f"Column: {column}"
+        )
+        self.results.append(result)
+        return result
+    
+    def check_freshness(self, df, table_name: str, date_column: str, max_age_hours: int):
+        """Validate data freshness"""
+        from pyspark.sql.functions import max as spark_max, current_timestamp, unix_timestamp
+        
+        latest = df.agg(spark_max(date_column)).collect()[0][0]
+        if latest:
+            age_hours = (datetime.now() - latest).total_seconds() / 3600
+            passed = age_hours <= max_age_hours
+        else:
+            age_hours = float('inf')
+            passed = False
+        
+        result = QualityCheckResult(
+            check_name="freshness",
+            table_name=table_name,
+            passed=passed,
+            expected=f"<= {max_age_hours} hours",
+            actual=f"{age_hours:.1f} hours",
+            timestamp=datetime.now().isoformat(),
+            details=f"Latest record: {latest}"
+        )
+        self.results.append(result)
+        return result
+    
+    def get_summary(self) -> Dict:
+        """Get summary of all quality checks"""
+        total = len(self.results)
+        passed = sum(1 for r in self.results if r.passed)
+        failed = total - passed
+        
+        return {
+            "total_checks": total,
+            "passed": passed,
+            "failed": failed,
+            "pass_rate": f"{(passed/total*100):.1f}%" if total > 0 else "N/A",
+            "failed_checks": [r for r in self.results if not r.passed]
+        }
+    
+    def save_results(self, output_path: str):
+        """Save quality check results to parquet"""
+        results_data = [
+            (r.check_name, r.table_name, r.passed, str(r.expected), 
+             str(r.actual), r.timestamp, r.details)
+            for r in self.results
+        ]
+        
+        df_results = self.spark.createDataFrame(
+            results_data,
+            ["check_name", "table_name", "passed", "expected", "actual", "timestamp", "details"]
+        )
+        
+        df_results.write.mode("append").parquet(output_path)
+
+# ============================================
+# EXAMPLE USAGE
+# ============================================
+def run_quality_checks():
+    """Run quality checks on lakehouse tables"""
+    
+    checker = DataQualityChecker(spark)
+    
+    # Load tables
+    df_transactions = spark.read.parquet("/lakehouse/silver/transactions")
+    df_customers = spark.read.parquet("/lakehouse/silver/customers")
+    df_products = spark.read.parquet("/lakehouse/silver/products")
+    df_fact_sales = spark.read.parquet("/lakehouse/gold/fact_sales")
+    
+    # Row count checks
+    checker.check_row_count(df_transactions, "silver.transactions", min_rows=1000)
+    checker.check_row_count(df_customers, "silver.customers", min_rows=100)
+    
+    # Null checks
+    checker.check_null_percentage(df_transactions, "silver.transactions", "customer_id", max_null_pct=0)
+    checker.check_null_percentage(df_transactions, "silver.transactions", "total_amount", max_null_pct=1)
+    
+    # Uniqueness checks
+    checker.check_uniqueness(df_transactions, "silver.transactions", ["transaction_id"])
+    checker.check_uniqueness(df_customers, "silver.customers", ["customer_id"])
+    
+    # Referential integrity
+    checker.check_referential_integrity(
+        df_transactions, df_customers,
+        "customer_id", "customer_id",
+        "transactions", "customers"
+    )
+    
+    # Value range checks
+    checker.check_value_range(df_transactions, "silver.transactions", "quantity", min_val=1)
+    checker.check_value_range(df_transactions, "silver.transactions", "unit_price", min_val=0.01)
+    
+    # Print summary
+    summary = checker.get_summary()
+    print(f"\n{'='*50}")
+    print(f"DATA QUALITY SUMMARY")
+    print(f"{'='*50}")
+    print(f"Total Checks: {summary['total_checks']}")
+    print(f"Passed: {summary['passed']}")
+    print(f"Failed: {summary['failed']}")
+    print(f"Pass Rate: {summary['pass_rate']}")
+    
+    if summary['failed_checks']:
+        print(f"\nFailed Checks:")
+        for check in summary['failed_checks']:
+            print(f"  - {check.check_name} on {check.table_name}: Expected {check.expected}, Got {check.actual}")
+    
+    # Save results
+    checker.save_results("/lakehouse/quality_results")
+    
+    return summary
+
+if __name__ == "__main__":
+    run_quality_checks()</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="orchestration" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Pipeline Orchestration)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Pipeline Orchestration
+- Idempotent execution
+- Checkpoint management
+- Error handling and retry
+- Logging and monitoring
+"""
+from pyspark.sql import SparkSession
+from datetime import datetime
+import logging
+import json
+from typing import Callable, Dict, Any
+from functools import wraps
+import time
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("LakehousePipeline")
+
+class PipelineOrchestrator:
+    def __init__(self, spark: SparkSession, checkpoint_path: str):
+        self.spark = spark
+        self.checkpoint_path = checkpoint_path
+        self.metrics: Dict[str, Any] = {}
+    
+    def with_retry(self, max_retries: int = 3, delay: int = 5):
+        """Decorator for retry logic"""
+        def decorator(func: Callable):
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                last_exception = None
+                for attempt in range(max_retries):
+                    try:
+                        return func(*args, **kwargs)
+                    except Exception as e:
+                        last_exception = e
+                        logger.warning(f"Attempt {attempt + 1} failed: {str(e)}")
+                        if attempt < max_retries - 1:
+                            time.sleep(delay)
+                raise last_exception
+            return wrapper
+        return decorator
+    
+    def checkpoint(self, step_name: str, data: Dict[str, Any]):
+        """Save checkpoint for idempotent execution"""
+        checkpoint_file = f"{self.checkpoint_path}/{step_name}.json"
+        checkpoint_data = {
+            "step_name": step_name,
+            "timestamp": datetime.now().isoformat(),
+            "data": data
+        }
+        
+        # In production, write to distributed storage
+        logger.info(f"Checkpoint saved: {step_name}")
+        return checkpoint_data
+    
+    def get_checkpoint(self, step_name: str) -> Dict[str, Any]:
+        """Retrieve checkpoint if exists"""
+        try:
+            checkpoint_file = f"{self.checkpoint_path}/{step_name}.json"
+            # In production, read from distributed storage
+            return None  # Return None if no checkpoint
+        except:
+            return None
+    
+    def run_step(self, step_name: str, func: Callable, *args, **kwargs):
+        """Run a pipeline step with logging and metrics"""
+        logger.info(f"Starting step: {step_name}")
+        start_time = time.time()
+        
+        try:
+            result = func(*args, **kwargs)
+            duration = time.time() - start_time
+            
+            self.metrics[step_name] = {
+                "status": "success",
+                "duration_seconds": duration,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            logger.info(f"Completed step: {step_name} in {duration:.2f}s")
+            return result
+            
+        except Exception as e:
+            duration = time.time() - start_time
+            self.metrics[step_name] = {
+                "status": "failed",
+                "duration_seconds": duration,
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+            logger.error(f"Failed step: {step_name} - {str(e)}")
+            raise
+    
+    def get_metrics(self) -> Dict[str, Any]:
+        """Get pipeline execution metrics"""
+        return {
+            "pipeline_metrics": self.metrics,
+            "total_steps": len(self.metrics),
+            "successful_steps": sum(1 for m in self.metrics.values() if m["status"] == "success"),
+            "failed_steps": sum(1 for m in self.metrics.values() if m["status"] == "failed"),
+            "total_duration": sum(m["duration_seconds"] for m in self.metrics.values())
+        }
+
+# ============================================
+# COMPLETE PIPELINE EXECUTION
+# ============================================
+def run_lakehouse_pipeline():
+    """Run complete lakehouse pipeline with orchestration"""
+    
+    spark = SparkSession.builder \
+        .appName("LakehousePipeline-Complete") \
+        .getOrCreate()
+    
+    orchestrator = PipelineOrchestrator(spark, "/lakehouse/checkpoints")
+    
+    try:
+        # Bronze Layer
+        orchestrator.run_step("bronze_transactions", ingest_transactions, 
+                             SOURCE_PATH, BRONZE_PATH, BATCH_ID)
+        orchestrator.run_step("bronze_customers", ingest_customers,
+                             SOURCE_PATH, BRONZE_PATH, BATCH_ID)
+        orchestrator.run_step("bronze_products", ingest_products,
+                             SOURCE_PATH, BRONZE_PATH, BATCH_ID)
+        
+        # Silver Layer
+        orchestrator.run_step("silver_transactions", cleanse_transactions,
+                             BRONZE_PATH, SILVER_PATH)
+        orchestrator.run_step("silver_customers", cleanse_customers,
+                             BRONZE_PATH, SILVER_PATH)
+        orchestrator.run_step("silver_products", cleanse_products,
+                             BRONZE_PATH, SILVER_PATH)
+        
+        # Gold Layer
+        orchestrator.run_step("gold_dim_date", create_dim_date,
+                             "2020-01-01", "2025-12-31", GOLD_PATH)
+        orchestrator.run_step("gold_dim_customer", create_dim_customer_scd2,
+                             SILVER_PATH, GOLD_PATH)
+        orchestrator.run_step("gold_dim_product", create_dim_product,
+                             SILVER_PATH, GOLD_PATH)
+        orchestrator.run_step("gold_fact_sales", create_fact_sales,
+                             SILVER_PATH, GOLD_PATH)
+        orchestrator.run_step("gold_agg_daily_sales", create_agg_daily_sales,
+                             GOLD_PATH)
+        
+        # Data Quality
+        orchestrator.run_step("quality_checks", run_quality_checks)
+        
+        # Print final metrics
+        metrics = orchestrator.get_metrics()
+        logger.info(f"\n{'='*50}")
+        logger.info("PIPELINE EXECUTION SUMMARY")
+        logger.info(f"{'='*50}")
+        logger.info(f"Total Steps: {metrics['total_steps']}")
+        logger.info(f"Successful: {metrics['successful_steps']}")
+        logger.info(f"Failed: {metrics['failed_steps']}")
+        logger.info(f"Total Duration: {metrics['total_duration']:.2f}s")
+        
+        return metrics
+        
+    except Exception as e:
+        logger.error(f"Pipeline failed: {str(e)}")
+        raise
+
+if __name__ == "__main__":
+    run_lakehouse_pipeline()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <h2>Production Considerations</h2>
+            <div class="code-container">
+                <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+                    <h3>Idempotency</h3>
+                    <p>All pipeline steps should be idempotent - running them multiple times produces the same result. Use MERGE operations for upserts and partition overwrites for batch loads.</p>
+                    
+                    <h3>Schema Evolution</h3>
+                    <p>Handle schema changes gracefully using schema merge options in Spark or Delta Lake's schema evolution features.</p>
+                    
+                    <h3>Late-Arriving Data</h3>
+                    <p>Design for late data by using watermarks in streaming and reprocessing windows in batch. Partition by ingestion date in Bronze to enable efficient reprocessing.</p>
+                    
+                    <h3>Backfills</h3>
+                    <p>Support historical backfills by parameterizing date ranges and using partition pruning for efficient processing.</p>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../../index.html#projects" style="color: var(--text-muted);">&larr; Back to Projects</a>
+                <a href="../02_streaming_pipeline/index.html" style="color: var(--accent-primary);">Next: Streaming Pipeline &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 8, y: 4, z: 8 } });
+            showArchitecture();
+        });
+        
+        function showArchitecture() {
+            viz.clear();
+            
+            // Bronze layer
+            viz.createDataNode({ type: 'cube', size: 0.8, color: 0xCD7F32, position: { x: -4, y: 0.5, z: 0 } });
+            viz.createLabel('Bronze', { x: -4, y: 1.8, z: 0 });
+            
+            // Silver layer
+            viz.createDataNode({ type: 'cube', size: 0.8, color: 0xC0C0C0, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('Silver', { x: 0, y: 1.8, z: 0 });
+            
+            // Gold layer
+            viz.createDataNode({ type: 'cube', size: 0.8, color: 0xFFD700, position: { x: 4, y: 0.5, z: 0 } });
+            viz.createLabel('Gold', { x: 4, y: 1.8, z: 0 });
+            
+            // Arrows
+            viz.createArrow({ x: -3, y: 0.5, z: 0 }, { x: -1, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 1, y: 0.5, z: 0 }, { x: 3, y: 0.5, z: 0 }, { color: 0x888888 });
+            
+            viz.createLabel('Medallion Architecture - Bronze/Silver/Gold', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(12, 12);
+        }
+    </script>
+</body>
+</html>

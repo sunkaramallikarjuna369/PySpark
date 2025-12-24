@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skewed Joins - Performance Lab</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#performance" class="nav-link active">Performance Lab</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Skewed Joins</h1>
+            <p>Data skew in joins is one of the most challenging performance problems in distributed computing. Learn how to identify skewed joins and apply techniques like salting, broadcast joins, and adaptive query execution to fix them.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+            
+            <h2>The Problem</h2>
+            <div class="code-container">
+                <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+                    <p><strong>What is join skew?</strong></p>
+                    <p>Join skew occurs when the join key has a non-uniform distribution, causing some partitions to process significantly more data than others. This leads to a few "straggler" tasks that take much longer than the rest.</p>
+                    <p><strong>Common causes:</strong></p>
+                    <ul>
+                        <li>Null values in join keys (all nulls go to one partition)</li>
+                        <li>Hot keys (e.g., "Unknown" customer, default values)</li>
+                        <li>Power-law distributions (few keys have most records)</li>
+                        <li>Time-based skew (recent dates have more data)</li>
+                    </ul>
+                    <p><strong>Symptoms:</strong></p>
+                    <ul>
+                        <li>One or few tasks take 10-100x longer than others</li>
+                        <li>Spark UI shows uneven task durations</li>
+                        <li>OOM errors on specific executors</li>
+                        <li>Job completes but takes hours instead of minutes</li>
+                    </ul>
+                </div>
+            </div>
+
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="diagnose">Diagnose Skew</button>
+                <button class="tab" data-tab="broadcast">Broadcast Join</button>
+                <button class="tab" data-tab="salting">Salting</button>
+                <button class="tab" data-tab="aqe">Adaptive Query Execution</button>
+                <button class="tab" data-tab="strategies">Advanced Strategies</button>
+            </div>
+            <div class="tab-contents">
+                <div id="diagnose" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Diagnose Join Skew)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Diagnose Join Skew
+- Analyze key distribution
+- Identify hot keys
+- Measure skew ratio
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import (
+    col, count, sum as spark_sum, avg, stddev,
+    percentile_approx, lit, when
+)
+
+spark = SparkSession.builder.appName("DiagnoseSkew").getOrCreate()
+
+# ============================================
+# ANALYZE KEY DISTRIBUTION
+# ============================================
+def analyze_key_distribution(df, key_column):
+    """Analyze distribution of join key"""
+    
+    # Count records per key
+    df_dist = df.groupBy(key_column).agg(count("*").alias("record_count"))
+    
+    # Basic statistics
+    stats = df_dist.agg(
+        count("*").alias("unique_keys"),
+        spark_sum("record_count").alias("total_records"),
+        avg("record_count").alias("avg_per_key"),
+        stddev("record_count").alias("stddev_per_key"),
+        percentile_approx("record_count", 0.5).alias("median"),
+        percentile_approx("record_count", 0.95).alias("p95"),
+        percentile_approx("record_count", 0.99).alias("p99")
+    ).collect()[0]
+    
+    print(f"Key Distribution Analysis for '{key_column}':")
+    print(f"  Unique keys: {stats['unique_keys']:,}")
+    print(f"  Total records: {stats['total_records']:,}")
+    print(f"  Avg records/key: {stats['avg_per_key']:.2f}")
+    print(f"  Std dev: {stats['stddev_per_key']:.2f}")
+    print(f"  Median: {stats['median']}")
+    print(f"  95th percentile: {stats['p95']}")
+    print(f"  99th percentile: {stats['p99']}")
+    
+    # Skew ratio (max / median)
+    max_count = df_dist.agg({"record_count": "max"}).collect()[0][0]
+    skew_ratio = max_count / stats['median'] if stats['median'] > 0 else float('inf')
+    print(f"  Skew ratio (max/median): {skew_ratio:.2f}")
+    
+    return df_dist, stats
+
+# ============================================
+# IDENTIFY HOT KEYS
+# ============================================
+def identify_hot_keys(df, key_column, threshold_multiplier=10):
+    """Find keys with disproportionately many records"""
+    
+    df_dist = df.groupBy(key_column).agg(count("*").alias("record_count"))
+    
+    # Calculate threshold (e.g., 10x the average)
+    avg_count = df_dist.agg(avg("record_count")).collect()[0][0]
+    threshold = avg_count * threshold_multiplier
+    
+    # Find hot keys
+    df_hot = df_dist.filter(col("record_count") > threshold) \
+        .orderBy(col("record_count").desc())
+    
+    print(f"Hot keys (>{threshold_multiplier}x average):")
+    df_hot.show(20, truncate=False)
+    
+    # Calculate impact
+    hot_records = df_hot.agg(spark_sum("record_count")).collect()[0][0] or 0
+    total_records = df.count()
+    
+    print(f"\nHot key impact:")
+    print(f"  Hot keys: {df_hot.count()}")
+    print(f"  Records in hot keys: {hot_records:,} ({hot_records/total_records*100:.1f}%)")
+    
+    return df_hot
+
+# ============================================
+# CHECK FOR NULL SKEW
+# ============================================
+def check_null_skew(df, key_column):
+    """Check if nulls are causing skew"""
+    
+    total = df.count()
+    null_count = df.filter(col(key_column).isNull()).count()
+    
+    print(f"Null analysis for '{key_column}':")
+    print(f"  Total records: {total:,}")
+    print(f"  Null records: {null_count:,} ({null_count/total*100:.2f}%)")
+    
+    if null_count > total * 0.01:  # More than 1% nulls
+        print("  WARNING: Significant null skew detected!")
+    
+    return null_count
+
+# ============================================
+# ANALYZE BOTH SIDES OF JOIN
+# ============================================
+def analyze_join_skew(df_left, df_right, join_key):
+    """Analyze skew on both sides of a join"""
+    
+    print("=" * 50)
+    print("LEFT SIDE:")
+    print("=" * 50)
+    analyze_key_distribution(df_left, join_key)
+    identify_hot_keys(df_left, join_key)
+    check_null_skew(df_left, join_key)
+    
+    print("\n" + "=" * 50)
+    print("RIGHT SIDE:")
+    print("=" * 50)
+    analyze_key_distribution(df_right, join_key)
+    identify_hot_keys(df_right, join_key)
+    check_null_skew(df_right, join_key)
+    
+    # Check for key overlap
+    left_keys = df_left.select(join_key).distinct()
+    right_keys = df_right.select(join_key).distinct()
+    
+    overlap = left_keys.intersect(right_keys).count()
+    print(f"\nKey overlap: {overlap} keys exist in both sides")
+
+# ============================================
+# SPARK UI ANALYSIS
+# ============================================
+"""
+In Spark UI, look for:
+1. Stages tab -> Task duration distribution
+   - Look for tasks taking 10x+ longer than median
+   
+2. SQL tab -> Query plan
+   - Look for SortMergeJoin with skewed partitions
+   
+3. Executors tab
+   - Look for executors with high GC time or shuffle spill
+
+Key metrics to check:
+- Task Duration: Max vs Median
+- Shuffle Read Size: Max vs Median  
+- Records Read: Max vs Median
+"""
+
+# Example usage
+df_orders = spark.read.parquet("/data/orders")
+df_customers = spark.read.parquet("/data/customers")
+
+analyze_join_skew(df_orders, df_customers, "customer_id")</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="broadcast" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Broadcast Join)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Broadcast Join
+- Eliminate shuffle for small tables
+- When to use broadcast
+- Configuration and limits
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, broadcast
+
+spark = SparkSession.builder.appName("BroadcastJoin").getOrCreate()
+
+# ============================================
+# BASIC BROADCAST JOIN
+# ============================================
+df_large = spark.read.parquet("/data/transactions")  # 1B rows
+df_small = spark.read.parquet("/data/products")      # 10K rows
+
+# Explicit broadcast hint
+df_joined = df_large.join(
+    broadcast(df_small),
+    "product_id"
+)
+
+# SQL syntax
+df_large.createOrReplaceTempView("transactions")
+df_small.createOrReplaceTempView("products")
+
+df_joined_sql = spark.sql("""
+    SELECT /*+ BROADCAST(p) */ *
+    FROM transactions t
+    JOIN products p ON t.product_id = p.product_id
+""")
+
+# ============================================
+# BROADCAST CONFIGURATION
+# ============================================
+# Auto-broadcast threshold (default 10MB)
+spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "100MB")
+
+# Disable auto-broadcast
+spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "-1")
+
+# Check current setting
+print(spark.conf.get("spark.sql.autoBroadcastJoinThreshold"))
+
+# ============================================
+# WHEN TO USE BROADCAST
+# ============================================
+"""
+USE BROADCAST WHEN:
+- One side is small enough to fit in executor memory
+- Rule of thumb: < 1GB (depends on executor memory)
+- Dimension tables joining with fact tables
+- Lookup/reference data
+
+DON'T USE BROADCAST WHEN:
+- Both sides are large
+- Small side is still too large for memory
+- Join is part of a streaming query (broadcast is static)
+"""
+
+def should_broadcast(df, max_size_mb=500):
+    """Check if DataFrame should be broadcast"""
+    
+    # Estimate size (rough)
+    count = df.count()
+    num_columns = len(df.columns)
+    estimated_size_mb = count * num_columns * 50 / (1024 * 1024)  # ~50 bytes per cell
+    
+    print(f"Estimated size: {estimated_size_mb:.2f} MB")
+    print(f"Recommendation: {'BROADCAST' if estimated_size_mb < max_size_mb else 'NO BROADCAST'}")
+    
+    return estimated_size_mb < max_size_mb
+
+# ============================================
+# BROADCAST FOR SKEW MITIGATION
+# ============================================
+def broadcast_hot_keys(df_large, df_small, join_key, hot_keys_list):
+    """Broadcast join for hot keys, regular join for rest"""
+    
+    # Separate hot key records
+    df_large_hot = df_large.filter(col(join_key).isin(hot_keys_list))
+    df_large_normal = df_large.filter(~col(join_key).isin(hot_keys_list))
+    
+    # Broadcast join for hot keys (small side is filtered)
+    df_small_hot = df_small.filter(col(join_key).isin(hot_keys_list))
+    df_joined_hot = df_large_hot.join(broadcast(df_small_hot), join_key)
+    
+    # Regular join for normal keys
+    df_joined_normal = df_large_normal.join(df_small, join_key)
+    
+    # Union results
+    df_result = df_joined_hot.union(df_joined_normal)
+    
+    return df_result
+
+# ============================================
+# BROADCAST WITH FILTER PUSHDOWN
+# ============================================
+# Broadcast a filtered subset
+df_active_products = df_small.filter(col("is_active") == True)
+df_joined = df_large.join(broadcast(df_active_products), "product_id")
+
+# ============================================
+# VERIFY BROADCAST IS USED
+# ============================================
+# Check execution plan
+df_joined.explain(True)
+
+# Look for "BroadcastHashJoin" or "BroadcastNestedLoopJoin"
+# Instead of "SortMergeJoin" or "ShuffledHashJoin"
+
+# ============================================
+# BROADCAST VARIABLES FOR LOOKUPS
+# ============================================
+# For simple key-value lookups, broadcast variables are more efficient
+lookup_dict = df_small.rdd.map(lambda r: (r["product_id"], r["product_name"])).collectAsMap()
+lookup_broadcast = spark.sparkContext.broadcast(lookup_dict)
+
+# Use in UDF
+from pyspark.sql.functions import udf
+from pyspark.sql.types import StringType
+
+@udf(StringType())
+def lookup_product_name(product_id):
+    return lookup_broadcast.value.get(product_id, "Unknown")
+
+df_with_name = df_large.withColumn("product_name", lookup_product_name(col("product_id")))</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="salting" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Salting Technique)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Salting Technique for Skewed Joins
+- Add random salt to distribute hot keys
+- Explode small side to match salted keys
+- Combine results
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import (
+    col, lit, concat, floor, rand, array, explode,
+    monotonically_increasing_id
+)
+
+spark = SparkSession.builder.appName("Salting").getOrCreate()
+
+# ============================================
+# BASIC SALTING
+# ============================================
+def salted_join(df_large, df_small, join_key, num_salts=10):
+    """
+    Salted join to handle skew
+    
+    1. Add random salt (0 to num_salts-1) to large side
+    2. Explode small side with all salt values
+    3. Join on (key, salt)
+    """
+    
+    # Add salt to large side
+    df_large_salted = df_large.withColumn(
+        "salt",
+        (rand() * num_salts).cast("int")
+    ).withColumn(
+        "salted_key",
+        concat(col(join_key), lit("_"), col("salt"))
+    )
+    
+    # Explode small side with all salts
+    salt_array = array([lit(i) for i in range(num_salts)])
+    
+    df_small_exploded = df_small.withColumn(
+        "salt",
+        explode(salt_array)
+    ).withColumn(
+        "salted_key",
+        concat(col(join_key), lit("_"), col("salt"))
+    )
+    
+    # Join on salted key
+    df_joined = df_large_salted.join(
+        df_small_exploded,
+        "salted_key"
+    ).drop("salt", "salted_key")
+    
+    return df_joined
+
+# ============================================
+# SELECTIVE SALTING (Only for hot keys)
+# ============================================
+def selective_salted_join(df_large, df_small, join_key, hot_keys, num_salts=10):
+    """
+    Apply salting only to hot keys
+    More efficient than salting everything
+    """
+    
+    # Separate hot and normal records
+    df_large_hot = df_large.filter(col(join_key).isin(hot_keys))
+    df_large_normal = df_large.filter(~col(join_key).isin(hot_keys))
+    
+    df_small_hot = df_small.filter(col(join_key).isin(hot_keys))
+    df_small_normal = df_small.filter(~col(join_key).isin(hot_keys))
+    
+    # Salted join for hot keys
+    df_large_salted = df_large_hot.withColumn(
+        "salt", (rand() * num_salts).cast("int")
+    )
+    
+    salt_array = array([lit(i) for i in range(num_salts)])
+    df_small_exploded = df_small_hot.withColumn(
+        "salt", explode(salt_array)
+    )
+    
+    df_joined_hot = df_large_salted.join(
+        df_small_exploded,
+        [join_key, "salt"]
+    ).drop("salt")
+    
+    # Regular join for normal keys
+    df_joined_normal = df_large_normal.join(df_small_normal, join_key)
+    
+    # Union results
+    df_result = df_joined_hot.union(df_joined_normal)
+    
+    return df_result
+
+# ============================================
+# DYNAMIC SALT COUNT
+# ============================================
+def calculate_optimal_salts(df, key_column, target_partition_size=1000000):
+    """Calculate optimal salt count based on skew"""
+    
+    # Find max records per key
+    max_per_key = df.groupBy(key_column) \
+        .count() \
+        .agg({"count": "max"}) \
+        .collect()[0][0]
+    
+    # Calculate salts needed
+    optimal_salts = max(1, max_per_key // target_partition_size)
+    
+    print(f"Max records per key: {max_per_key:,}")
+    print(f"Optimal salt count: {optimal_salts}")
+    
+    return optimal_salts
+
+# ============================================
+# SALTING FOR AGGREGATIONS
+# ============================================
+def salted_aggregation(df, group_key, agg_column, num_salts=10):
+    """
+    Two-phase aggregation with salting
+    Phase 1: Partial aggregation with salt
+    Phase 2: Final aggregation without salt
+    """
+    from pyspark.sql.functions import sum as spark_sum, count
+    
+    # Phase 1: Partial aggregation with salt
+    df_partial = df.withColumn(
+        "salt", (rand() * num_salts).cast("int")
+    ).groupBy(group_key, "salt").agg(
+        spark_sum(agg_column).alias("partial_sum"),
+        count("*").alias("partial_count")
+    )
+    
+    # Phase 2: Final aggregation
+    df_final = df_partial.groupBy(group_key).agg(
+        spark_sum("partial_sum").alias("total_sum"),
+        spark_sum("partial_count").alias("total_count")
+    )
+    
+    return df_final
+
+# ============================================
+# EXAMPLE: SALTED JOIN IN ACTION
+# ============================================
+# Identify hot keys
+df_orders = spark.read.parquet("/data/orders")
+df_customers = spark.read.parquet("/data/customers")
+
+hot_keys = df_orders.groupBy("customer_id") \
+    .count() \
+    .filter(col("count") > 100000) \
+    .select("customer_id") \
+    .rdd.flatMap(lambda x: x).collect()
+
+print(f"Hot keys: {hot_keys}")
+
+# Apply selective salting
+df_joined = selective_salted_join(
+    df_orders, df_customers, 
+    "customer_id", hot_keys, 
+    num_salts=20
+)</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="aqe" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Adaptive Query Execution)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Adaptive Query Execution (AQE) for Skew Handling
+- Automatic skew detection and handling
+- Runtime optimization
+- Configuration options
+"""
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("AQE-Skew") \
+    .config("spark.sql.adaptive.enabled", "true") \
+    .getOrCreate()
+
+# ============================================
+# ENABLE AQE (Spark 3.0+)
+# ============================================
+# Master switch
+spark.conf.set("spark.sql.adaptive.enabled", "true")
+
+# ============================================
+# SKEW JOIN OPTIMIZATION
+# ============================================
+# Enable skew join optimization
+spark.conf.set("spark.sql.adaptive.skewJoin.enabled", "true")
+
+# Skew detection threshold
+# A partition is skewed if:
+# - Size > skewedPartitionFactor * median partition size
+# - Size > skewedPartitionThresholdInBytes
+spark.conf.set("spark.sql.adaptive.skewJoin.skewedPartitionFactor", "5")
+spark.conf.set("spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes", "256MB")
+
+# ============================================
+# HOW AQE HANDLES SKEW
+# ============================================
+"""
+AQE Skew Join Process:
+1. Detect skewed partitions at runtime (after shuffle)
+2. Split skewed partitions into smaller sub-partitions
+3. Replicate matching data from other side
+4. Process sub-partitions in parallel
+
+Benefits:
+- No manual intervention needed
+- Works with any join type
+- Adapts to actual data distribution
+- No code changes required
+"""
+
+# ============================================
+# OTHER AQE OPTIMIZATIONS
+# ============================================
+# Coalesce shuffle partitions
+spark.conf.set("spark.sql.adaptive.coalescePartitions.enabled", "true")
+spark.conf.set("spark.sql.adaptive.coalescePartitions.minPartitionSize", "64MB")
+
+# Convert sort-merge join to broadcast join at runtime
+spark.conf.set("spark.sql.adaptive.localShuffleReader.enabled", "true")
+
+# Optimize skewed aggregations
+spark.conf.set("spark.sql.adaptive.optimizeSkewsInRebalancePartitions.enabled", "true")
+
+# ============================================
+# VERIFY AQE IS WORKING
+# ============================================
+df_orders = spark.read.parquet("/data/orders")
+df_customers = spark.read.parquet("/data/customers")
+
+df_joined = df_orders.join(df_customers, "customer_id")
+
+# Check execution plan
+df_joined.explain(True)
+
+# Look for:
+# - "AdaptiveSparkPlan" at the top
+# - "SkewedJoin" in the plan
+# - "CustomShuffleReader" for coalesced partitions
+
+# ============================================
+# MONITOR AQE IN SPARK UI
+# ============================================
+"""
+In Spark UI SQL tab:
+1. Look for "AdaptiveSparkPlan"
+2. Check "Skewed Partitions" metric
+3. Compare initial vs final partition counts
+4. Look for "AQE Shuffle Read" stages
+"""
+
+# ============================================
+# AQE LIMITATIONS
+# ============================================
+"""
+AQE may not help when:
+1. Skew is extreme (single key has 90%+ of data)
+2. Both sides of join are skewed on same keys
+3. Streaming queries (AQE is for batch only)
+4. Cached DataFrames (statistics not updated)
+
+In these cases, use manual techniques:
+- Salting
+- Broadcast join
+- Pre-aggregation
+"""
+
+# ============================================
+# COMBINING AQE WITH MANUAL OPTIMIZATION
+# ============================================
+# Even with AQE, manual hints can help
+
+# Force broadcast for known small tables
+from pyspark.sql.functions import broadcast
+
+df_joined = df_orders.join(
+    broadcast(df_customers),  # Hint for small table
+    "customer_id"
+)
+
+# Pre-filter to reduce data before join
+df_orders_filtered = df_orders.filter(col("order_date") >= "2024-01-01")
+df_joined = df_orders_filtered.join(df_customers, "customer_id")
+
+# ============================================
+# AQE CONFIGURATION SUMMARY
+# ============================================
+def configure_aqe_for_skew():
+    """Recommended AQE configuration for skewed workloads"""
+    
+    configs = {
+        # Enable AQE
+        "spark.sql.adaptive.enabled": "true",
+        
+        # Skew join
+        "spark.sql.adaptive.skewJoin.enabled": "true",
+        "spark.sql.adaptive.skewJoin.skewedPartitionFactor": "5",
+        "spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes": "256MB",
+        
+        # Partition coalescing
+        "spark.sql.adaptive.coalescePartitions.enabled": "true",
+        "spark.sql.adaptive.coalescePartitions.minPartitionSize": "64MB",
+        "spark.sql.adaptive.coalescePartitions.initialPartitionNum": "200",
+        
+        # Local shuffle reader
+        "spark.sql.adaptive.localShuffleReader.enabled": "true",
+        
+        # Rebalance partitions
+        "spark.sql.adaptive.optimizeSkewsInRebalancePartitions.enabled": "true"
+    }
+    
+    for key, value in configs.items():
+        spark.conf.set(key, value)
+        print(f"Set {key} = {value}")
+
+configure_aqe_for_skew()</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="strategies" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Advanced Skew Strategies)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Advanced Strategies for Skewed Joins
+- Iterative join for extreme skew
+- Map-side join
+- Pre-aggregation
+- Bucketing
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, count, broadcast
+
+spark = SparkSession.builder.appName("AdvancedSkew").getOrCreate()
+
+# ============================================
+# ITERATIVE JOIN FOR EXTREME SKEW
+# ============================================
+def iterative_join(df_large, df_small, join_key, batch_size=1000000):
+    """
+    Process join in batches for extreme skew
+    Useful when single hot key has billions of records
+    """
+    
+    # Get all unique keys from small side
+    keys = df_small.select(join_key).distinct().collect()
+    keys = [row[join_key] for row in keys]
+    
+    results = []
+    
+    # Process in batches
+    for i in range(0, len(keys), batch_size):
+        batch_keys = keys[i:i + batch_size]
+        
+        df_large_batch = df_large.filter(col(join_key).isin(batch_keys))
+        df_small_batch = df_small.filter(col(join_key).isin(batch_keys))
+        
+        df_joined_batch = df_large_batch.join(
+            broadcast(df_small_batch),
+            join_key
+        )
+        
+        results.append(df_joined_batch)
+        print(f"Processed batch {i // batch_size + 1}")
+    
+    # Union all batches
+    df_result = results[0]
+    for df in results[1:]:
+        df_result = df_result.union(df)
+    
+    return df_result
+
+# ============================================
+# PRE-AGGREGATION TO REDUCE SKEW
+# ============================================
+def join_with_preaggregation(df_large, df_small, join_key, agg_columns):
+    """
+    Pre-aggregate large side before join
+    Reduces data volume and skew impact
+    """
+    from pyspark.sql.functions import sum as spark_sum, count, first
+    
+    # Pre-aggregate large side
+    agg_exprs = [spark_sum(c).alias(f"sum_{c}") for c in agg_columns]
+    agg_exprs.append(count("*").alias("record_count"))
+    
+    df_large_agg = df_large.groupBy(join_key).agg(*agg_exprs)
+    
+    # Join aggregated data (much smaller)
+    df_joined = df_large_agg.join(df_small, join_key)
+    
+    return df_joined
+
+# ============================================
+# BUCKETING FOR REPEATED JOINS
+# ============================================
+def create_bucketed_tables(df_large, df_small, join_key, num_buckets=100):
+    """
+    Create bucketed tables for efficient repeated joins
+    Eliminates shuffle on subsequent joins
+    """
+    
+    # Write large table with bucketing
+    df_large.write \
+        .bucketBy(num_buckets, join_key) \
+        .sortBy(join_key) \
+        .mode("overwrite") \
+        .saveAsTable("orders_bucketed")
+    
+    # Write small table with same bucketing
+    df_small.write \
+        .bucketBy(num_buckets, join_key) \
+        .sortBy(join_key) \
+        .mode("overwrite") \
+        .saveAsTable("customers_bucketed")
+    
+    # Join bucketed tables (no shuffle!)
+    df_joined = spark.sql("""
+        SELECT *
+        FROM orders_bucketed o
+        JOIN customers_bucketed c ON o.customer_id = c.customer_id
+    """)
+    
+    return df_joined
+
+# ============================================
+# HANDLE NULL KEYS
+# ============================================
+def join_with_null_handling(df_large, df_small, join_key):
+    """
+    Handle null keys separately to avoid skew
+    """
+    
+    # Separate null and non-null records
+    df_large_null = df_large.filter(col(join_key).isNull())
+    df_large_nonnull = df_large.filter(col(join_key).isNotNull())
+    
+    df_small_null = df_small.filter(col(join_key).isNull())
+    df_small_nonnull = df_small.filter(col(join_key).isNotNull())
+    
+    # Join non-null records normally
+    df_joined_nonnull = df_large_nonnull.join(df_small_nonnull, join_key)
+    
+    # Handle null records based on join type
+    # For inner join: nulls don't match, so exclude
+    # For left join: keep left nulls with null right columns
+    
+    return df_joined_nonnull
+
+# ============================================
+# RANGE JOIN FOR NUMERIC KEYS
+# ============================================
+def range_join(df_large, df_small, join_key, num_ranges=100):
+    """
+    Convert equality join to range join for better distribution
+    Works for numeric keys
+    """
+    from pyspark.sql.functions import floor, lit
+    
+    # Get key range
+    stats = df_large.agg(
+        {"join_key": "min", "join_key": "max"}
+    ).collect()[0]
+    min_key, max_key = stats[0], stats[1]
+    range_size = (max_key - min_key) / num_ranges
+    
+    # Add range bucket
+    df_large_ranged = df_large.withColumn(
+        "range_bucket",
+        floor((col(join_key) - lit(min_key)) / lit(range_size))
+    )
+    
+    df_small_ranged = df_small.withColumn(
+        "range_bucket",
+        floor((col(join_key) - lit(min_key)) / lit(range_size))
+    )
+    
+    # Join on both key and range bucket
+    df_joined = df_large_ranged.join(
+        df_small_ranged,
+        [join_key, "range_bucket"]
+    ).drop("range_bucket")
+    
+    return df_joined
+
+# ============================================
+# MONITORING AND ALERTING
+# ============================================
+def monitor_join_performance(df_joined, threshold_seconds=300):
+    """
+    Monitor join execution and alert on slow performance
+    """
+    import time
+    
+    start_time = time.time()
+    
+    # Trigger execution
+    count = df_joined.count()
+    
+    duration = time.time() - start_time
+    
+    print(f"Join completed: {count:,} records in {duration:.2f} seconds")
+    
+    if duration > threshold_seconds:
+        print(f"WARNING: Join took longer than {threshold_seconds}s threshold!")
+        print("Consider applying skew mitigation techniques")
+    
+    return duration</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../01_small_files/index.html" style="color: var(--text-muted);">&larr; Previous: Small Files</a>
+                <a href="../03_cache_optimization/index.html" style="color: var(--accent-primary);">Next: Cache Optimization &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showSkew();
+        });
+        
+        function showSkew() {
+            viz.clear();
+            
+            // Skewed partitions (problem)
+            viz.createDataNode({ type: 'cube', size: 1.5, color: 0xff6b6b, position: { x: -2, y: 0.9, z: 0 } });
+            viz.createDataNode({ type: 'cube', size: 0.3, color: 0x51cf66, position: { x: -0.5, y: 0.2, z: 0 } });
+            viz.createDataNode({ type: 'cube', size: 0.3, color: 0x51cf66, position: { x: 0.3, y: 0.2, z: 0 } });
+            viz.createDataNode({ type: 'cube', size: 0.3, color: 0x51cf66, position: { x: 1.1, y: 0.2, z: 0 } });
+            viz.createLabel('Skewed (One Hot Key)', { x: -0.5, y: 2, z: 0 });
+            
+            // Balanced after salting
+            for (let i = 0; i < 4; i++) {
+                viz.createDataNode({ type: 'cube', size: 0.5, color: 0x51cf66, position: { x: 3 + i * 0.7, y: 0.35, z: 0 } });
+            }
+            viz.createLabel('Balanced (After Salting)', { x: 4, y: 1.5, z: 0 });
+            
+            viz.createArrow({ x: 1.5, y: 0.5, z: 0 }, { x: 2.5, y: 0.5, z: 0 }, { color: 0x4dabf7 });
+            
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

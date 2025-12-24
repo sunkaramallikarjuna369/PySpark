@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Small Files Problem - Performance Lab</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#performance" class="nav-link active">Performance Lab</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Small Files Problem</h1>
+            <p>The small files problem is one of the most common performance issues in distributed data processing. Learn how to identify, diagnose, and fix small file issues in your PySpark pipelines.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+            
+            <h2>The Problem</h2>
+            <div class="code-container">
+                <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+                    <p><strong>What causes small files?</strong></p>
+                    <ul>
+                        <li>Streaming jobs with frequent micro-batches</li>
+                        <li>Over-partitioning (too many partitions relative to data size)</li>
+                        <li>Incremental/append writes without compaction</li>
+                        <li>High-cardinality partition columns</li>
+                    </ul>
+                    <p><strong>Why is it a problem?</strong></p>
+                    <ul>
+                        <li>Excessive metadata overhead (NameNode pressure in HDFS)</li>
+                        <li>Poor read performance (many small I/O operations)</li>
+                        <li>Increased task scheduling overhead</li>
+                        <li>Memory pressure from tracking many files</li>
+                    </ul>
+                    <p><strong>Rule of thumb:</strong> Target file sizes of 128MB-1GB for optimal performance.</p>
+                </div>
+            </div>
+
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="diagnose">Diagnose</button>
+                <button class="tab" data-tab="repartition">Repartition</button>
+                <button class="tab" data-tab="coalesce">Coalesce</button>
+                <button class="tab" data-tab="compaction">Compaction</button>
+                <button class="tab" data-tab="streaming">Streaming Fixes</button>
+            </div>
+            <div class="tab-contents">
+                <div id="diagnose" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Diagnose Small Files)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Diagnose Small Files Problem
+- Analyze file sizes in a directory
+- Identify problematic partitions
+- Calculate optimal file count
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, input_file_name, count, sum as spark_sum
+import os
+
+spark = SparkSession.builder.appName("SmallFilesDiagnosis").getOrCreate()
+
+# ============================================
+# METHOD 1: Using Spark to analyze files
+# ============================================
+def analyze_file_sizes(path):
+    """Analyze file sizes using Spark"""
+    
+    # Read with file metadata
+    df = spark.read.parquet(path)
+    
+    # Get file information
+    df_files = df.select(input_file_name().alias("file_path")).distinct()
+    
+    # Count records per file
+    df_file_stats = df \
+        .withColumn("file_path", input_file_name()) \
+        .groupBy("file_path") \
+        .agg(count("*").alias("record_count"))
+    
+    print(f"Total files: {df_files.count()}")
+    print(f"Total records: {df.count()}")
+    print(f"\nRecords per file distribution:")
+    df_file_stats.describe("record_count").show()
+    
+    return df_file_stats
+
+# ============================================
+# METHOD 2: Using filesystem directly
+# ============================================
+def analyze_file_sizes_fs(path):
+    """Analyze file sizes using Hadoop filesystem"""
+    
+    hadoop_conf = spark._jsc.hadoopConfiguration()
+    fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(
+        spark._jvm.java.net.URI(path), hadoop_conf
+    )
+    
+    file_statuses = fs.listStatus(spark._jvm.org.apache.hadoop.fs.Path(path))
+    
+    sizes = []
+    for status in file_statuses:
+        if not status.isDirectory():
+            sizes.append({
+                'path': str(status.getPath()),
+                'size_bytes': status.getLen(),
+                'size_mb': status.getLen() / (1024 * 1024)
+            })
+    
+    # Statistics
+    total_files = len(sizes)
+    total_size_mb = sum(f['size_mb'] for f in sizes)
+    avg_size_mb = total_size_mb / total_files if total_files > 0 else 0
+    small_files = sum(1 for f in sizes if f['size_mb'] < 128)
+    
+    print(f"Total files: {total_files}")
+    print(f"Total size: {total_size_mb:.2f} MB")
+    print(f"Average file size: {avg_size_mb:.2f} MB")
+    print(f"Small files (<128MB): {small_files} ({small_files/total_files*100:.1f}%)")
+    
+    return sizes
+
+# ============================================
+# METHOD 3: Analyze partitioned data
+# ============================================
+def analyze_partitioned_data(path, partition_cols):
+    """Analyze file distribution across partitions"""
+    
+    df = spark.read.parquet(path)
+    
+    # Count records per partition
+    df_partition_stats = df \
+        .groupBy(partition_cols) \
+        .agg(count("*").alias("record_count"))
+    
+    print("Records per partition:")
+    df_partition_stats.orderBy("record_count").show(20)
+    
+    # Identify skewed partitions
+    stats = df_partition_stats.describe("record_count").collect()
+    mean = float(stats[1]["record_count"])
+    stddev = float(stats[2]["record_count"])
+    
+    df_skewed = df_partition_stats.filter(
+        (col("record_count") < mean - 2 * stddev) |
+        (col("record_count") > mean + 2 * stddev)
+    )
+    
+    print(f"\nSkewed partitions (>2 std dev from mean):")
+    df_skewed.show()
+    
+    return df_partition_stats
+
+# ============================================
+# CALCULATE OPTIMAL FILE COUNT
+# ============================================
+def calculate_optimal_files(total_size_mb, target_file_size_mb=256):
+    """Calculate optimal number of files"""
+    
+    optimal_files = max(1, int(total_size_mb / target_file_size_mb))
+    
+    print(f"Total data size: {total_size_mb:.2f} MB")
+    print(f"Target file size: {target_file_size_mb} MB")
+    print(f"Optimal file count: {optimal_files}")
+    
+    return optimal_files
+
+# Example usage
+path = "/data/sales"
+analyze_file_sizes(path)
+analyze_file_sizes_fs(path)
+analyze_partitioned_data(path, ["year", "month"])</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="repartition" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Repartition Strategies)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Repartition Strategies
+- When to use repartition vs coalesce
+- Optimal partition sizing
+- Partition by column strategies
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, spark_partition_id, count
+
+spark = SparkSession.builder.appName("Repartition").getOrCreate()
+
+# ============================================
+# REPARTITION BASICS
+# ============================================
+df = spark.read.parquet("/data/sales")
+
+# Check current partitions
+print(f"Current partitions: {df.rdd.getNumPartitions()}")
+
+# Repartition to specific number (full shuffle)
+df_repartitioned = df.repartition(100)
+
+# Repartition by column (for better data locality)
+df_by_date = df.repartition("sale_date")
+
+# Repartition by column with specific count
+df_by_date_100 = df.repartition(100, "sale_date")
+
+# Multiple columns
+df_by_multi = df.repartition(50, "year", "month")
+
+# ============================================
+# CALCULATE OPTIMAL PARTITIONS
+# ============================================
+def calculate_optimal_partitions(df, target_partition_size_mb=256):
+    """Calculate optimal partition count based on data size"""
+    
+    # Estimate data size (this triggers computation)
+    # For large datasets, sample instead
+    sample_fraction = 0.01
+    sample_size = df.sample(sample_fraction).cache().count()
+    sample_bytes = spark.sparkContext._jvm.org.apache.spark.util.SizeEstimator.estimate(
+        df.sample(sample_fraction).rdd.collect()
+    )
+    
+    estimated_total_mb = (sample_bytes / sample_fraction) / (1024 * 1024)
+    optimal_partitions = max(1, int(estimated_total_mb / target_partition_size_mb))
+    
+    print(f"Estimated data size: {estimated_total_mb:.2f} MB")
+    print(f"Optimal partitions: {optimal_partitions}")
+    
+    return optimal_partitions
+
+# Alternative: Use row count heuristic
+def partitions_by_row_count(df, rows_per_partition=1000000):
+    """Calculate partitions based on row count"""
+    
+    total_rows = df.count()
+    optimal_partitions = max(1, total_rows // rows_per_partition)
+    
+    print(f"Total rows: {total_rows}")
+    print(f"Optimal partitions: {optimal_partitions}")
+    
+    return optimal_partitions
+
+# ============================================
+# REPARTITION BEFORE WRITE
+# ============================================
+def write_with_optimal_partitions(df, output_path, target_file_size_mb=256):
+    """Write with optimal file sizes"""
+    
+    # Estimate size and calculate partitions
+    estimated_size_mb = df.count() * 0.001  # Rough estimate: 1KB per row
+    num_files = max(1, int(estimated_size_mb / target_file_size_mb))
+    
+    df.repartition(num_files) \
+        .write \
+        .mode("overwrite") \
+        .parquet(output_path)
+    
+    print(f"Written {num_files} files to {output_path}")
+
+# ============================================
+# REPARTITION WITH SORT (for better compression)
+# ============================================
+def repartition_and_sort(df, num_partitions, sort_columns):
+    """Repartition and sort within partitions for better compression"""
+    
+    df_optimized = df \
+        .repartition(num_partitions) \
+        .sortWithinPartitions(sort_columns)
+    
+    return df_optimized
+
+# Example: Sort by date within partitions
+df_sorted = repartition_and_sort(df, 100, ["sale_date", "customer_id"])
+
+# ============================================
+# VERIFY PARTITION DISTRIBUTION
+# ============================================
+def verify_partition_distribution(df):
+    """Check record distribution across partitions"""
+    
+    df_dist = df \
+        .withColumn("partition_id", spark_partition_id()) \
+        .groupBy("partition_id") \
+        .agg(count("*").alias("record_count"))
+    
+    print("Partition distribution:")
+    df_dist.describe("record_count").show()
+    
+    # Check for skew
+    stats = df_dist.agg(
+        {"record_count": "avg", "record_count": "stddev"}
+    ).collect()[0]
+    
+    return df_dist
+
+verify_partition_distribution(df_repartitioned)</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="coalesce" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Coalesce for Reducing Files)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Coalesce for Reducing Partitions
+- More efficient than repartition for reducing partitions
+- No shuffle required
+- Best practices and gotchas
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
+
+spark = SparkSession.builder.appName("Coalesce").getOrCreate()
+
+# ============================================
+# COALESCE BASICS
+# ============================================
+df = spark.read.parquet("/data/sales")
+
+print(f"Original partitions: {df.rdd.getNumPartitions()}")
+
+# Coalesce to fewer partitions (no shuffle)
+df_coalesced = df.coalesce(10)
+print(f"After coalesce: {df_coalesced.rdd.getNumPartitions()}")
+
+# ============================================
+# COALESCE VS REPARTITION
+# ============================================
+"""
+COALESCE:
+- Only reduces partitions (cannot increase)
+- No shuffle - combines existing partitions
+- Faster but may result in uneven partition sizes
+- Use when: Reducing partitions after filter/aggregation
+
+REPARTITION:
+- Can increase or decrease partitions
+- Full shuffle - redistributes data evenly
+- Slower but ensures even distribution
+- Use when: Need specific partition count or partition by column
+"""
+
+# After filter - data is reduced, coalesce to fewer files
+df_filtered = df.filter(col("amount") > 1000)
+df_optimized = df_filtered.coalesce(5)
+
+# ============================================
+# COALESCE GOTCHA: UNEVEN PARTITIONS
+# ============================================
+def demonstrate_coalesce_skew():
+    """Show how coalesce can create uneven partitions"""
+    
+    # Create DataFrame with 100 partitions
+    df = spark.range(1000000).repartition(100)
+    
+    # Coalesce to 10 - each new partition gets 10 old partitions
+    df_coalesced = df.coalesce(10)
+    
+    # Check distribution
+    from pyspark.sql.functions import spark_partition_id, count
+    
+    df_coalesced \
+        .withColumn("partition_id", spark_partition_id()) \
+        .groupBy("partition_id") \
+        .agg(count("*").alias("count")) \
+        .orderBy("partition_id") \
+        .show()
+
+# ============================================
+# SMART COALESCE BASED ON DATA SIZE
+# ============================================
+def smart_coalesce(df, target_file_size_mb=256):
+    """Coalesce based on estimated data size"""
+    
+    current_partitions = df.rdd.getNumPartitions()
+    
+    # Estimate total size (sample-based)
+    sample = df.sample(0.01).cache()
+    sample_count = sample.count()
+    
+    if sample_count == 0:
+        return df.coalesce(1)
+    
+    # Rough size estimate
+    total_count = df.count()
+    estimated_size_mb = total_count * 0.001  # ~1KB per row estimate
+    
+    target_partitions = max(1, int(estimated_size_mb / target_file_size_mb))
+    
+    if target_partitions < current_partitions:
+        print(f"Coalescing from {current_partitions} to {target_partitions}")
+        return df.coalesce(target_partitions)
+    elif target_partitions > current_partitions:
+        print(f"Repartitioning from {current_partitions} to {target_partitions}")
+        return df.repartition(target_partitions)
+    else:
+        print(f"Keeping {current_partitions} partitions")
+        return df
+
+# ============================================
+# COALESCE BEFORE WRITE
+# ============================================
+def write_coalesced(df, output_path, num_files):
+    """Write with specific number of files using coalesce"""
+    
+    df.coalesce(num_files) \
+        .write \
+        .mode("overwrite") \
+        .parquet(output_path)
+
+# ============================================
+# ADAPTIVE COALESCE (Spark 3.0+)
+# ============================================
+# Enable adaptive query execution
+spark.conf.set("spark.sql.adaptive.enabled", "true")
+spark.conf.set("spark.sql.adaptive.coalescePartitions.enabled", "true")
+spark.conf.set("spark.sql.adaptive.coalescePartitions.minPartitionSize", "64MB")
+spark.conf.set("spark.sql.adaptive.coalescePartitions.initialPartitionNum", "200")
+
+# With AQE, Spark automatically coalesces small partitions
+df_aqe = spark.read.parquet("/data/sales") \
+    .filter(col("amount") > 1000) \
+    .groupBy("category") \
+    .count()
+
+# Spark will automatically optimize partition count</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="compaction" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (File Compaction)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+File Compaction Strategies
+- Periodic compaction jobs
+- Delta Lake OPTIMIZE
+- Partition-level compaction
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, input_file_name
+from datetime import datetime, timedelta
+
+spark = SparkSession.builder.appName("Compaction").getOrCreate()
+
+# ============================================
+# BASIC COMPACTION (Read and Rewrite)
+# ============================================
+def compact_directory(input_path, output_path, target_files):
+    """Compact small files by reading and rewriting"""
+    
+    df = spark.read.parquet(input_path)
+    
+    df.repartition(target_files) \
+        .write \
+        .mode("overwrite") \
+        .parquet(output_path)
+    
+    print(f"Compacted to {target_files} files")
+
+# ============================================
+# PARTITION-LEVEL COMPACTION
+# ============================================
+def compact_partition(base_path, partition_path, target_files):
+    """Compact a specific partition"""
+    
+    full_path = f"{base_path}/{partition_path}"
+    
+    df = spark.read.parquet(full_path)
+    
+    # Write to temp location
+    temp_path = f"{full_path}_compacted"
+    df.coalesce(target_files).write.mode("overwrite").parquet(temp_path)
+    
+    # In production: atomic swap using rename
+    # For now, just demonstrate the pattern
+    print(f"Compacted {partition_path} to {target_files} files")
+
+# ============================================
+# SMART COMPACTION (Only compact if needed)
+# ============================================
+def smart_compact(path, min_file_size_mb=64, target_file_size_mb=256):
+    """Only compact if average file size is below threshold"""
+    
+    # Get file sizes
+    hadoop_conf = spark._jsc.hadoopConfiguration()
+    fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(
+        spark._jvm.java.net.URI(path), hadoop_conf
+    )
+    
+    file_statuses = fs.listStatus(spark._jvm.org.apache.hadoop.fs.Path(path))
+    
+    sizes_mb = [s.getLen() / (1024 * 1024) for s in file_statuses if not s.isDirectory()]
+    
+    if not sizes_mb:
+        print("No files found")
+        return
+    
+    avg_size = sum(sizes_mb) / len(sizes_mb)
+    total_size = sum(sizes_mb)
+    
+    print(f"Current: {len(sizes_mb)} files, avg size: {avg_size:.2f} MB")
+    
+    if avg_size < min_file_size_mb:
+        target_files = max(1, int(total_size / target_file_size_mb))
+        print(f"Compacting to {target_files} files...")
+        
+        df = spark.read.parquet(path)
+        temp_path = f"{path}_compacting"
+        
+        df.coalesce(target_files).write.mode("overwrite").parquet(temp_path)
+        
+        # In production: atomic rename
+        print("Compaction complete")
+    else:
+        print("No compaction needed")
+
+# ============================================
+# DELTA LAKE OPTIMIZE
+# ============================================
+def delta_optimize(table_path):
+    """Use Delta Lake OPTIMIZE for compaction"""
+    
+    # OPTIMIZE command compacts small files
+    spark.sql(f"OPTIMIZE delta.`{table_path}`")
+    
+    # OPTIMIZE with Z-ORDER for query optimization
+    spark.sql(f"OPTIMIZE delta.`{table_path}` ZORDER BY (date, customer_id)")
+    
+    # OPTIMIZE specific partitions
+    spark.sql(f"""
+        OPTIMIZE delta.`{table_path}` 
+        WHERE date >= '2024-01-01'
+    """)
+
+# ============================================
+# SCHEDULED COMPACTION JOB
+# ============================================
+def run_compaction_job(base_path, partition_col, lookback_days=7):
+    """Run compaction for recent partitions"""
+    
+    from datetime import datetime, timedelta
+    
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=lookback_days)
+    
+    current_date = start_date
+    while current_date <= end_date:
+        partition_value = current_date.strftime("%Y-%m-%d")
+        partition_path = f"{partition_col}={partition_value}"
+        full_path = f"{base_path}/{partition_path}"
+        
+        try:
+            smart_compact(full_path)
+        except Exception as e:
+            print(f"Error compacting {partition_path}: {e}")
+        
+        current_date += timedelta(days=1)
+
+# ============================================
+# COMPACTION WITH DEDUPLICATION
+# ============================================
+def compact_and_dedupe(path, key_columns, timestamp_column):
+    """Compact files and remove duplicates"""
+    from pyspark.sql.window import Window
+    from pyspark.sql.functions import row_number
+    
+    df = spark.read.parquet(path)
+    
+    # Deduplicate - keep latest record per key
+    window_spec = Window.partitionBy(key_columns).orderBy(col(timestamp_column).desc())
+    
+    df_deduped = df \
+        .withColumn("row_num", row_number().over(window_spec)) \
+        .filter(col("row_num") == 1) \
+        .drop("row_num")
+    
+    # Calculate optimal file count
+    count = df_deduped.count()
+    target_files = max(1, count // 1000000)  # ~1M rows per file
+    
+    # Write compacted and deduped data
+    df_deduped.coalesce(target_files) \
+        .write \
+        .mode("overwrite") \
+        .parquet(f"{path}_compacted")
+    
+    print(f"Compacted and deduped: {df.count()} -> {count} records")</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="streaming" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Streaming Small Files Fixes)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Fixing Small Files in Streaming Jobs
+- Trigger interval optimization
+- Foreachbatch with compaction
+- Delta Lake auto-optimize
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, current_timestamp
+
+spark = SparkSession.builder \
+    .appName("StreamingSmallFiles") \
+    .config("spark.sql.streaming.minBatchesToRetain", "10") \
+    .getOrCreate()
+
+# ============================================
+# PROBLEM: Frequent triggers create small files
+# ============================================
+# BAD: Creates a file every 10 seconds
+df_stream = spark.readStream.format("kafka").load()
+
+query_bad = df_stream \
+    .writeStream \
+    .format("parquet") \
+    .trigger(processingTime="10 seconds") \
+    .start("/output/small_files")  # Many small files!
+
+# ============================================
+# SOLUTION 1: Longer trigger intervals
+# ============================================
+# BETTER: Less frequent writes
+query_better = df_stream \
+    .writeStream \
+    .format("parquet") \
+    .trigger(processingTime="5 minutes") \
+    .start("/output/larger_files")
+
+# ============================================
+# SOLUTION 2: ForeachBatch with repartition
+# ============================================
+def write_with_compaction(batch_df, batch_id):
+    """Write batch with controlled file count"""
+    
+    if batch_df.isEmpty():
+        return
+    
+    record_count = batch_df.count()
+    
+    # Calculate files based on record count
+    # Target: ~100K records per file
+    num_files = max(1, record_count // 100000)
+    
+    batch_df.repartition(num_files) \
+        .write \
+        .mode("append") \
+        .parquet("/output/compacted_stream")
+    
+    print(f"Batch {batch_id}: {record_count} records -> {num_files} files")
+
+query_compacted = df_stream \
+    .writeStream \
+    .foreachBatch(write_with_compaction) \
+    .trigger(processingTime="1 minute") \
+    .option("checkpointLocation", "/checkpoints/compacted") \
+    .start()
+
+# ============================================
+# SOLUTION 3: Delta Lake with Auto-Optimize
+# ============================================
+spark.conf.set("spark.databricks.delta.optimizeWrite.enabled", "true")
+spark.conf.set("spark.databricks.delta.autoCompact.enabled", "true")
+
+query_delta = df_stream \
+    .writeStream \
+    .format("delta") \
+    .trigger(processingTime="1 minute") \
+    .option("checkpointLocation", "/checkpoints/delta") \
+    .start("/output/delta_optimized")
+
+# Delta will automatically:
+# 1. Optimize write to create larger files
+# 2. Auto-compact small files in background
+
+# ============================================
+# SOLUTION 4: Two-stage pipeline
+# ============================================
+# Stage 1: Fast streaming to staging (small files OK)
+query_staging = df_stream \
+    .writeStream \
+    .format("parquet") \
+    .trigger(processingTime="30 seconds") \
+    .option("checkpointLocation", "/checkpoints/staging") \
+    .start("/staging/raw")
+
+# Stage 2: Periodic batch compaction to final location
+def compact_staging_to_final():
+    """Run periodically (e.g., every hour) to compact staging"""
+    
+    df_staging = spark.read.parquet("/staging/raw")
+    
+    # Get only new data (use watermark or timestamp)
+    df_new = df_staging.filter(col("event_time") > last_processed_time)
+    
+    # Compact and write to final
+    target_files = max(1, df_new.count() // 500000)
+    
+    df_new.repartition(target_files) \
+        .write \
+        .mode("append") \
+        .partitionBy("date") \
+        .parquet("/final/compacted")
+    
+    # Clean up staging (optional)
+    # spark.sql("DELETE FROM staging WHERE event_time <= last_processed_time")
+
+# ============================================
+# SOLUTION 5: Trigger.Once for batch-like streaming
+# ============================================
+# Process all available data, then stop
+# Good for scheduled jobs that want streaming semantics
+
+query_once = df_stream \
+    .writeStream \
+    .format("parquet") \
+    .trigger(once=True) \
+    .option("checkpointLocation", "/checkpoints/once") \
+    .start("/output/batch_like")
+
+query_once.awaitTermination()  # Wait for completion
+
+# ============================================
+# MONITORING FILE SIZES IN STREAMING
+# ============================================
+class FileMonitorListener:
+    """Monitor output file sizes"""
+    
+    def __init__(self, output_path):
+        self.output_path = output_path
+    
+    def check_file_sizes(self):
+        hadoop_conf = spark._jsc.hadoopConfiguration()
+        fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(
+            spark._jvm.java.net.URI(self.output_path), hadoop_conf
+        )
+        
+        statuses = fs.listStatus(
+            spark._jvm.org.apache.hadoop.fs.Path(self.output_path)
+        )
+        
+        sizes = [s.getLen() / (1024 * 1024) for s in statuses]
+        
+        if sizes:
+            avg_size = sum(sizes) / len(sizes)
+            if avg_size < 64:
+                print(f"WARNING: Average file size {avg_size:.2f} MB is below threshold")
+        
+        return sizes</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../../index.html#performance" style="color: var(--text-muted);">&larr; Back to Performance Lab</a>
+                <a href="../02_skewed_joins/index.html" style="color: var(--accent-primary);">Next: Skewed Joins &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showSmallFiles();
+        });
+        
+        function showSmallFiles() {
+            viz.clear();
+            
+            // Many small files (problem)
+            for (let i = 0; i < 20; i++) {
+                const x = (i % 5) * 0.6 - 1.2;
+                const z = Math.floor(i / 5) * 0.6 - 0.9;
+                viz.createDataNode({ type: 'cube', size: 0.15, color: 0xff6b6b, position: { x: x - 2, y: 0.2, z: z } });
+            }
+            viz.createLabel('Small Files (Bad)', { x: -2, y: 1.5, z: 0 });
+            
+            // Few large files (good)
+            for (let i = 0; i < 4; i++) {
+                const x = (i % 2) * 1 - 0.5;
+                const z = Math.floor(i / 2) * 1 - 0.5;
+                viz.createDataNode({ type: 'cube', size: 0.5, color: 0x51cf66, position: { x: x + 2, y: 0.4, z: z } });
+            }
+            viz.createLabel('Compacted (Good)', { x: 2, y: 1.5, z: 0 });
+            
+            // Arrow
+            viz.createArrow({ x: -0.3, y: 0.5, z: 0 }, { x: 0.8, y: 0.5, z: 0 }, { color: 0x4dabf7 });
+            
+            viz.createGrid(8, 8);
+        }
+    </script>
+</body>
+</html>

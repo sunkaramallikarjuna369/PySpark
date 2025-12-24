@@ -28,6 +28,10 @@
                 <a href="#etl" class="nav-link">ETL</a>
                 <a href="#datawarehouse" class="nav-link">Data Warehouse</a>
                 <a href="#shell" class="nav-link">Shell</a>
+                <a href="#projects" class="nav-link">Projects</a>
+                <a href="#performance" class="nav-link">Performance</a>
+                <a href="#quality" class="nav-link">Quality</a>
+                <a href="#interview" class="nav-link">Interview</a>
                 <button class="theme-toggle" aria-label="Toggle theme">🌙</button>
             </nav>
         </div>
@@ -51,11 +55,11 @@
             <!-- Stats -->
             <div style="display: flex; justify-content: center; gap: 3rem; margin-top: 2rem;">
                 <div style="text-align: center;">
-                    <div style="font-size: 2.5rem; font-weight: 700; color: var(--accent-primary);">83</div>
+                    <div style="font-size: 2.5rem; font-weight: 700; color: var(--accent-primary);">98</div>
                     <div style="color: var(--text-muted);">Concepts</div>
                 </div>
                 <div style="text-align: center;">
-                    <div style="font-size: 2.5rem; font-weight: 700; color: var(--accent-primary);">6</div>
+                    <div style="font-size: 2.5rem; font-weight: 700; color: var(--accent-primary);">10</div>
                     <div style="color: var(--text-muted);">Categories</div>
                 </div>
                 <div style="text-align: center;">
@@ -659,6 +663,164 @@
                     <h3 class="card-title">Best Practices</h3>
                     <p class="card-description">Write maintainable, secure, and efficient scripts</p>
                     <div class="card-meta"><span>35 min</span><span>Advanced</span></div>
+                </a>
+            </div>
+        </section>
+
+        <!-- Capstone Projects Section -->
+        <section id="projects" class="category-section section">
+            <div class="category-header">
+                <div class="category-icon projects" style="background: rgba(255, 107, 107, 0.1);">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                    </svg>
+                </div>
+                <div>
+                    <h2>Capstone Projects</h2>
+                    <p style="margin: 0; color: var(--text-muted);">End-to-End Real-World Data Engineering Projects</p>
+                </div>
+            </div>
+            <div class="card-grid">
+                <a href="projects/01_lakehouse_pipeline/index.html" class="card projects">
+                    <div class="card-icon" style="background: rgba(255, 107, 107, 0.1); color: #ff6b6b;">🏠</div>
+                    <h3 class="card-title">Lakehouse Pipeline</h3>
+                    <p class="card-description">Build a complete Bronze/Silver/Gold medallion architecture with Delta Lake</p>
+                    <div class="card-meta"><span>2 hours</span><span>Advanced</span></div>
+                </a>
+                <a href="projects/02_streaming_pipeline/index.html" class="card projects">
+                    <div class="card-icon" style="background: rgba(255, 107, 107, 0.1); color: #ff6b6b;">🌊</div>
+                    <h3 class="card-title">Streaming Pipeline</h3>
+                    <p class="card-description">Real-time data processing with Kafka and Structured Streaming</p>
+                    <div class="card-meta"><span>2 hours</span><span>Advanced</span></div>
+                </a>
+                <a href="projects/03_cdc_scd_project/index.html" class="card projects">
+                    <div class="card-icon" style="background: rgba(255, 107, 107, 0.1); color: #ff6b6b;">🔄</div>
+                    <h3 class="card-title">CDC & SCD Implementation</h3>
+                    <p class="card-description">Change Data Capture and Slowly Changing Dimensions with Delta Lake</p>
+                    <div class="card-meta"><span>2 hours</span><span>Advanced</span></div>
+                </a>
+            </div>
+        </section>
+
+        <!-- Performance Lab Section -->
+        <section id="performance" class="category-section section">
+            <div class="category-header">
+                <div class="category-icon performance" style="background: rgba(255, 212, 59, 0.1);">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h2>Performance Lab</h2>
+                    <p style="margin: 0; color: var(--text-muted);">Spark Performance Optimization and Debugging</p>
+                </div>
+            </div>
+            <div class="card-grid">
+                <a href="performance_lab/01_small_files/index.html" class="card performance">
+                    <div class="card-icon" style="background: rgba(255, 212, 59, 0.1); color: #ffd43b;">📁</div>
+                    <h3 class="card-title">Small Files Problem</h3>
+                    <p class="card-description">Diagnose and fix small files issues with compaction strategies</p>
+                    <div class="card-meta"><span>45 min</span><span>Advanced</span></div>
+                </a>
+                <a href="performance_lab/02_skewed_joins/index.html" class="card performance">
+                    <div class="card-icon" style="background: rgba(255, 212, 59, 0.1); color: #ffd43b;">⚖️</div>
+                    <h3 class="card-title">Skewed Joins</h3>
+                    <p class="card-description">Handle data skew with salting, broadcast, and AQE</p>
+                    <div class="card-meta"><span>45 min</span><span>Advanced</span></div>
+                </a>
+                <a href="performance_lab/03_cache_optimization/index.html" class="card performance">
+                    <div class="card-icon" style="background: rgba(255, 212, 59, 0.1); color: #ffd43b;">💾</div>
+                    <h3 class="card-title">Cache Optimization</h3>
+                    <p class="card-description">Master caching strategies and avoid common pitfalls</p>
+                    <div class="card-meta"><span>40 min</span><span>Advanced</span></div>
+                </a>
+                <a href="performance_lab/04_execution_plans/index.html" class="card performance">
+                    <div class="card-icon" style="background: rgba(255, 212, 59, 0.1); color: #ffd43b;">📊</div>
+                    <h3 class="card-title">Execution Plans</h3>
+                    <p class="card-description">Read and optimize Spark execution plans</p>
+                    <div class="card-meta"><span>50 min</span><span>Expert</span></div>
+                </a>
+            </div>
+        </section>
+
+        <!-- Data Quality Section -->
+        <section id="quality" class="category-section section">
+            <div class="category-header">
+                <div class="category-icon quality" style="background: rgba(81, 207, 102, 0.1);">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h2>Data Quality & Testing</h2>
+                    <p style="margin: 0; color: var(--text-muted);">Build Reliable Data Pipelines with Testing and Validation</p>
+                </div>
+            </div>
+            <div class="card-grid">
+                <a href="data_quality/01_unit_testing/index.html" class="card quality">
+                    <div class="card-icon" style="background: rgba(81, 207, 102, 0.1); color: #51cf66;">🧪</div>
+                    <h3 class="card-title">Unit Testing PySpark</h3>
+                    <p class="card-description">Test transformations with pytest and chispa</p>
+                    <div class="card-meta"><span>45 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="data_quality/02_data_validation/index.html" class="card quality">
+                    <div class="card-icon" style="background: rgba(81, 207, 102, 0.1); color: #51cf66;">✓</div>
+                    <h3 class="card-title">Data Validation</h3>
+                    <p class="card-description">Implement validation patterns and Great Expectations</p>
+                    <div class="card-meta"><span>50 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="data_quality/03_schema_evolution/index.html" class="card quality">
+                    <div class="card-icon" style="background: rgba(81, 207, 102, 0.1); color: #51cf66;">📐</div>
+                    <h3 class="card-title">Schema Evolution</h3>
+                    <p class="card-description">Handle schema changes gracefully in pipelines</p>
+                    <div class="card-meta"><span>40 min</span><span>Advanced</span></div>
+                </a>
+                <a href="data_quality/04_error_handling/index.html" class="card quality">
+                    <div class="card-icon" style="background: rgba(81, 207, 102, 0.1); color: #51cf66;">🛡️</div>
+                    <h3 class="card-title">Error Handling</h3>
+                    <p class="card-description">Quarantine patterns, DLQ, and graceful degradation</p>
+                    <div class="card-meta"><span>45 min</span><span>Advanced</span></div>
+                </a>
+            </div>
+        </section>
+
+        <!-- Interview Prep Section -->
+        <section id="interview" class="category-section section">
+            <div class="category-header">
+                <div class="category-icon interview" style="background: rgba(77, 171, 247, 0.1);">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M20 6h-4V4c0-1.1-.9-2-2-2h-4c-1.1 0-2 .9-2 2v2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6 0h-4V4h4v2z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h2>Interview Prep</h2>
+                    <p style="margin: 0; color: var(--text-muted);">Data Engineering Interview Questions and System Design</p>
+                </div>
+            </div>
+            <div class="card-grid">
+                <a href="interview_prep/01_concepts/index.html" class="card interview">
+                    <div class="card-icon" style="background: rgba(77, 171, 247, 0.1); color: #4dabf7;">📚</div>
+                    <h3 class="card-title">Core Concepts</h3>
+                    <p class="card-description">Spark architecture, memory management, and internals</p>
+                    <div class="card-meta"><span>60 min</span><span>All Levels</span></div>
+                </a>
+                <a href="interview_prep/02_coding_challenges/index.html" class="card interview">
+                    <div class="card-icon" style="background: rgba(77, 171, 247, 0.1); color: #4dabf7;">💻</div>
+                    <h3 class="card-title">Coding Challenges</h3>
+                    <p class="card-description">Common PySpark coding problems with solutions</p>
+                    <div class="card-meta"><span>90 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="interview_prep/03_system_design/index.html" class="card interview">
+                    <div class="card-icon" style="background: rgba(77, 171, 247, 0.1); color: #4dabf7;">🏗️</div>
+                    <h3 class="card-title">System Design</h3>
+                    <p class="card-description">Design data platforms, pipelines, and architectures</p>
+                    <div class="card-meta"><span>90 min</span><span>Advanced</span></div>
+                </a>
+                <a href="interview_prep/04_troubleshooting/index.html" class="card interview">
+                    <div class="card-icon" style="background: rgba(77, 171, 247, 0.1); color: #4dabf7;">🔧</div>
+                    <h3 class="card-title">Troubleshooting</h3>
+                    <p class="card-description">Debug OOM, slow jobs, skew, and shuffle issues</p>
+                    <div class="card-meta"><span>60 min</span><span>Advanced</span></div>
                 </a>
             </div>
         </section>

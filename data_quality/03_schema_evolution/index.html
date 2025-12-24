@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schema Evolution - Data Quality</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#quality" class="nav-link active">Data Quality</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Schema Evolution</h1>
+            <p>Handle schema changes gracefully in your data pipelines. Learn patterns for adding columns, changing types, and maintaining backward compatibility.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="basics">Schema Basics</button>
+                <button class="tab" data-tab="merge">Schema Merge</button>
+                <button class="tab" data-tab="delta">Delta Lake</button>
+                <button class="tab" data-tab="migration">Migration Patterns</button>
+            </div>
+            <div class="tab-contents">
+                <div id="basics" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Schema Basics)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Schema Evolution Basics
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.types import *
+from pyspark.sql.functions import col, lit
+
+spark = SparkSession.builder.appName("SchemaEvolution").getOrCreate()
+
+# ============================================
+# SCHEMA DEFINITION
+# ============================================
+schema_v1 = StructType([
+    StructField("id", IntegerType(), False),
+    StructField("name", StringType(), True),
+    StructField("amount", DoubleType(), True)
+])
+
+schema_v2 = StructType([
+    StructField("id", IntegerType(), False),
+    StructField("name", StringType(), True),
+    StructField("amount", DoubleType(), True),
+    StructField("category", StringType(), True),  # New column
+    StructField("created_at", TimestampType(), True)  # New column
+])
+
+# ============================================
+# COMPARE SCHEMAS
+# ============================================
+def compare_schemas(schema1: StructType, schema2: StructType) -> dict:
+    """Compare two schemas and find differences"""
+    fields1 = {f.name: f for f in schema1.fields}
+    fields2 = {f.name: f for f in schema2.fields}
+    
+    added = set(fields2.keys()) - set(fields1.keys())
+    removed = set(fields1.keys()) - set(fields2.keys())
+    
+    type_changes = {}
+    for name in set(fields1.keys()) & set(fields2.keys()):
+        if fields1[name].dataType != fields2[name].dataType:
+            type_changes[name] = {
+                "old": str(fields1[name].dataType),
+                "new": str(fields2[name].dataType)
+            }
+    
+    return {
+        "added": list(added),
+        "removed": list(removed),
+        "type_changes": type_changes
+    }
+
+diff = compare_schemas(schema_v1, schema_v2)
+print(f"Schema changes: {diff}")
+
+# ============================================
+# ADD COLUMNS WITH DEFAULTS
+# ============================================
+def add_missing_columns(df, target_schema: StructType):
+    """Add missing columns with null values"""
+    current_cols = set(df.columns)
+    
+    for field in target_schema.fields:
+        if field.name not in current_cols:
+            df = df.withColumn(field.name, lit(None).cast(field.dataType))
+    
+    # Reorder to match target schema
+    return df.select([f.name for f in target_schema.fields])
+
+# ============================================
+# SAFE TYPE CASTING
+# ============================================
+def safe_cast(df, column: str, target_type):
+    """Cast column with error handling"""
+    try:
+        return df.withColumn(column, col(column).cast(target_type))
+    except Exception as e:
+        print(f"Warning: Could not cast {column} to {target_type}: {e}")
+        return df
+
+# ============================================
+# SCHEMA VALIDATION
+# ============================================
+def validate_schema(df, expected_schema: StructType, strict=False):
+    """Validate DataFrame schema against expected"""
+    actual_fields = {f.name: f for f in df.schema.fields}
+    expected_fields = {f.name: f for f in expected_schema.fields}
+    
+    errors = []
+    
+    # Check required fields exist
+    for name, field in expected_fields.items():
+        if name not in actual_fields:
+            if not field.nullable:
+                errors.append(f"Missing required column: {name}")
+        elif strict and actual_fields[name].dataType != field.dataType:
+            errors.append(f"Type mismatch for {name}: expected {field.dataType}, got {actual_fields[name].dataType}")
+    
+    return len(errors) == 0, errors</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="merge" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Schema Merge)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Schema Merge Strategies
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, lit
+
+spark = SparkSession.builder.appName("SchemaMerge").getOrCreate()
+
+# ============================================
+# PARQUET SCHEMA MERGE
+# ============================================
+# Enable schema merging for Parquet
+spark.conf.set("spark.sql.parquet.mergeSchema", "true")
+
+# Read with merged schema
+df = spark.read \
+    .option("mergeSchema", "true") \
+    .parquet("/data/partitioned_data")
+
+# ============================================
+# UNION WITH DIFFERENT SCHEMAS
+# ============================================
+def union_with_schema_alignment(df1, df2):
+    """Union DataFrames with different schemas"""
+    # Get all columns
+    all_columns = set(df1.columns) | set(df2.columns)
+    
+    # Add missing columns to each DataFrame
+    def add_missing(df, columns):
+        for col_name in columns:
+            if col_name not in df.columns:
+                df = df.withColumn(col_name, lit(None))
+        return df.select(sorted(columns))
+    
+    df1_aligned = add_missing(df1, all_columns)
+    df2_aligned = add_missing(df2, all_columns)
+    
+    return df1_aligned.union(df2_aligned)
+
+# ============================================
+# SCHEMA INFERENCE WITH SAMPLING
+# ============================================
+def infer_schema_from_sample(path, sample_size=1000):
+    """Infer schema from sample of data"""
+    df_sample = spark.read \
+        .option("inferSchema", "true") \
+        .option("samplingRatio", 0.1) \
+        .json(path)
+    
+    return df_sample.schema
+
+# ============================================
+# BACKWARD COMPATIBLE WRITES
+# ============================================
+def write_backward_compatible(df, path, partition_cols=None):
+    """Write data maintaining backward compatibility"""
+    
+    # Read existing schema if exists
+    try:
+        existing_df = spark.read.parquet(path)
+        existing_schema = existing_df.schema
+        
+        # Merge schemas
+        merged_schema = merge_schemas(existing_schema, df.schema)
+        
+        # Align new data to merged schema
+        df_aligned = align_to_schema(df, merged_schema)
+    except:
+        df_aligned = df
+    
+    # Write with schema merge enabled
+    writer = df_aligned.write \
+        .mode("append") \
+        .option("mergeSchema", "true")
+    
+    if partition_cols:
+        writer = writer.partitionBy(partition_cols)
+    
+    writer.parquet(path)
+
+def merge_schemas(schema1, schema2):
+    """Merge two schemas, keeping all fields"""
+    fields = {f.name: f for f in schema1.fields}
+    
+    for field in schema2.fields:
+        if field.name not in fields:
+            fields[field.name] = field
+        else:
+            # Handle type conflicts - prefer wider type
+            existing = fields[field.name]
+            if can_widen(existing.dataType, field.dataType):
+                fields[field.name] = field
+    
+    return StructType(list(fields.values()))
+
+def can_widen(type1, type2):
+    """Check if type2 is wider than type1"""
+    widening_rules = {
+        (IntegerType(), LongType()): True,
+        (IntegerType(), DoubleType()): True,
+        (LongType(), DoubleType()): True,
+        (FloatType(), DoubleType()): True,
+    }
+    return widening_rules.get((type(type1)(), type(type2)()), False)</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="delta" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Delta Lake Schema Evolution)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Delta Lake Schema Evolution
+"""
+from delta.tables import DeltaTable
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# ============================================
+# AUTO MERGE SCHEMA
+# ============================================
+# Enable automatic schema evolution
+df_new = spark.createDataFrame([
+    (1, "Alice", 100.0, "Electronics")  # New 'category' column
+], ["id", "name", "amount", "category"])
+
+# Write with schema merge
+df_new.write \
+    .format("delta") \
+    .mode("append") \
+    .option("mergeSchema", "true") \
+    .save("/delta/sales")
+
+# ============================================
+# OVERWRITE SCHEMA
+# ============================================
+# Completely replace schema (use with caution!)
+df_new_schema.write \
+    .format("delta") \
+    .mode("overwrite") \
+    .option("overwriteSchema", "true") \
+    .save("/delta/sales")
+
+# ============================================
+# ADD COLUMNS VIA ALTER TABLE
+# ============================================
+spark.sql("""
+    ALTER TABLE delta.`/delta/sales`
+    ADD COLUMNS (
+        category STRING COMMENT 'Product category',
+        created_at TIMESTAMP COMMENT 'Record creation time'
+    )
+""")
+
+# ============================================
+# CHANGE COLUMN TYPE
+# ============================================
+spark.sql("""
+    ALTER TABLE delta.`/delta/sales`
+    ALTER COLUMN amount TYPE DECIMAL(10,2)
+""")
+
+# ============================================
+# RENAME COLUMN
+# ============================================
+spark.sql("""
+    ALTER TABLE delta.`/delta/sales`
+    RENAME COLUMN old_name TO new_name
+""")
+
+# ============================================
+# DROP COLUMN (Delta 2.0+)
+# ============================================
+spark.sql("""
+    ALTER TABLE delta.`/delta/sales`
+    DROP COLUMN deprecated_column
+""")
+
+# ============================================
+# SCHEMA ENFORCEMENT
+# ============================================
+# Delta enforces schema by default
+# This will fail if schema doesn't match:
+try:
+    df_wrong_schema.write \
+        .format("delta") \
+        .mode("append") \
+        .save("/delta/sales")
+except Exception as e:
+    print(f"Schema mismatch: {e}")
+
+# ============================================
+# VIEW SCHEMA HISTORY
+# ============================================
+delta_table = DeltaTable.forPath(spark, "/delta/sales")
+
+# View history
+history = delta_table.history()
+history.select("version", "timestamp", "operation").show()
+
+# View schema at specific version
+df_v1 = spark.read.format("delta") \
+    .option("versionAsOf", 1) \
+    .load("/delta/sales")
+print(df_v1.schema)</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="migration" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Migration Patterns)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Schema Migration Patterns
+"""
+from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql.functions import col, lit, when, coalesce
+from pyspark.sql.types import *
+from typing import List, Callable
+from dataclasses import dataclass
+
+spark = SparkSession.builder.appName("SchemaMigration").getOrCreate()
+
+# ============================================
+# MIGRATION DEFINITION
+# ============================================
+@dataclass
+class Migration:
+    version: int
+    description: str
+    up: Callable[[DataFrame], DataFrame]
+    down: Callable[[DataFrame], DataFrame] = None
+
+# ============================================
+# MIGRATION REGISTRY
+# ============================================
+class MigrationManager:
+    def __init__(self):
+        self.migrations: List[Migration] = []
+    
+    def register(self, migration: Migration):
+        self.migrations.append(migration)
+        self.migrations.sort(key=lambda m: m.version)
+    
+    def migrate(self, df: DataFrame, from_version: int, to_version: int) -> DataFrame:
+        """Apply migrations to transform schema"""
+        if from_version < to_version:
+            # Upgrade
+            for m in self.migrations:
+                if from_version < m.version <= to_version:
+                    print(f"Applying migration {m.version}: {m.description}")
+                    df = m.up(df)
+        else:
+            # Downgrade
+            for m in reversed(self.migrations):
+                if to_version < m.version <= from_version:
+                    if m.down:
+                        print(f"Reverting migration {m.version}")
+                        df = m.down(df)
+                    else:
+                        raise ValueError(f"Migration {m.version} cannot be reverted")
+        
+        return df
+
+# ============================================
+# EXAMPLE MIGRATIONS
+# ============================================
+manager = MigrationManager()
+
+# Migration 1: Add category column
+manager.register(Migration(
+    version=1,
+    description="Add category column",
+    up=lambda df: df.withColumn("category", lit("unknown")),
+    down=lambda df: df.drop("category")
+))
+
+# Migration 2: Split name into first/last
+manager.register(Migration(
+    version=2,
+    description="Split name into first_name and last_name",
+    up=lambda df: df \
+        .withColumn("first_name", split(col("name"), " ")[0]) \
+        .withColumn("last_name", split(col("name"), " ")[1]) \
+        .drop("name"),
+    down=lambda df: df \
+        .withColumn("name", concat(col("first_name"), lit(" "), col("last_name"))) \
+        .drop("first_name", "last_name")
+))
+
+# Migration 3: Change amount precision
+manager.register(Migration(
+    version=3,
+    description="Change amount to decimal",
+    up=lambda df: df.withColumn("amount", col("amount").cast(DecimalType(10, 2))),
+    down=lambda df: df.withColumn("amount", col("amount").cast(DoubleType()))
+))
+
+# ============================================
+# APPLY MIGRATIONS
+# ============================================
+df_v0 = spark.createDataFrame([
+    (1, "John Doe", 100.0),
+    (2, "Jane Smith", 200.0)
+], ["id", "name", "amount"])
+
+# Migrate from v0 to v3
+df_v3 = manager.migrate(df_v0, from_version=0, to_version=3)
+df_v3.show()
+
+# ============================================
+# VERSIONED SCHEMA STORAGE
+# ============================================
+def save_with_version(df: DataFrame, path: str, version: int):
+    """Save DataFrame with schema version metadata"""
+    df.write \
+        .mode("overwrite") \
+        .option("schema_version", str(version)) \
+        .parquet(f"{path}/v{version}")
+
+def load_and_migrate(path: str, target_version: int) -> DataFrame:
+    """Load data and migrate to target version"""
+    import os
+    
+    # Find latest version
+    versions = [int(d.replace("v", "")) for d in os.listdir(path) if d.startswith("v")]
+    current_version = max(versions)
+    
+    df = spark.read.parquet(f"{path}/v{current_version}")
+    
+    if current_version != target_version:
+        df = manager.migrate(df, current_version, target_version)
+    
+    return df</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../02_data_validation/index.html" style="color: var(--text-muted);">&larr; Previous: Data Validation</a>
+                <a href="../04_error_handling/index.html" style="color: var(--accent-primary);">Next: Error Handling &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showEvolution();
+        });
+        
+        function showEvolution() {
+            viz.clear();
+            
+            viz.createDataNode({ type: 'cube', size: 0.4, color: 0x868e96, position: { x: -2.5, y: 0.3, z: 0 } });
+            viz.createLabel('Schema v1', { x: -2.5, y: 1, z: 0 });
+            
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x4dabf7, position: { x: 0, y: 0.35, z: 0 } });
+            viz.createLabel('Schema v2', { x: 0, y: 1.1, z: 0 });
+            
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0x51cf66, position: { x: 2.5, y: 0.4, z: 0 } });
+            viz.createLabel('Schema v3', { x: 2.5, y: 1.2, z: 0 });
+            
+            viz.createArrow({ x: -1.8, y: 0.3, z: 0 }, { x: -0.7, y: 0.35, z: 0 }, { color: 0xffd43b });
+            viz.createArrow({ x: 0.7, y: 0.35, z: 0 }, { x: 1.7, y: 0.4, z: 0 }, { color: 0xffd43b });
+            
+            viz.createLabel('Schema Evolution Over Time', { x: 0, y: -1, z: 0 });
+            viz.createGrid(8, 8);
+        }
+    </script>
+</body>
+</html>

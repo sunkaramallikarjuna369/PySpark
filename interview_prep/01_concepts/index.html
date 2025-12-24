@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Core Concepts - Interview Prep</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#interview" class="nav-link active">Interview Prep</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Core Concepts for Data Engineering Interviews</h1>
+            <p>Master the fundamental concepts that are commonly asked in data engineering interviews. This section covers Spark internals, distributed computing principles, and key architectural concepts.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Interview Topics</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="spark">Spark Architecture</button>
+                <button class="tab" data-tab="memory">Memory Management</button>
+                <button class="tab" data-tab="shuffle">Shuffle Operations</button>
+                <button class="tab" data-tab="catalyst">Catalyst Optimizer</button>
+                <button class="tab" data-tab="compare">RDD vs DataFrame vs Dataset</button>
+            </div>
+            <div class="tab-contents">
+                <div id="spark" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+<h3>Q: Explain Spark's Architecture</h3>
+<p><strong>Answer:</strong></p>
+<p>Spark follows a master-worker architecture with these key components:</p>
+
+<p><strong>Driver Program:</strong></p>
+<ul>
+    <li>Contains the SparkContext/SparkSession</li>
+    <li>Converts user code into tasks</li>
+    <li>Schedules tasks on executors</li>
+    <li>Coordinates job execution</li>
+</ul>
+
+<p><strong>Cluster Manager:</strong></p>
+<ul>
+    <li>Allocates resources across applications</li>
+    <li>Types: Standalone, YARN, Mesos, Kubernetes</li>
+    <li>Manages executor lifecycle</li>
+</ul>
+
+<p><strong>Executors:</strong></p>
+<ul>
+    <li>Run on worker nodes</li>
+    <li>Execute tasks and store data</li>
+    <li>Report status back to driver</li>
+    <li>Each application has its own executors</li>
+</ul>
+
+<p><strong>Job Execution Flow:</strong></p>
+<ol>
+    <li>User submits application to driver</li>
+    <li>Driver creates SparkContext, connects to cluster manager</li>
+    <li>Cluster manager allocates executors</li>
+    <li>Driver sends application code to executors</li>
+    <li>SparkContext sends tasks to executors</li>
+    <li>Executors run tasks and return results</li>
+</ol>
+
+<h3>Q: What is lazy evaluation in Spark?</h3>
+<p><strong>Answer:</strong></p>
+<p>Lazy evaluation means Spark doesn't execute transformations immediately. Instead, it builds a DAG (Directed Acyclic Graph) of transformations and only executes when an action is called.</p>
+
+<p><strong>Benefits:</strong></p>
+<ul>
+    <li>Optimization: Spark can optimize the entire query plan</li>
+    <li>Efficiency: Avoids unnecessary computation</li>
+    <li>Pipelining: Multiple operations can be combined</li>
+</ul>
+
+<p><strong>Transformations (Lazy):</strong> map, filter, select, groupBy, join</p>
+<p><strong>Actions (Trigger Execution):</strong> count, collect, show, write, save</p>
+
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px; margin-top: 1rem;">
+# Nothing happens here - just building DAG
+df_filtered = df.filter(col("amount") > 100)
+df_grouped = df_filtered.groupBy("category")
+df_result = df_grouped.sum("amount")
+
+# Execution happens here
+df_result.show()  # Action triggers computation
+</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="memory" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+<h3>Q: Explain Spark's Memory Management</h3>
+<p><strong>Answer:</strong></p>
+<p>Spark uses a unified memory management model (since Spark 1.6) that divides executor memory into regions:</p>
+
+<p><strong>Memory Regions:</strong></p>
+<ul>
+    <li><strong>Reserved Memory (300MB):</strong> For Spark internal objects</li>
+    <li><strong>User Memory (1 - spark.memory.fraction):</strong> For user data structures, UDFs</li>
+    <li><strong>Spark Memory (spark.memory.fraction, default 0.6):</strong>
+        <ul>
+            <li><strong>Storage Memory:</strong> For cached data, broadcast variables</li>
+            <li><strong>Execution Memory:</strong> For shuffles, joins, sorts, aggregations</li>
+        </ul>
+    </li>
+</ul>
+
+<p><strong>Unified Memory Model:</strong></p>
+<ul>
+    <li>Storage and Execution can borrow from each other</li>
+    <li>Execution can evict storage if needed (but not vice versa when storage is in use)</li>
+    <li>Controlled by spark.memory.storageFraction (default 0.5)</li>
+</ul>
+
+<h3>Q: How do you handle Out of Memory errors?</h3>
+<p><strong>Answer:</strong></p>
+<ol>
+    <li><strong>Increase executor memory:</strong> --executor-memory 8g</li>
+    <li><strong>Increase number of partitions:</strong> Reduce data per partition</li>
+    <li><strong>Use disk-based storage:</strong> MEMORY_AND_DISK instead of MEMORY_ONLY</li>
+    <li><strong>Optimize joins:</strong> Use broadcast for small tables</li>
+    <li><strong>Avoid collect():</strong> Don't bring all data to driver</li>
+    <li><strong>Use serialized storage:</strong> MEMORY_ONLY_SER for less memory usage</li>
+    <li><strong>Tune GC:</strong> Use G1GC for large heaps</li>
+</ol>
+
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px; margin-top: 1rem;">
+# Memory configuration
+spark.conf.set("spark.executor.memory", "8g")
+spark.conf.set("spark.driver.memory", "4g")
+spark.conf.set("spark.memory.fraction", "0.6")
+spark.conf.set("spark.memory.storageFraction", "0.5")
+
+# Increase partitions to reduce memory per partition
+df.repartition(200)
+
+# Use serialized storage
+df.persist(StorageLevel.MEMORY_AND_DISK_SER)
+</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="shuffle" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+<h3>Q: What is a shuffle in Spark and why is it expensive?</h3>
+<p><strong>Answer:</strong></p>
+<p>A shuffle is the process of redistributing data across partitions, typically required when data needs to be reorganized by key (e.g., for groupBy, join, repartition).</p>
+
+<p><strong>Why it's expensive:</strong></p>
+<ul>
+    <li><strong>Disk I/O:</strong> Data is written to disk before transfer</li>
+    <li><strong>Network I/O:</strong> Data transferred between executors</li>
+    <li><strong>Serialization:</strong> Data must be serialized/deserialized</li>
+    <li><strong>Memory pressure:</strong> Buffers needed for sorting and aggregation</li>
+</ul>
+
+<p><strong>Operations that cause shuffle:</strong></p>
+<ul>
+    <li>groupBy, reduceByKey, aggregateByKey</li>
+    <li>join, cogroup (except broadcast join)</li>
+    <li>repartition, repartitionByRange</li>
+    <li>distinct, intersection, subtract</li>
+    <li>sortBy, orderBy</li>
+</ul>
+
+<h3>Q: How do you minimize shuffles?</h3>
+<p><strong>Answer:</strong></p>
+<ol>
+    <li><strong>Use broadcast joins:</strong> For small tables (&lt;10MB default)</li>
+    <li><strong>Pre-partition data:</strong> Partition by join key</li>
+    <li><strong>Use coalesce instead of repartition:</strong> When reducing partitions</li>
+    <li><strong>Combine operations:</strong> groupBy multiple columns at once</li>
+    <li><strong>Use bucketing:</strong> For repeated joins on same key</li>
+    <li><strong>Filter early:</strong> Reduce data before shuffle</li>
+</ol>
+
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px; margin-top: 1rem;">
+# BAD: Two shuffles
+df.groupBy("a").count().groupBy("b").count()
+
+# GOOD: One shuffle
+df.groupBy("a", "b").count()
+
+# BAD: Shuffle join
+df_large.join(df_small, "key")
+
+# GOOD: Broadcast join (no shuffle)
+df_large.join(broadcast(df_small), "key")
+
+# Shuffle partition configuration
+spark.conf.set("spark.sql.shuffle.partitions", "200")
+</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="catalyst" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+<h3>Q: What is the Catalyst Optimizer?</h3>
+<p><strong>Answer:</strong></p>
+<p>Catalyst is Spark SQL's query optimizer that transforms logical plans into optimized physical execution plans.</p>
+
+<p><strong>Optimization Phases:</strong></p>
+<ol>
+    <li><strong>Analysis:</strong> Resolve references, validate schema</li>
+    <li><strong>Logical Optimization:</strong> Apply rule-based optimizations
+        <ul>
+            <li>Predicate pushdown</li>
+            <li>Constant folding</li>
+            <li>Column pruning</li>
+            <li>Boolean expression simplification</li>
+        </ul>
+    </li>
+    <li><strong>Physical Planning:</strong> Generate physical plans, choose best based on cost</li>
+    <li><strong>Code Generation:</strong> Generate optimized Java bytecode (Tungsten)</li>
+</ol>
+
+<h3>Q: What is predicate pushdown?</h3>
+<p><strong>Answer:</strong></p>
+<p>Predicate pushdown moves filter conditions as close to the data source as possible, reducing the amount of data read and processed.</p>
+
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px; margin-top: 1rem;">
+# Without pushdown: Read all data, then filter
+df = spark.read.parquet("/data")
+df_filtered = df.filter(col("date") == "2024-01-01")
+
+# With pushdown: Filter pushed to Parquet reader
+# Only reads relevant row groups/pages
+# Check with explain():
+df_filtered.explain(True)
+
+# Look for "PushedFilters" in the plan:
+# PushedFilters: [IsNotNull(date), EqualTo(date,2024-01-01)]
+</pre>
+
+<h3>Q: What is Tungsten?</h3>
+<p><strong>Answer:</strong></p>
+<p>Tungsten is Spark's execution engine that provides:</p>
+<ul>
+    <li><strong>Memory Management:</strong> Off-heap memory, avoiding GC overhead</li>
+    <li><strong>Cache-aware Computation:</strong> Algorithms optimized for CPU cache</li>
+    <li><strong>Code Generation:</strong> Whole-stage code generation for CPU efficiency</li>
+    <li><strong>Binary Processing:</strong> Operates on binary data without deserialization</li>
+</ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="compare" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+<h3>Q: Compare RDD, DataFrame, and Dataset</h3>
+<p><strong>Answer:</strong></p>
+
+<table style="width: 100%; border-collapse: collapse; margin: 1rem 0;">
+    <tr style="background: var(--bg-primary);">
+        <th style="padding: 0.5rem; border: 1px solid var(--border-color);">Feature</th>
+        <th style="padding: 0.5rem; border: 1px solid var(--border-color);">RDD</th>
+        <th style="padding: 0.5rem; border: 1px solid var(--border-color);">DataFrame</th>
+        <th style="padding: 0.5rem; border: 1px solid var(--border-color);">Dataset</th>
+    </tr>
+    <tr>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">Type Safety</td>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">Compile-time</td>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">Runtime</td>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">Compile-time</td>
+    </tr>
+    <tr>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">Optimization</td>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">No Catalyst</td>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">Catalyst + Tungsten</td>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">Catalyst + Tungsten</td>
+    </tr>
+    <tr>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">Schema</td>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">No schema</td>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">Has schema</td>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">Has schema</td>
+    </tr>
+    <tr>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">API</td>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">Functional</td>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">Declarative SQL-like</td>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">Both</td>
+    </tr>
+    <tr>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">Language</td>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">Scala, Java, Python</td>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">All languages</td>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">Scala, Java only</td>
+    </tr>
+    <tr>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">Use Case</td>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">Low-level control</td>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">SQL/BI workloads</td>
+        <td style="padding: 0.5rem; border: 1px solid var(--border-color);">Type-safe + optimization</td>
+    </tr>
+</table>
+
+<p><strong>When to use each:</strong></p>
+<ul>
+    <li><strong>RDD:</strong> Low-level transformations, unstructured data, fine-grained control</li>
+    <li><strong>DataFrame:</strong> Most common choice, SQL-like operations, Python/R users</li>
+    <li><strong>Dataset:</strong> Type safety needed, Scala/Java projects, complex domain objects</li>
+</ul>
+
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px; margin-top: 1rem;">
+# RDD
+rdd = sc.parallelize([1, 2, 3, 4, 5])
+rdd.map(lambda x: x * 2).collect()
+
+# DataFrame
+df = spark.createDataFrame([(1,), (2,), (3,)], ["value"])
+df.select(col("value") * 2).show()
+
+# Dataset (Scala)
+case class Person(name: String, age: Int)
+val ds = Seq(Person("Alice", 30)).toDS()
+ds.filter(_.age > 25)
+</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../../index.html#interview" style="color: var(--text-muted);">&larr; Back to Interview Prep</a>
+                <a href="../02_coding_challenges/index.html" style="color: var(--accent-primary);">Next: Coding Challenges &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 8, y: 5, z: 8 } });
+            showArchitecture();
+        });
+        
+        function showArchitecture() {
+            viz.clear();
+            
+            // Driver
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0x4dabf7, position: { x: 0, y: 1.5, z: 0 } });
+            viz.createLabel('Driver', { x: 0, y: 2.3, z: 0 });
+            
+            // Cluster Manager
+            viz.createDataNode({ type: 'sphere', size: 0.4, color: 0xffd43b, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('Cluster Manager', { x: 0, y: 0.5, z: 1 });
+            
+            // Executors
+            for (let i = 0; i < 3; i++) {
+                const x = (i - 1) * 2;
+                viz.createDataNode({ type: 'cube', size: 0.5, color: 0x51cf66, position: { x: x, y: -0.5, z: 0 } });
+                viz.createLabel(`Executor ${i + 1}`, { x: x, y: -1.2, z: 0 });
+            }
+            
+            // Connections
+            viz.createArrow({ x: 0, y: 1.1, z: 0 }, { x: 0, y: 0.8, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: -0.3, y: 0.2, z: 0 }, { x: -1.7, y: -0.2, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0, y: 0.2, z: 0 }, { x: 0, y: -0.2, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.3, y: 0.2, z: 0 }, { x: 1.7, y: -0.2, z: 0 }, { color: 0x888888 });
+            
+            viz.createGrid(8, 8);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Execution Plans - Performance Lab</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#performance" class="nav-link active">Performance Lab</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Understanding Execution Plans</h1>
+            <p>Learn to read and interpret Spark execution plans to identify performance bottlenecks, understand query optimization, and debug slow queries.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="explain">Explain Methods</button>
+                <button class="tab" data-tab="reading">Reading Plans</button>
+                <button class="tab" data-tab="operators">Key Operators</button>
+                <button class="tab" data-tab="optimization">Optimization Tips</button>
+                <button class="tab" data-tab="sql">SQL EXPLAIN</button>
+            </div>
+            <div class="tab-contents">
+                <div id="explain" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Explain Methods)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Different ways to view execution plans
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, sum as spark_sum
+
+spark = SparkSession.builder.appName("ExecutionPlans").getOrCreate()
+
+df = spark.read.parquet("/data/sales")
+
+# ============================================
+# BASIC EXPLAIN
+# ============================================
+# Physical plan only
+df.filter(col("amount") > 100).explain()
+
+# Output:
+# == Physical Plan ==
+# *(1) Filter (amount#12 > 100)
+# +- *(1) ColumnarToRow
+#    +- FileScan parquet [amount#12,...]
+
+# ============================================
+# EXTENDED EXPLAIN
+# ============================================
+# Shows all plan stages
+df.filter(col("amount") > 100).explain(extended=True)
+
+# Output includes:
+# == Parsed Logical Plan ==
+# == Analyzed Logical Plan ==
+# == Optimized Logical Plan ==
+# == Physical Plan ==
+
+# ============================================
+# EXPLAIN WITH MODE
+# ============================================
+# Simple - physical plan only
+df.explain(mode="simple")
+
+# Extended - all plans
+df.explain(mode="extended")
+
+# Codegen - generated Java code
+df.explain(mode="codegen")
+
+# Cost - with statistics
+df.explain(mode="cost")
+
+# Formatted - human-readable
+df.explain(mode="formatted")
+
+# ============================================
+# FORMATTED EXPLAIN (Best for reading)
+# ============================================
+query = df \
+    .filter(col("amount") > 100) \
+    .groupBy("category") \
+    .agg(spark_sum("amount").alias("total"))
+
+query.explain(mode="formatted")
+
+# Output:
+# == Physical Plan ==
+# AdaptiveSparkPlan isFinalPlan=false
+# +- HashAggregate(keys=[category#10], functions=[sum(amount#12)])
+#    +- Exchange hashpartitioning(category#10, 200)
+#       +- HashAggregate(keys=[category#10], functions=[partial_sum(amount#12)])
+#          +- Filter (amount#12 > 100)
+#             +- FileScan parquet [category#10,amount#12]
+
+# ============================================
+# GET PLAN AS STRING
+# ============================================
+plan_string = query._jdf.queryExecution().toString()
+print(plan_string)
+
+# ============================================
+# ANALYZE COMMAND (for tables)
+# ============================================
+df.createOrReplaceTempView("sales")
+spark.sql("ANALYZE TABLE sales COMPUTE STATISTICS")
+spark.sql("ANALYZE TABLE sales COMPUTE STATISTICS FOR COLUMNS amount, category")</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="reading" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Reading Execution Plans)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+How to Read Execution Plans
+- Bottom to top execution
+- Key symbols and metrics
+- Identifying bottlenecks
+"""
+
+# ============================================
+# PLAN STRUCTURE
+# ============================================
+"""
+Plans are read BOTTOM TO TOP:
+1. Data source (FileScan, InMemoryTableScan)
+2. Transformations (Filter, Project, HashAggregate)
+3. Exchanges (Shuffle operations)
+4. Final output
+
+Key symbols:
+- * (asterisk): Whole-stage code generation enabled
+- +- : Tree structure showing parent-child relationships
+- Exchange: Shuffle operation (expensive!)
+- BroadcastExchange: Broadcast for join
+"""
+
+# ============================================
+# EXAMPLE PLAN WALKTHROUGH
+# ============================================
+df_orders = spark.read.parquet("/data/orders")
+df_products = spark.read.parquet("/data/products")
+
+query = df_orders \
+    .join(df_products, "product_id") \
+    .filter(col("amount") > 100) \
+    .groupBy("category") \
+    .agg(spark_sum("amount").alias("total"))
+
+query.explain(mode="formatted")
+
+"""
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=false
++- HashAggregate(keys=[category], functions=[sum(amount)])        <- Final aggregation
+   +- Exchange hashpartitioning(category, 200)                    <- SHUFFLE for groupBy
+      +- HashAggregate(keys=[category], functions=[partial_sum])  <- Partial aggregation
+         +- Project [category, amount]                            <- Column selection
+            +- Filter (amount > 100)                              <- Filter pushdown
+               +- BroadcastHashJoin [product_id], Inner           <- Join (broadcast)
+                  :- FileScan parquet orders [product_id, amount] <- Scan orders
+                  +- BroadcastExchange                            <- Broadcast products
+                     +- FileScan parquet products [product_id, category]
+
+Reading this plan:
+1. Scan orders table (bottom left)
+2. Scan products table and broadcast it (bottom right)
+3. BroadcastHashJoin - join without shuffle (good!)
+4. Filter amount > 100 (pushed down after join)
+5. Project - select only needed columns
+6. Partial aggregation (map-side combine)
+7. Exchange - shuffle for final groupBy (expensive)
+8. Final aggregation
+"""
+
+# ============================================
+# IDENTIFYING BOTTLENECKS
+# ============================================
+"""
+RED FLAGS in execution plans:
+
+1. Multiple Exchange operations
+   - Each Exchange = shuffle = network I/O
+   - Look for ways to reduce shuffles
+
+2. SortMergeJoin instead of BroadcastHashJoin
+   - Requires shuffle on both sides
+   - Consider broadcast hint for small tables
+
+3. Missing filter pushdown
+   - Filter should be close to FileScan
+   - If filter is high in plan, check data types
+
+4. CartesianProduct
+   - Cross join - usually a mistake
+   - Check join conditions
+
+5. Large Exchange data size
+   - Check "data size" in Spark UI
+   - Consider pre-filtering or aggregating
+
+6. No whole-stage codegen (*)
+   - Missing asterisk means no codegen
+   - Usually due to UDFs or complex types
+"""
+
+# ============================================
+# COMPARE PLANS
+# ============================================
+# Bad plan (no broadcast)
+spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "-1")
+query_bad = df_orders.join(df_products, "product_id")
+query_bad.explain()  # Shows SortMergeJoin with 2 Exchanges
+
+# Good plan (with broadcast)
+spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "100MB")
+query_good = df_orders.join(df_products, "product_id")
+query_good.explain()  # Shows BroadcastHashJoin with 1 Exchange</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="operators" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Key Operators)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Key Physical Operators in Spark Plans
+"""
+
+# ============================================
+# SCAN OPERATORS
+# ============================================
+"""
+FileScan parquet/orc/json/csv
+- Reads from file system
+- Look for: partition pruning, column pruning
+- Good: "PartitionFilters: [date >= 2024-01-01]"
+- Good: "PushedFilters: [IsNotNull(id)]"
+
+InMemoryTableScan
+- Reads from cached DataFrame
+- Fast but uses memory
+
+BatchScan (Spark 3.0+)
+- New data source API
+- Better pushdown support
+"""
+
+# ============================================
+# JOIN OPERATORS
+# ============================================
+"""
+BroadcastHashJoin (BEST for small tables)
+- One side broadcast to all executors
+- No shuffle required
+- Look for: BroadcastExchange
+
+SortMergeJoin (DEFAULT for large tables)
+- Both sides shuffled and sorted
+- Two Exchange operations
+- Can handle any size data
+
+ShuffledHashJoin
+- Hash join with shuffle
+- Better than SortMerge for unsorted data
+- Enable: spark.sql.join.preferSortMergeJoin=false
+
+BroadcastNestedLoopJoin
+- For non-equi joins with broadcast
+- Can be slow for large data
+
+CartesianProduct
+- Cross join - avoid if possible!
+"""
+
+# ============================================
+# AGGREGATE OPERATORS
+# ============================================
+"""
+HashAggregate
+- Hash-based aggregation
+- Two phases: partial (map-side) + final
+- Look for: "partial_" prefix in functions
+
+SortAggregate
+- Sort-based aggregation
+- Used when hash doesn't fit in memory
+- Slower than HashAggregate
+
+ObjectHashAggregate
+- For complex types (arrays, maps)
+- No whole-stage codegen
+"""
+
+# ============================================
+# EXCHANGE OPERATORS (SHUFFLES)
+# ============================================
+"""
+Exchange hashpartitioning
+- Shuffle by hash of columns
+- Used for: groupBy, join
+
+Exchange rangepartitioning
+- Shuffle by range
+- Used for: orderBy, sort
+
+Exchange RoundRobinPartitioning
+- Even distribution
+- Used for: repartition(n)
+
+Exchange SinglePartition
+- All data to one partition
+- Used for: global aggregation, collect
+
+BroadcastExchange
+- Send to all executors
+- Used for: broadcast join
+"""
+
+# ============================================
+# OTHER IMPORTANT OPERATORS
+# ============================================
+"""
+Filter
+- Row filtering
+- Should be pushed down close to scan
+
+Project
+- Column selection/transformation
+- Should only include needed columns
+
+Sort
+- Sorting operation
+- Expensive for large data
+
+TakeOrderedAndProject
+- Optimized for LIMIT with ORDER BY
+- Better than full sort + limit
+
+Window
+- Window functions
+- Requires sort within partitions
+
+Expand
+- For CUBE, ROLLUP, GROUPING SETS
+- Duplicates rows for multiple aggregations
+
+Generate
+- For explode, posexplode
+- Can increase row count significantly
+"""
+
+# ============================================
+# WHOLE-STAGE CODEGEN
+# ============================================
+"""
+WholeStageCodegen
+- Fuses multiple operators into single Java function
+- Indicated by * prefix: *(1) Filter
+- Much faster than interpreted execution
+
+Operators that break codegen:
+- UDFs (use pandas_udf instead)
+- Complex types (arrays, maps, structs)
+- Some window functions
+"""
+
+# Check codegen
+query.explain(mode="codegen")  # Shows generated Java code</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="optimization" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Optimization Tips)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Optimization Tips Based on Execution Plans
+"""
+
+# ============================================
+# TIP 1: REDUCE SHUFFLES
+# ============================================
+# Bad: Multiple shuffles
+df.groupBy("a").count().groupBy("b").count()  # 2 shuffles
+
+# Better: Combine operations
+df.groupBy("a", "b").count()  # 1 shuffle
+
+# ============================================
+# TIP 2: PUSH FILTERS DOWN
+# ============================================
+# Bad: Filter after join
+df1.join(df2, "key").filter(col("date") > "2024-01-01")
+
+# Better: Filter before join
+df1.filter(col("date") > "2024-01-01").join(df2, "key")
+
+# ============================================
+# TIP 3: USE BROADCAST FOR SMALL TABLES
+# ============================================
+from pyspark.sql.functions import broadcast
+
+# Force broadcast
+df_large.join(broadcast(df_small), "key")
+
+# ============================================
+# TIP 4: SELECT ONLY NEEDED COLUMNS
+# ============================================
+# Bad: Select all columns
+df.join(df2, "key")
+
+# Better: Select needed columns first
+df.select("key", "amount").join(df2.select("key", "name"), "key")
+
+# ============================================
+# TIP 5: USE PARTITION PRUNING
+# ============================================
+# Ensure filter on partition column
+df.filter(col("date") == "2024-01-01")  # Prunes partitions
+
+# Check plan for: PartitionFilters: [date = 2024-01-01]
+
+# ============================================
+# TIP 6: AVOID UDFs WHEN POSSIBLE
+# ============================================
+# Bad: Python UDF (breaks codegen)
+@udf
+def my_func(x):
+    return x * 2
+
+# Better: Use built-in functions
+from pyspark.sql.functions import col
+df.withColumn("doubled", col("x") * 2)
+
+# If UDF needed, use pandas_udf
+from pyspark.sql.functions import pandas_udf
+@pandas_udf("double")
+def my_pandas_func(s: pd.Series) -> pd.Series:
+    return s * 2
+
+# ============================================
+# TIP 7: OPTIMIZE JOIN ORDER
+# ============================================
+# Put largest table first in multi-way joins
+# Spark's optimizer usually handles this, but hints help
+
+df_large \
+    .join(df_medium, "key1") \
+    .join(broadcast(df_small), "key2")
+
+# ============================================
+# TIP 8: USE BUCKETING FOR REPEATED JOINS
+# ============================================
+# Create bucketed tables
+df.write.bucketBy(100, "key").saveAsTable("bucketed_table")
+
+# Join without shuffle
+spark.sql("""
+    SELECT * FROM bucketed_table1 t1
+    JOIN bucketed_table2 t2 ON t1.key = t2.key
+""")
+
+# ============================================
+# TIP 9: ENABLE AQE
+# ============================================
+spark.conf.set("spark.sql.adaptive.enabled", "true")
+spark.conf.set("spark.sql.adaptive.coalescePartitions.enabled", "true")
+spark.conf.set("spark.sql.adaptive.skewJoin.enabled", "true")
+
+# ============================================
+# TIP 10: CHECK STATISTICS
+# ============================================
+# Analyze tables for better optimization
+spark.sql("ANALYZE TABLE my_table COMPUTE STATISTICS")
+spark.sql("ANALYZE TABLE my_table COMPUTE STATISTICS FOR ALL COLUMNS")
+
+# Check statistics
+spark.sql("DESCRIBE EXTENDED my_table").show()</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="sql" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">SQL (EXPLAIN in Spark SQL)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>-- ============================================
+-- BASIC EXPLAIN
+-- ============================================
+EXPLAIN
+SELECT category, SUM(amount) as total
+FROM sales
+WHERE amount > 100
+GROUP BY category;
+
+-- ============================================
+-- EXTENDED EXPLAIN
+-- ============================================
+EXPLAIN EXTENDED
+SELECT * FROM orders o
+JOIN products p ON o.product_id = p.product_id;
+
+-- ============================================
+-- FORMATTED EXPLAIN
+-- ============================================
+EXPLAIN FORMATTED
+SELECT category, COUNT(*) as cnt
+FROM sales
+GROUP BY category
+ORDER BY cnt DESC
+LIMIT 10;
+
+-- ============================================
+-- COST-BASED EXPLAIN
+-- ============================================
+EXPLAIN COST
+SELECT * FROM large_table
+WHERE date = '2024-01-01';
+
+-- ============================================
+-- CODEGEN EXPLAIN
+-- ============================================
+EXPLAIN CODEGEN
+SELECT a, SUM(b) FROM table GROUP BY a;
+
+-- ============================================
+-- ANALYZE TABLE FOR STATISTICS
+-- ============================================
+-- Compute table statistics
+ANALYZE TABLE sales COMPUTE STATISTICS;
+
+-- Compute column statistics
+ANALYZE TABLE sales COMPUTE STATISTICS FOR COLUMNS amount, category, date;
+
+-- Compute all column statistics
+ANALYZE TABLE sales COMPUTE STATISTICS FOR ALL COLUMNS;
+
+-- ============================================
+-- VIEW STATISTICS
+-- ============================================
+DESCRIBE EXTENDED sales;
+DESCRIBE EXTENDED sales amount;
+
+-- ============================================
+-- QUERY HINTS
+-- ============================================
+-- Broadcast hint
+SELECT /*+ BROADCAST(p) */ *
+FROM orders o
+JOIN products p ON o.product_id = p.product_id;
+
+-- Merge hint (force sort-merge join)
+SELECT /*+ MERGE(o, p) */ *
+FROM orders o
+JOIN products p ON o.product_id = p.product_id;
+
+-- Shuffle hash hint
+SELECT /*+ SHUFFLE_HASH(o) */ *
+FROM orders o
+JOIN products p ON o.product_id = p.product_id;
+
+-- Coalesce hint
+SELECT /*+ COALESCE(10) */ *
+FROM large_table;
+
+-- Repartition hint
+SELECT /*+ REPARTITION(100) */ *
+FROM large_table;
+
+-- Repartition by column
+SELECT /*+ REPARTITION(100, category) */ *
+FROM sales;
+
+-- ============================================
+-- EXAMPLE: COMPARING PLANS
+-- ============================================
+-- Without hint (may use SortMergeJoin)
+EXPLAIN
+SELECT * FROM orders o
+JOIN products p ON o.product_id = p.product_id;
+
+-- With broadcast hint (uses BroadcastHashJoin)
+EXPLAIN
+SELECT /*+ BROADCAST(p) */ *
+FROM orders o
+JOIN products p ON o.product_id = p.product_id;</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../03_cache_optimization/index.html" style="color: var(--text-muted);">&larr; Previous: Cache Optimization</a>
+                <a href="../../index.html#performance" style="color: var(--accent-primary);">Back to Performance Lab &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 8, y: 5, z: 8 } });
+            showPlan();
+        });
+        
+        function showPlan() {
+            viz.clear();
+            
+            // Execution plan tree
+            viz.createDataNode({ type: 'sphere', size: 0.4, color: 0x51cf66, position: { x: 0, y: 2.5, z: 0 } });
+            viz.createLabel('Result', { x: 0, y: 3.2, z: 0 });
+            
+            viz.createDataNode({ type: 'cube', size: 0.35, color: 0x4dabf7, position: { x: 0, y: 1.5, z: 0 } });
+            viz.createLabel('HashAggregate', { x: 0, y: 1.5, z: 1 });
+            
+            viz.createDataNode({ type: 'cube', size: 0.35, color: 0xff6b6b, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('Exchange (Shuffle)', { x: 0, y: 0.5, z: 1 });
+            
+            viz.createDataNode({ type: 'cube', size: 0.35, color: 0xffd43b, position: { x: -1, y: -0.5, z: 0 } });
+            viz.createLabel('Filter', { x: -1, y: -0.5, z: 1 });
+            
+            viz.createDataNode({ type: 'cylinder', size: 0.35, color: 0x868e96, position: { x: -1, y: -1.5, z: 0 } });
+            viz.createLabel('FileScan', { x: -1, y: -2.2, z: 0 });
+            
+            // Arrows
+            viz.createArrow({ x: 0, y: 2.1, z: 0 }, { x: 0, y: 1.9, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0, y: 1.1, z: 0 }, { x: 0, y: 0.9, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: -0.3, y: 0.2, z: 0 }, { x: -0.7, y: -0.2, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: -1, y: -0.9, z: 0 }, { x: -1, y: -1.1, z: 0 }, { color: 0x888888 });
+            
+            viz.createGrid(8, 8);
+        }
+    </script>
+</body>
+</html>

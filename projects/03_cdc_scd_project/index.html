@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CDC/SCD Implementation Project - Data Engineering Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#projects" class="nav-link active">Projects</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>CDC and SCD Implementation Project</h1>
+            <p>Build a production-grade Change Data Capture (CDC) pipeline with Slowly Changing Dimension (SCD) Type 2 implementation. This project covers CDC pattern detection, merge operations, historical tracking, and handling late-arriving data.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+            
+            <h2>Business Problem</h2>
+            <div class="code-container">
+                <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+                    <p><strong>Scenario:</strong> A retail company needs to track changes to customer and product data over time for regulatory compliance and historical analysis. The source system provides CDC feeds (inserts, updates, deletes) that must be applied to dimension tables while maintaining full history.</p>
+                    <p><strong>Requirements:</strong></p>
+                    <ul>
+                        <li>Process CDC events (INSERT, UPDATE, DELETE) from source systems</li>
+                        <li>Implement SCD Type 2 for customer dimension (full history)</li>
+                        <li>Implement SCD Type 1 for product dimension (overwrite)</li>
+                        <li>Handle late-arriving CDC events correctly</li>
+                        <li>Support point-in-time queries for historical analysis</li>
+                        <li>Implement merge/upsert operations efficiently</li>
+                    </ul>
+                </div>
+            </div>
+
+            <h2>Architecture Diagram</h2>
+            <div class="code-container">
+                <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px; font-family: monospace; white-space: pre;">
++------------------+     +------------------+     +------------------+     +------------------+
+|   SOURCE SYSTEM  |     |    CDC CAPTURE   |     |   CDC PROCESSOR  |     |  DIMENSION TABLE |
++------------------+     +------------------+     +------------------+     +------------------+
+|                  |     |                  |     |                  |     |                  |
+| Customer Table   |---->| Debezium/        |---->| Parse CDC Events |---->| dim_customer     |
+| (OLTP)           |     | Kafka Connect    |     | Detect Changes   |     | (SCD Type 2)     |
+|                  |     |                  |     | Apply Merge      |     |                  |
+| Product Table    |---->| Change Log       |---->| Handle Deletes   |---->| dim_product      |
+| (OLTP)           |     | Extraction       |     | Late Data        |     | (SCD Type 1)     |
++------------------+     +------------------+     +------------------+     +------------------+
+                                                  |                  |
+                                                  | CDC Event Types: |
+                                                  | - INSERT (c)     |
+                                                  | - UPDATE (u)     |
+                                                  | - DELETE (d)     |
+                                                  | - SNAPSHOT (r)   |
+                                                  +------------------+
+                </div>
+            </div>
+
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="cdc-basics">CDC Basics</button>
+                <button class="tab" data-tab="scd2">SCD Type 2</button>
+                <button class="tab" data-tab="scd1">SCD Type 1</button>
+                <button class="tab" data-tab="merge">Merge Operations</button>
+                <button class="tab" data-tab="late-data">Late Data Handling</button>
+                <button class="tab" data-tab="delta">Delta Lake CDC</button>
+            </div>
+            <div class="tab-contents">
+                <div id="cdc-basics" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (CDC Event Processing)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+CDC Event Processing Basics
+- Parse CDC events from various sources
+- Identify operation types (INSERT, UPDATE, DELETE)
+- Extract before/after images
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import (
+    col, lit, when, from_json, get_json_object,
+    current_timestamp, to_timestamp, coalesce
+)
+from pyspark.sql.types import *
+
+spark = SparkSession.builder \
+    .appName("CDC-Processing") \
+    .getOrCreate()
+
+# ============================================
+# CDC EVENT SCHEMA (Debezium Format)
+# ============================================
+debezium_schema = StructType([
+    StructField("before", StructType([
+        StructField("customer_id", StringType()),
+        StructField("first_name", StringType()),
+        StructField("last_name", StringType()),
+        StructField("email", StringType()),
+        StructField("city", StringType()),
+        StructField("state", StringType()),
+        StructField("updated_at", LongType())
+    ])),
+    StructField("after", StructType([
+        StructField("customer_id", StringType()),
+        StructField("first_name", StringType()),
+        StructField("last_name", StringType()),
+        StructField("email", StringType()),
+        StructField("city", StringType()),
+        StructField("state", StringType()),
+        StructField("updated_at", LongType())
+    ])),
+    StructField("op", StringType()),  # c=create, u=update, d=delete, r=read(snapshot)
+    StructField("ts_ms", LongType()),  # Event timestamp
+    StructField("source", StructType([
+        StructField("db", StringType()),
+        StructField("table", StringType()),
+        StructField("ts_ms", LongType())
+    ]))
+])
+
+# ============================================
+# PARSE CDC EVENTS FROM KAFKA
+# ============================================
+def parse_cdc_events(df_raw):
+    """Parse Debezium CDC events from Kafka"""
+    
+    df_parsed = df_raw \
+        .select(
+            from_json(col("value").cast("string"), debezium_schema).alias("cdc")
+        ) \
+        .select(
+            col("cdc.op").alias("operation"),
+            col("cdc.ts_ms").alias("event_timestamp_ms"),
+            col("cdc.before").alias("before"),
+            col("cdc.after").alias("after"),
+            col("cdc.source.db").alias("source_db"),
+            col("cdc.source.table").alias("source_table")
+        )
+    
+    return df_parsed
+
+# ============================================
+# EXTRACT CURRENT STATE FROM CDC
+# ============================================
+def extract_current_state(df_cdc):
+    """Extract current record state based on operation type"""
+    
+    df_state = df_cdc \
+        .withColumn("record", 
+            when(col("operation").isin("c", "u", "r"), col("after"))
+            .when(col("operation") == "d", col("before"))
+        ) \
+        .withColumn("is_deleted", col("operation") == "d") \
+        .select(
+            col("record.customer_id").alias("customer_id"),
+            col("record.first_name").alias("first_name"),
+            col("record.last_name").alias("last_name"),
+            col("record.email").alias("email"),
+            col("record.city").alias("city"),
+            col("record.state").alias("state"),
+            col("record.updated_at").alias("source_updated_at"),
+            col("event_timestamp_ms"),
+            col("operation"),
+            col("is_deleted")
+        )
+    
+    return df_state
+
+# ============================================
+# CDC OPERATION CLASSIFICATION
+# ============================================
+def classify_cdc_operations(df_cdc):
+    """Classify and count CDC operations"""
+    
+    df_classified = df_cdc \
+        .withColumn("operation_type",
+            when(col("operation") == "c", "INSERT")
+            .when(col("operation") == "u", "UPDATE")
+            .when(col("operation") == "d", "DELETE")
+            .when(col("operation") == "r", "SNAPSHOT")
+            .otherwise("UNKNOWN")
+        )
+    
+    # Count by operation type
+    operation_counts = df_classified \
+        .groupBy("operation_type") \
+        .count() \
+        .collect()
+    
+    for row in operation_counts:
+        print(f"{row['operation_type']}: {row['count']}")
+    
+    return df_classified
+
+# ============================================
+# SIMPLE CDC FILE FORMAT
+# ============================================
+# Alternative: Simple CSV-based CDC format
+simple_cdc_schema = StructType([
+    StructField("cdc_operation", StringType()),  # I, U, D
+    StructField("cdc_timestamp", TimestampType()),
+    StructField("customer_id", StringType()),
+    StructField("first_name", StringType()),
+    StructField("last_name", StringType()),
+    StructField("email", StringType()),
+    StructField("city", StringType()),
+    StructField("state", StringType())
+])
+
+def read_simple_cdc(path):
+    """Read simple CDC format from CSV"""
+    return spark.read \
+        .schema(simple_cdc_schema) \
+        .option("header", "true") \
+        .csv(path)
+
+# ============================================
+# CDC DEDUPLICATION
+# ============================================
+def deduplicate_cdc_events(df_cdc, key_columns, timestamp_column):
+    """Keep only the latest CDC event per key"""
+    from pyspark.sql.window import Window
+    from pyspark.sql.functions import row_number
+    
+    window_spec = Window \
+        .partitionBy(key_columns) \
+        .orderBy(col(timestamp_column).desc())
+    
+    df_deduped = df_cdc \
+        .withColumn("row_num", row_number().over(window_spec)) \
+        .filter(col("row_num") == 1) \
+        .drop("row_num")
+    
+    return df_deduped
+
+# Example usage
+df_raw = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("subscribe", "dbserver1.inventory.customers") \
+    .load()
+
+df_cdc = parse_cdc_events(df_raw)
+df_state = extract_current_state(df_cdc)
+df_classified = classify_cdc_operations(df_cdc)</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="scd2" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (SCD Type 2 Implementation)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+SCD Type 2 Implementation
+- Maintain full history of changes
+- Track effective dates and current flag
+- Support point-in-time queries
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import (
+    col, lit, when, coalesce, current_date, current_timestamp,
+    to_date, md5, concat_ws, row_number, max as spark_max
+)
+from pyspark.sql.window import Window
+from pyspark.sql.types import *
+
+spark = SparkSession.builder \
+    .appName("SCD-Type2") \
+    .getOrCreate()
+
+# ============================================
+# SCD TYPE 2 DIMENSION SCHEMA
+# ============================================
+"""
+dim_customer schema:
+- customer_sk (surrogate key - auto-generated)
+- customer_id (natural/business key)
+- first_name, last_name, email, city, state (attributes)
+- effective_date (when this version became active)
+- end_date (when this version was superseded, 9999-12-31 for current)
+- is_current (boolean flag for current record)
+- record_hash (hash of tracked attributes for change detection)
+- created_at, updated_at (audit columns)
+"""
+
+# ============================================
+# INITIAL LOAD (First Time)
+# ============================================
+def scd2_initial_load(df_source, dim_path):
+    """Perform initial load of SCD Type 2 dimension"""
+    
+    # Add SCD2 columns
+    df_dim = df_source \
+        .withColumn("customer_sk", row_number().over(Window.orderBy("customer_id"))) \
+        .withColumn("effective_date", current_date()) \
+        .withColumn("end_date", to_date(lit("9999-12-31"))) \
+        .withColumn("is_current", lit(True)) \
+        .withColumn("record_hash", md5(concat_ws("||",
+            col("email"), col("city"), col("state")
+        ))) \
+        .withColumn("created_at", current_timestamp()) \
+        .withColumn("updated_at", current_timestamp())
+    
+    df_dim.write \
+        .mode("overwrite") \
+        .parquet(dim_path)
+    
+    print(f"Initial load complete: {df_dim.count()} records")
+    return df_dim
+
+# ============================================
+# SCD TYPE 2 MERGE (Incremental)
+# ============================================
+def scd2_merge(df_cdc, dim_path):
+    """Apply CDC changes to SCD Type 2 dimension"""
+    
+    # Read existing dimension
+    df_existing = spark.read.parquet(dim_path)
+    
+    # Get current records only
+    df_current = df_existing.filter(col("is_current") == True)
+    
+    # Calculate hash for incoming records
+    df_incoming = df_cdc \
+        .filter(col("is_deleted") == False) \
+        .withColumn("incoming_hash", md5(concat_ws("||",
+            col("email"), col("city"), col("state")
+        )))
+    
+    # Join to find changes
+    df_joined = df_incoming.alias("inc").join(
+        df_current.alias("cur"),
+        col("inc.customer_id") == col("cur.customer_id"),
+        "full_outer"
+    )
+    
+    # ============================================
+    # CASE 1: Unchanged records (hash matches)
+    # ============================================
+    df_unchanged = df_joined.filter(
+        col("cur.customer_sk").isNotNull() &
+        (col("inc.incoming_hash") == col("cur.record_hash"))
+    ).select("cur.*")
+    
+    # ============================================
+    # CASE 2: Changed records - close old version
+    # ============================================
+    df_changed_close = df_joined.filter(
+        col("cur.customer_sk").isNotNull() &
+        col("inc.customer_id").isNotNull() &
+        (col("inc.incoming_hash") != col("cur.record_hash"))
+    ).select("cur.*") \
+        .withColumn("end_date", current_date()) \
+        .withColumn("is_current", lit(False)) \
+        .withColumn("updated_at", current_timestamp())
+    
+    # ============================================
+    # CASE 3: Changed records - create new version
+    # ============================================
+    # Get max surrogate key
+    max_sk = df_existing.agg(spark_max("customer_sk")).collect()[0][0] or 0
+    
+    df_changed_new = df_joined.filter(
+        col("cur.customer_sk").isNotNull() &
+        col("inc.customer_id").isNotNull() &
+        (col("inc.incoming_hash") != col("cur.record_hash"))
+    ).select(
+        col("inc.customer_id"),
+        col("inc.first_name"),
+        col("inc.last_name"),
+        col("inc.email"),
+        col("inc.city"),
+        col("inc.state"),
+        col("inc.incoming_hash").alias("record_hash")
+    ).withColumn("customer_sk", 
+        row_number().over(Window.orderBy("customer_id")) + max_sk
+    ).withColumn("effective_date", current_date()) \
+     .withColumn("end_date", to_date(lit("9999-12-31"))) \
+     .withColumn("is_current", lit(True)) \
+     .withColumn("created_at", current_timestamp()) \
+     .withColumn("updated_at", current_timestamp())
+    
+    # ============================================
+    # CASE 4: New records (INSERT)
+    # ============================================
+    # Update max_sk after changed records
+    new_max_sk = max_sk + df_changed_new.count()
+    
+    df_new = df_joined.filter(
+        col("cur.customer_sk").isNull() &
+        col("inc.customer_id").isNotNull()
+    ).select(
+        col("inc.customer_id"),
+        col("inc.first_name"),
+        col("inc.last_name"),
+        col("inc.email"),
+        col("inc.city"),
+        col("inc.state"),
+        col("inc.incoming_hash").alias("record_hash")
+    ).withColumn("customer_sk",
+        row_number().over(Window.orderBy("customer_id")) + new_max_sk
+    ).withColumn("effective_date", current_date()) \
+     .withColumn("end_date", to_date(lit("9999-12-31"))) \
+     .withColumn("is_current", lit(True)) \
+     .withColumn("created_at", current_timestamp()) \
+     .withColumn("updated_at", current_timestamp())
+    
+    # ============================================
+    # CASE 5: Deleted records - close version
+    # ============================================
+    df_deleted_ids = df_cdc.filter(col("is_deleted") == True).select("customer_id")
+    
+    df_deleted_close = df_current.join(
+        df_deleted_ids,
+        "customer_id",
+        "inner"
+    ).withColumn("end_date", current_date()) \
+     .withColumn("is_current", lit(False)) \
+     .withColumn("updated_at", current_timestamp())
+    
+    # ============================================
+    # Historical records (already closed)
+    # ============================================
+    df_historical = df_existing.filter(col("is_current") == False)
+    
+    # ============================================
+    # UNION ALL RESULTS
+    # ============================================
+    # Ensure all DataFrames have same columns in same order
+    columns = df_existing.columns
+    
+    df_final = df_unchanged.select(columns) \
+        .union(df_changed_close.select(columns)) \
+        .union(df_changed_new.select(columns)) \
+        .union(df_new.select(columns)) \
+        .union(df_deleted_close.select(columns)) \
+        .union(df_historical.select(columns))
+    
+    # Write back
+    df_final.write \
+        .mode("overwrite") \
+        .parquet(dim_path)
+    
+    # Print statistics
+    print(f"SCD2 Merge Complete:")
+    print(f"  Unchanged: {df_unchanged.count()}")
+    print(f"  Changed (closed): {df_changed_close.count()}")
+    print(f"  Changed (new version): {df_changed_new.count()}")
+    print(f"  New inserts: {df_new.count()}")
+    print(f"  Deleted (closed): {df_deleted_close.count()}")
+    print(f"  Historical: {df_historical.count()}")
+    print(f"  Total: {df_final.count()}")
+    
+    return df_final
+
+# ============================================
+# POINT-IN-TIME QUERY
+# ============================================
+def get_dimension_as_of(dim_path, as_of_date):
+    """Get dimension state as of a specific date"""
+    
+    df_dim = spark.read.parquet(dim_path)
+    
+    df_as_of = df_dim.filter(
+        (col("effective_date") <= as_of_date) &
+        (col("end_date") > as_of_date)
+    )
+    
+    return df_as_of
+
+# Example: Get customer dimension as of 2024-01-15
+df_jan15 = get_dimension_as_of("/lakehouse/gold/dim_customer", "2024-01-15")</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="scd1" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (SCD Type 1 Implementation)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+SCD Type 1 Implementation
+- Overwrite existing records with new values
+- No history maintained
+- Simpler but loses historical data
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import (
+    col, lit, when, coalesce, current_timestamp,
+    row_number, max as spark_max
+)
+from pyspark.sql.window import Window
+
+spark = SparkSession.builder \
+    .appName("SCD-Type1") \
+    .getOrCreate()
+
+# ============================================
+# SCD TYPE 1 MERGE
+# ============================================
+def scd1_merge(df_cdc, dim_path):
+    """Apply CDC changes with SCD Type 1 (overwrite)"""
+    
+    # Read existing dimension
+    try:
+        df_existing = spark.read.parquet(dim_path)
+        has_existing = True
+        max_sk = df_existing.agg(spark_max("product_sk")).collect()[0][0] or 0
+    except:
+        has_existing = False
+        max_sk = 0
+    
+    # Separate inserts/updates from deletes
+    df_upserts = df_cdc.filter(col("is_deleted") == False)
+    df_deletes = df_cdc.filter(col("is_deleted") == True)
+    
+    if not has_existing:
+        # First load
+        df_new = df_upserts \
+            .withColumn("product_sk", row_number().over(Window.orderBy("product_id"))) \
+            .withColumn("created_at", current_timestamp()) \
+            .withColumn("updated_at", current_timestamp())
+        
+        df_new.write.mode("overwrite").parquet(dim_path)
+        return df_new
+    
+    # ============================================
+    # EXISTING RECORDS NOT IN CDC (keep as-is)
+    # ============================================
+    cdc_ids = df_cdc.select("product_id").distinct()
+    
+    df_unchanged = df_existing.join(
+        cdc_ids,
+        "product_id",
+        "left_anti"
+    )
+    
+    # ============================================
+    # UPDATED RECORDS (overwrite with new values)
+    # ============================================
+    df_updated = df_upserts.alias("cdc").join(
+        df_existing.alias("dim"),
+        col("cdc.product_id") == col("dim.product_id"),
+        "inner"
+    ).select(
+        col("dim.product_sk"),
+        col("cdc.product_id"),
+        col("cdc.product_name"),
+        col("cdc.category"),
+        col("cdc.subcategory"),
+        col("cdc.brand"),
+        col("cdc.unit_cost"),
+        col("cdc.unit_price"),
+        col("dim.created_at"),
+        current_timestamp().alias("updated_at")
+    )
+    
+    # ============================================
+    # NEW RECORDS (insert)
+    # ============================================
+    existing_ids = df_existing.select("product_id").distinct()
+    
+    df_new = df_upserts.join(
+        existing_ids,
+        "product_id",
+        "left_anti"
+    ).withColumn("product_sk",
+        row_number().over(Window.orderBy("product_id")) + max_sk
+    ).withColumn("created_at", current_timestamp()) \
+     .withColumn("updated_at", current_timestamp())
+    
+    # ============================================
+    # UNION (excluding deleted records)
+    # ============================================
+    columns = df_existing.columns
+    
+    df_final = df_unchanged.select(columns) \
+        .union(df_updated.select(columns)) \
+        .union(df_new.select(columns))
+    
+    df_final.write \
+        .mode("overwrite") \
+        .parquet(dim_path)
+    
+    print(f"SCD1 Merge Complete:")
+    print(f"  Unchanged: {df_unchanged.count()}")
+    print(f"  Updated: {df_updated.count()}")
+    print(f"  New: {df_new.count()}")
+    print(f"  Deleted: {df_deletes.count()}")
+    print(f"  Final: {df_final.count()}")
+    
+    return df_final
+
+# ============================================
+# SCD TYPE 1 WITH MERGE INTO (Delta Lake)
+# ============================================
+def scd1_delta_merge(df_cdc, delta_table_path):
+    """SCD Type 1 using Delta Lake MERGE"""
+    from delta.tables import DeltaTable
+    
+    delta_table = DeltaTable.forPath(spark, delta_table_path)
+    
+    # Separate operations
+    df_upserts = df_cdc.filter(col("is_deleted") == False)
+    df_deletes = df_cdc.filter(col("is_deleted") == True)
+    
+    # MERGE for upserts
+    delta_table.alias("target").merge(
+        df_upserts.alias("source"),
+        "target.product_id = source.product_id"
+    ).whenMatchedUpdate(set={
+        "product_name": col("source.product_name"),
+        "category": col("source.category"),
+        "subcategory": col("source.subcategory"),
+        "brand": col("source.brand"),
+        "unit_cost": col("source.unit_cost"),
+        "unit_price": col("source.unit_price"),
+        "updated_at": current_timestamp()
+    }).whenNotMatchedInsert(values={
+        "product_id": col("source.product_id"),
+        "product_name": col("source.product_name"),
+        "category": col("source.category"),
+        "subcategory": col("source.subcategory"),
+        "brand": col("source.brand"),
+        "unit_cost": col("source.unit_cost"),
+        "unit_price": col("source.unit_price"),
+        "created_at": current_timestamp(),
+        "updated_at": current_timestamp()
+    }).execute()
+    
+    # DELETE for deletes
+    if df_deletes.count() > 0:
+        delta_table.alias("target").merge(
+            df_deletes.alias("source"),
+            "target.product_id = source.product_id"
+        ).whenMatchedDelete().execute()
+    
+    print("Delta MERGE complete")</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="merge" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Merge/Upsert Operations)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Merge/Upsert Operations
+- Efficient merge patterns for large datasets
+- Handling duplicates and conflicts
+- Optimizing merge performance
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import (
+    col, lit, when, coalesce, current_timestamp,
+    broadcast, row_number
+)
+from pyspark.sql.window import Window
+
+spark = SparkSession.builder \
+    .appName("Merge-Operations") \
+    .getOrCreate()
+
+# ============================================
+# BASIC UPSERT PATTERN
+# ============================================
+def upsert_basic(df_source, df_target, key_columns):
+    """Basic upsert: update existing, insert new"""
+    
+    # Create key expression for join
+    join_condition = [df_source[k] == df_target[k] for k in key_columns]
+    
+    # Find records to update (exist in both)
+    df_updates = df_source.alias("src").join(
+        df_target.alias("tgt"),
+        join_condition,
+        "inner"
+    ).select("src.*")
+    
+    # Find records to insert (only in source)
+    df_inserts = df_source.join(
+        df_target.select(key_columns),
+        key_columns,
+        "left_anti"
+    )
+    
+    # Find records to keep (only in target, not in source)
+    df_keep = df_target.join(
+        df_source.select(key_columns),
+        key_columns,
+        "left_anti"
+    )
+    
+    # Union all
+    df_result = df_updates.union(df_inserts).union(df_keep)
+    
+    return df_result
+
+# ============================================
+# OPTIMIZED MERGE WITH BROADCAST
+# ============================================
+def upsert_with_broadcast(df_source, df_target, key_columns):
+    """Optimized upsert using broadcast for small source"""
+    
+    # Broadcast small source DataFrame
+    df_source_bc = broadcast(df_source)
+    
+    join_condition = [df_source_bc[k] == df_target[k] for k in key_columns]
+    
+    # Full outer join
+    df_joined = df_target.alias("tgt").join(
+        df_source_bc.alias("src"),
+        join_condition,
+        "full_outer"
+    )
+    
+    # Coalesce: prefer source values, fall back to target
+    result_columns = []
+    for c in df_target.columns:
+        if c in key_columns:
+            result_columns.append(coalesce(col(f"src.{c}"), col(f"tgt.{c}")).alias(c))
+        else:
+            result_columns.append(coalesce(col(f"src.{c}"), col(f"tgt.{c}")).alias(c))
+    
+    df_result = df_joined.select(result_columns)
+    
+    return df_result
+
+# ============================================
+# MERGE WITH CONFLICT RESOLUTION
+# ============================================
+def upsert_with_conflict_resolution(df_source, df_target, key_columns, 
+                                     timestamp_column, resolution="latest"):
+    """Upsert with conflict resolution based on timestamp"""
+    
+    join_condition = [df_source[k] == df_target[k] for k in key_columns]
+    
+    df_joined = df_target.alias("tgt").join(
+        df_source.alias("src"),
+        join_condition,
+        "full_outer"
+    )
+    
+    if resolution == "latest":
+        # Keep record with latest timestamp
+        df_result = df_joined.withColumn("use_source",
+            when(col(f"src.{timestamp_column}").isNull(), False)
+            .when(col(f"tgt.{timestamp_column}").isNull(), True)
+            .when(col(f"src.{timestamp_column}") > col(f"tgt.{timestamp_column}"), True)
+            .otherwise(False)
+        )
+    elif resolution == "source_wins":
+        # Always prefer source
+        df_result = df_joined.withColumn("use_source",
+            col("src." + key_columns[0]).isNotNull()
+        )
+    elif resolution == "target_wins":
+        # Always prefer target
+        df_result = df_joined.withColumn("use_source",
+            col("tgt." + key_columns[0]).isNull()
+        )
+    
+    # Select appropriate columns based on resolution
+    result_columns = []
+    for c in df_target.columns:
+        result_columns.append(
+            when(col("use_source"), col(f"src.{c}"))
+            .otherwise(col(f"tgt.{c}"))
+            .alias(c)
+        )
+    
+    return df_result.select(result_columns)
+
+# ============================================
+# BATCH MERGE FOR LARGE DATASETS
+# ============================================
+def batch_merge(df_source, target_path, key_columns, batch_size=100000):
+    """Merge large datasets in batches"""
+    
+    # Add row number for batching
+    df_source_numbered = df_source.withColumn(
+        "batch_num",
+        (row_number().over(Window.orderBy(key_columns)) - 1) / batch_size
+    ).cache()
+    
+    num_batches = df_source_numbered.agg({"batch_num": "max"}).collect()[0][0] + 1
+    
+    for batch in range(int(num_batches)):
+        print(f"Processing batch {batch + 1} of {int(num_batches)}")
+        
+        df_batch = df_source_numbered.filter(col("batch_num") == batch).drop("batch_num")
+        df_target = spark.read.parquet(target_path)
+        
+        df_merged = upsert_basic(df_batch, df_target, key_columns)
+        
+        df_merged.write.mode("overwrite").parquet(target_path)
+    
+    df_source_numbered.unpersist()
+    print("Batch merge complete")
+
+# ============================================
+# DELTA LAKE MERGE
+# ============================================
+def delta_merge_upsert(df_source, delta_path, key_columns, update_columns=None):
+    """Efficient merge using Delta Lake"""
+    from delta.tables import DeltaTable
+    
+    delta_table = DeltaTable.forPath(spark, delta_path)
+    
+    # Build merge condition
+    merge_condition = " AND ".join([f"target.{k} = source.{k}" for k in key_columns])
+    
+    # Build update set
+    if update_columns is None:
+        update_columns = [c for c in df_source.columns if c not in key_columns]
+    
+    update_set = {c: f"source.{c}" for c in update_columns}
+    update_set["updated_at"] = "current_timestamp()"
+    
+    # Build insert values
+    insert_values = {c: f"source.{c}" for c in df_source.columns}
+    insert_values["created_at"] = "current_timestamp()"
+    insert_values["updated_at"] = "current_timestamp()"
+    
+    # Execute merge
+    delta_table.alias("target").merge(
+        df_source.alias("source"),
+        merge_condition
+    ).whenMatchedUpdate(
+        set=update_set
+    ).whenNotMatchedInsert(
+        values=insert_values
+    ).execute()
+    
+    print("Delta merge complete")</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="late-data" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Late-Arriving Data Handling)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Late-Arriving Data Handling
+- Detect and process late CDC events
+- Reprocess affected time periods
+- Maintain data consistency
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import (
+    col, lit, when, current_timestamp, to_date,
+    datediff, max as spark_max, min as spark_min
+)
+from datetime import datetime, timedelta
+
+spark = SparkSession.builder \
+    .appName("Late-Data-Handling") \
+    .getOrCreate()
+
+# ============================================
+# DETECT LATE-ARRIVING DATA
+# ============================================
+def detect_late_data(df_cdc, late_threshold_hours=24):
+    """Identify CDC events that arrived late"""
+    
+    df_with_lateness = df_cdc \
+        .withColumn("processing_time", current_timestamp()) \
+        .withColumn("event_time", 
+            to_timestamp(col("source_updated_at") / 1000)
+        ) \
+        .withColumn("lateness_hours",
+            (col("processing_time").cast("long") - col("event_time").cast("long")) / 3600
+        ) \
+        .withColumn("is_late",
+            col("lateness_hours") > late_threshold_hours
+        )
+    
+    # Statistics
+    late_count = df_with_lateness.filter(col("is_late")).count()
+    total_count = df_with_lateness.count()
+    
+    print(f"Late data detection:")
+    print(f"  Total events: {total_count}")
+    print(f"  Late events: {late_count}")
+    print(f"  Late percentage: {late_count/total_count*100:.2f}%")
+    
+    return df_with_lateness
+
+# ============================================
+# PROCESS LATE DATA FOR SCD2
+# ============================================
+def process_late_scd2(df_late_cdc, dim_path):
+    """Process late-arriving CDC events for SCD2 dimension"""
+    
+    df_dim = spark.read.parquet(dim_path)
+    
+    for row in df_late_cdc.collect():
+        customer_id = row["customer_id"]
+        event_date = to_date(row["event_time"])
+        
+        # Find the version that was current at event_date
+        df_affected = df_dim.filter(
+            (col("customer_id") == customer_id) &
+            (col("effective_date") <= event_date) &
+            (col("end_date") > event_date)
+        )
+        
+        if df_affected.count() > 0:
+            # Need to split the affected version
+            affected_version = df_affected.first()
+            
+            # Close the affected version at event_date
+            # Create new version from event_date to original end_date
+            # Insert the late change between them
+            
+            print(f"Reprocessing customer {customer_id} for date {event_date}")
+            # Implementation depends on specific business rules
+
+# ============================================
+# LATE DATA QUARANTINE
+# ============================================
+def quarantine_late_data(df_cdc, late_threshold_hours, quarantine_path):
+    """Quarantine late data for manual review"""
+    
+    df_with_lateness = detect_late_data(df_cdc, late_threshold_hours)
+    
+    # Separate on-time and late data
+    df_ontime = df_with_lateness.filter(~col("is_late"))
+    df_late = df_with_lateness.filter(col("is_late"))
+    
+    # Write late data to quarantine
+    if df_late.count() > 0:
+        df_late \
+            .withColumn("quarantine_reason", lit("late_arrival")) \
+            .withColumn("quarantine_timestamp", current_timestamp()) \
+            .write \
+            .mode("append") \
+            .partitionBy("event_date") \
+            .parquet(quarantine_path)
+        
+        print(f"Quarantined {df_late.count()} late records")
+    
+    return df_ontime
+
+# ============================================
+# REPROCESS HISTORICAL PERIOD
+# ============================================
+def reprocess_period(start_date, end_date, source_path, dim_path):
+    """Reprocess a historical period to fix late data issues"""
+    
+    print(f"Reprocessing period: {start_date} to {end_date}")
+    
+    # Read all CDC events for the period
+    df_cdc = spark.read.parquet(source_path) \
+        .filter(
+            (col("event_date") >= start_date) &
+            (col("event_date") <= end_date)
+        ) \
+        .orderBy("event_timestamp")
+    
+    # Read dimension and filter to before start_date
+    df_dim = spark.read.parquet(dim_path)
+    
+    # Get dimension state as of start_date - 1
+    df_dim_before = df_dim.filter(
+        col("effective_date") < start_date
+    )
+    
+    # Close any versions that were current at start_date
+    df_to_close = df_dim.filter(
+        (col("effective_date") < start_date) &
+        (col("end_date") >= start_date) &
+        (col("is_current") == True)
+    ).withColumn("end_date", to_date(lit(start_date))) \
+     .withColumn("is_current", lit(False))
+    
+    # Replay CDC events in order
+    # This would call scd2_merge for each day's events
+    
+    print("Reprocessing complete")
+
+# ============================================
+# IDEMPOTENT CDC PROCESSING
+# ============================================
+def idempotent_cdc_process(df_cdc, dim_path, processed_offsets_path):
+    """Process CDC events idempotently using offset tracking"""
+    
+    # Read last processed offset
+    try:
+        df_offsets = spark.read.parquet(processed_offsets_path)
+        last_offset = df_offsets.agg(spark_max("offset")).collect()[0][0]
+    except:
+        last_offset = -1
+    
+    # Filter to unprocessed events
+    df_new_events = df_cdc.filter(col("kafka_offset") > last_offset)
+    
+    if df_new_events.count() == 0:
+        print("No new events to process")
+        return
+    
+    # Process new events
+    # ... (call appropriate SCD merge function)
+    
+    # Record processed offsets
+    max_offset = df_new_events.agg(spark_max("kafka_offset")).collect()[0][0]
+    
+    spark.createDataFrame(
+        [(max_offset, datetime.now())],
+        ["offset", "processed_at"]
+    ).write.mode("append").parquet(processed_offsets_path)
+    
+    print(f"Processed events up to offset {max_offset}")</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="delta" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Delta Lake CDC Features)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Delta Lake CDC Features
+- Change Data Feed (CDF)
+- Time Travel
+- MERGE operations
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, current_timestamp
+from delta.tables import DeltaTable
+
+spark = SparkSession.builder \
+    .appName("Delta-CDC") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+# ============================================
+# ENABLE CHANGE DATA FEED
+# ============================================
+# Create table with CDF enabled
+spark.sql("""
+    CREATE TABLE IF NOT EXISTS customers (
+        customer_id STRING,
+        first_name STRING,
+        last_name STRING,
+        email STRING,
+        city STRING,
+        state STRING,
+        updated_at TIMESTAMP
+    )
+    USING DELTA
+    TBLPROPERTIES (delta.enableChangeDataFeed = true)
+""")
+
+# Or enable on existing table
+spark.sql("""
+    ALTER TABLE customers 
+    SET TBLPROPERTIES (delta.enableChangeDataFeed = true)
+""")
+
+# ============================================
+# READ CHANGE DATA FEED
+# ============================================
+# Read changes since version
+df_changes_version = spark.read \
+    .format("delta") \
+    .option("readChangeFeed", "true") \
+    .option("startingVersion", 5) \
+    .option("endingVersion", 10) \
+    .table("customers")
+
+# Read changes since timestamp
+df_changes_timestamp = spark.read \
+    .format("delta") \
+    .option("readChangeFeed", "true") \
+    .option("startingTimestamp", "2024-01-01 00:00:00") \
+    .option("endingTimestamp", "2024-01-31 23:59:59") \
+    .table("customers")
+
+# CDF adds these columns:
+# _change_type: insert, update_preimage, update_postimage, delete
+# _commit_version: version number
+# _commit_timestamp: timestamp of commit
+
+# ============================================
+# PROCESS CDF FOR DOWNSTREAM
+# ============================================
+def process_cdf_changes(df_cdf):
+    """Process Change Data Feed for downstream systems"""
+    
+    # Separate by change type
+    df_inserts = df_cdf.filter(col("_change_type") == "insert")
+    df_updates_before = df_cdf.filter(col("_change_type") == "update_preimage")
+    df_updates_after = df_cdf.filter(col("_change_type") == "update_postimage")
+    df_deletes = df_cdf.filter(col("_change_type") == "delete")
+    
+    print(f"Inserts: {df_inserts.count()}")
+    print(f"Updates: {df_updates_after.count()}")
+    print(f"Deletes: {df_deletes.count()}")
+    
+    # For downstream CDC consumers, typically send:
+    # - Inserts as-is
+    # - Updates (postimage only, or both for audit)
+    # - Deletes (preimage for the deleted record)
+    
+    return df_inserts, df_updates_after, df_deletes
+
+# ============================================
+# STREAMING CDF
+# ============================================
+df_cdf_stream = spark.readStream \
+    .format("delta") \
+    .option("readChangeFeed", "true") \
+    .option("startingVersion", 0) \
+    .table("customers")
+
+query = df_cdf_stream \
+    .writeStream \
+    .format("console") \
+    .outputMode("append") \
+    .start()
+
+# ============================================
+# TIME TRAVEL QUERIES
+# ============================================
+# Query by version
+df_v5 = spark.read \
+    .format("delta") \
+    .option("versionAsOf", 5) \
+    .load("/delta/customers")
+
+# Query by timestamp
+df_yesterday = spark.read \
+    .format("delta") \
+    .option("timestampAsOf", "2024-01-15 10:00:00") \
+    .load("/delta/customers")
+
+# SQL syntax
+spark.sql("SELECT * FROM customers VERSION AS OF 5")
+spark.sql("SELECT * FROM customers TIMESTAMP AS OF '2024-01-15'")
+
+# ============================================
+# DELTA MERGE FOR SCD2
+# ============================================
+def delta_scd2_merge(df_updates, delta_path):
+    """SCD Type 2 merge using Delta Lake"""
+    
+    delta_table = DeltaTable.forPath(spark, delta_path)
+    
+    # Prepare staged updates with new surrogate keys
+    df_staged = df_updates \
+        .withColumn("merge_key", col("customer_id")) \
+        .withColumn("effective_date", current_timestamp()) \
+        .withColumn("is_current", lit(True))
+    
+    # Merge: update existing current records, insert new versions
+    delta_table.alias("target").merge(
+        df_staged.alias("source"),
+        "target.customer_id = source.merge_key AND target.is_current = true"
+    ).whenMatchedUpdate(
+        condition="target.record_hash != source.record_hash",
+        set={
+            "is_current": "false",
+            "end_date": "source.effective_date"
+        }
+    ).whenNotMatchedInsert(
+        values={
+            "customer_id": "source.customer_id",
+            "first_name": "source.first_name",
+            "last_name": "source.last_name",
+            "email": "source.email",
+            "city": "source.city",
+            "state": "source.state",
+            "effective_date": "source.effective_date",
+            "end_date": "cast('9999-12-31' as date)",
+            "is_current": "true",
+            "record_hash": "source.record_hash"
+        }
+    ).execute()
+
+# ============================================
+# VACUUM AND OPTIMIZE
+# ============================================
+# Remove old files (respect retention)
+spark.sql("VACUUM customers RETAIN 168 HOURS")
+
+# Optimize file layout
+spark.sql("OPTIMIZE customers")
+
+# Z-order for query optimization
+spark.sql("OPTIMIZE customers ZORDER BY (customer_id)")
+
+# ============================================
+# DESCRIBE HISTORY
+# ============================================
+# View table history
+spark.sql("DESCRIBE HISTORY customers").show(truncate=False)
+
+# Programmatic access
+delta_table = DeltaTable.forPath(spark, "/delta/customers")
+df_history = delta_table.history()
+df_history.select("version", "timestamp", "operation", "operationMetrics").show()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../02_streaming_pipeline/index.html" style="color: var(--text-muted);">&larr; Previous: Streaming Pipeline</a>
+                <a href="../../index.html#projects" style="color: var(--accent-primary);">Back to Projects &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 8, y: 4, z: 8 } });
+            showCDC();
+        });
+        
+        function showCDC() {
+            viz.clear();
+            
+            // Source
+            viz.createDataNode({ type: 'cylinder', size: 0.6, color: 0x4CAF50, position: { x: -4, y: 0.5, z: 0 } });
+            viz.createLabel('Source DB', { x: -4, y: 1.6, z: 0 });
+            
+            // CDC Capture
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0xFF9800, position: { x: -1.5, y: 0.5, z: 0 } });
+            viz.createLabel('CDC', { x: -1.5, y: 1.5, z: 0 });
+            
+            // Processor
+            viz.createDataNode({ type: 'sphere', size: 0.6, color: 0xE25A1C, position: { x: 1.5, y: 0.5, z: 0 } });
+            viz.createLabel('Processor', { x: 1.5, y: 1.6, z: 0 });
+            
+            // Dimension
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0x2196F3, position: { x: 4, y: 0.5, z: 0 } });
+            viz.createLabel('SCD2 Dim', { x: 4, y: 1.6, z: 0 });
+            
+            // Arrows
+            viz.createArrow({ x: -3.2, y: 0.5, z: 0 }, { x: -2.1, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: -0.9, y: 0.5, z: 0 }, { x: 0.8, y: 0.5, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 2.2, y: 0.5, z: 0 }, { x: 3.3, y: 0.5, z: 0 }, { color: 0x888888 });
+            
+            viz.createLabel('CDC to SCD Type 2 Pipeline', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(12, 12);
+        }
+    </script>
+</body>
+</html>

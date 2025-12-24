@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Streaming Pipeline Project - Data Engineering Hub</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#projects" class="nav-link active">Projects</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Real-Time Streaming Pipeline with Kafka</h1>
+            <p>Build a production-grade streaming pipeline using PySpark Structured Streaming with Kafka integration. This project covers real-time data ingestion, windowed aggregations, watermarking, and fault-tolerant processing.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+            
+            <h2>Business Problem</h2>
+            <div class="code-container">
+                <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+                    <p><strong>Scenario:</strong> A ride-sharing company needs real-time analytics on ride events to monitor driver performance, detect surge pricing opportunities, and provide live dashboards. Events arrive continuously from mobile apps and need to be processed with sub-minute latency.</p>
+                    <p><strong>Requirements:</strong></p>
+                    <ul>
+                        <li>Ingest ride events from Kafka in real-time</li>
+                        <li>Calculate windowed aggregations (rides per minute, average fare)</li>
+                        <li>Handle late-arriving data with watermarks</li>
+                        <li>Implement exactly-once processing with checkpointing</li>
+                        <li>Output to multiple sinks (Delta Lake, console, alerts)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <h2>Architecture Diagram</h2>
+            <div class="code-container">
+                <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px; font-family: monospace; white-space: pre;">
++------------------+     +------------------+     +------------------+     +------------------+
+|   DATA SOURCES   |     |      KAFKA       |     | SPARK STREAMING  |     |      SINKS       |
++------------------+     +------------------+     +------------------+     +------------------+
+|                  |     |                  |     |                  |     |                  |
+| Mobile App       |---->| ride_events      |---->| Parse JSON       |---->| Delta Lake       |
+| Driver App       |---->| driver_location  |---->| Windowed Aggs    |---->| Real-time DB     |
+| Payment System   |---->| payment_events   |---->| Join Streams     |---->| Alert System     |
+|                  |     |                  |     | Watermarking     |---->| Dashboard        |
++------------------+     +------------------+     +------------------+     +------------------+
+                                                  |                  |
+                                                  | Checkpointing    |
+                                                  | Exactly-once     |
+                                                  | Fault-tolerant   |
+                                                  +------------------+
+                </div>
+            </div>
+
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="basic">Basic Streaming</button>
+                <button class="tab" data-tab="kafka">Kafka Integration</button>
+                <button class="tab" data-tab="windows">Windowed Aggregations</button>
+                <button class="tab" data-tab="watermark">Watermarking</button>
+                <button class="tab" data-tab="joins">Stream Joins</button>
+                <button class="tab" data-tab="production">Production Patterns</button>
+            </div>
+            <div class="tab-contents">
+                <div id="basic" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Basic Structured Streaming)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Basic Structured Streaming
+- Read from streaming source
+- Apply transformations
+- Write to streaming sink
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import (
+    col, from_json, to_timestamp, window,
+    count, sum, avg, min, max, current_timestamp
+)
+from pyspark.sql.types import *
+
+spark = SparkSession.builder \
+    .appName("StreamingPipeline-Basic") \
+    .config("spark.sql.streaming.checkpointLocation", "/checkpoints") \
+    .getOrCreate()
+
+# ============================================
+# SCHEMA DEFINITION
+# ============================================
+ride_event_schema = StructType([
+    StructField("ride_id", StringType(), True),
+    StructField("driver_id", StringType(), True),
+    StructField("rider_id", StringType(), True),
+    StructField("pickup_location", StructType([
+        StructField("lat", DoubleType(), True),
+        StructField("lon", DoubleType(), True)
+    ]), True),
+    StructField("dropoff_location", StructType([
+        StructField("lat", DoubleType(), True),
+        StructField("lon", DoubleType(), True)
+    ]), True),
+    StructField("fare_amount", DoubleType(), True),
+    StructField("distance_miles", DoubleType(), True),
+    StructField("event_type", StringType(), True),  # started, completed, cancelled
+    StructField("event_timestamp", StringType(), True)
+])
+
+# ============================================
+# READ FROM FILE STREAM (for testing)
+# ============================================
+df_stream = spark.readStream \
+    .format("json") \
+    .schema(ride_event_schema) \
+    .option("maxFilesPerTrigger", 1) \
+    .load("/data/streaming/ride_events/")
+
+# ============================================
+# BASIC TRANSFORMATIONS
+# ============================================
+df_transformed = df_stream \
+    .withColumn("event_time", to_timestamp(col("event_timestamp"))) \
+    .withColumn("pickup_lat", col("pickup_location.lat")) \
+    .withColumn("pickup_lon", col("pickup_location.lon")) \
+    .withColumn("dropoff_lat", col("dropoff_location.lat")) \
+    .withColumn("dropoff_lon", col("dropoff_location.lon")) \
+    .withColumn("processing_time", current_timestamp()) \
+    .drop("pickup_location", "dropoff_location")
+
+# ============================================
+# WRITE TO CONSOLE (for debugging)
+# ============================================
+query_console = df_transformed \
+    .writeStream \
+    .format("console") \
+    .outputMode("append") \
+    .option("truncate", False) \
+    .trigger(processingTime="10 seconds") \
+    .start()
+
+# ============================================
+# WRITE TO PARQUET (append mode)
+# ============================================
+query_parquet = df_transformed \
+    .writeStream \
+    .format("parquet") \
+    .outputMode("append") \
+    .option("path", "/output/ride_events") \
+    .option("checkpointLocation", "/checkpoints/ride_events") \
+    .partitionBy("event_type") \
+    .trigger(processingTime="1 minute") \
+    .start()
+
+# Wait for termination
+query_parquet.awaitTermination()
+
+# ============================================
+# STREAMING QUERY MANAGEMENT
+# ============================================
+# Check query status
+print(f"Query ID: {query_parquet.id}")
+print(f"Query Name: {query_parquet.name}")
+print(f"Is Active: {query_parquet.isActive}")
+print(f"Status: {query_parquet.status}")
+print(f"Recent Progress: {query_parquet.recentProgress}")
+
+# Stop query gracefully
+# query_parquet.stop()</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="kafka" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Kafka Integration)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Kafka Integration with Structured Streaming
+- Read from Kafka topics
+- Parse JSON messages
+- Write back to Kafka
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import (
+    col, from_json, to_json, struct, 
+    to_timestamp, current_timestamp
+)
+from pyspark.sql.types import *
+
+spark = SparkSession.builder \
+    .appName("StreamingPipeline-Kafka") \
+    .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0") \
+    .getOrCreate()
+
+KAFKA_BOOTSTRAP_SERVERS = "localhost:9092"
+
+# ============================================
+# READ FROM KAFKA
+# ============================================
+df_kafka_raw = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP_SERVERS) \
+    .option("subscribe", "ride_events") \
+    .option("startingOffsets", "latest") \
+    .option("failOnDataLoss", "false") \
+    .option("kafka.security.protocol", "PLAINTEXT") \
+    .load()
+
+# Kafka message structure:
+# key (binary), value (binary), topic, partition, offset, timestamp, timestampType
+
+# ============================================
+# PARSE JSON FROM KAFKA VALUE
+# ============================================
+ride_schema = StructType([
+    StructField("ride_id", StringType()),
+    StructField("driver_id", StringType()),
+    StructField("rider_id", StringType()),
+    StructField("fare_amount", DoubleType()),
+    StructField("distance_miles", DoubleType()),
+    StructField("event_type", StringType()),
+    StructField("event_timestamp", StringType())
+])
+
+df_parsed = df_kafka_raw \
+    .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)", "timestamp") \
+    .select(
+        col("key"),
+        from_json(col("value"), ride_schema).alias("data"),
+        col("timestamp").alias("kafka_timestamp")
+    ) \
+    .select("key", "data.*", "kafka_timestamp") \
+    .withColumn("event_time", to_timestamp(col("event_timestamp")))
+
+# ============================================
+# READ FROM MULTIPLE TOPICS
+# ============================================
+df_multi_topic = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP_SERVERS) \
+    .option("subscribe", "ride_events,driver_location,payment_events") \
+    .option("startingOffsets", "earliest") \
+    .load() \
+    .selectExpr("topic", "CAST(value AS STRING)", "timestamp")
+
+# ============================================
+# READ WITH PATTERN SUBSCRIPTION
+# ============================================
+df_pattern = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP_SERVERS) \
+    .option("subscribePattern", "ride.*") \
+    .load()
+
+# ============================================
+# WRITE TO KAFKA
+# ============================================
+# Prepare output - must have 'key' and 'value' columns
+df_output = df_parsed \
+    .select(
+        col("ride_id").alias("key"),
+        to_json(struct(
+            col("ride_id"),
+            col("driver_id"),
+            col("fare_amount"),
+            col("event_type"),
+            current_timestamp().alias("processed_at")
+        )).alias("value")
+    )
+
+query_kafka_sink = df_output \
+    .writeStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP_SERVERS) \
+    .option("topic", "processed_rides") \
+    .option("checkpointLocation", "/checkpoints/kafka_sink") \
+    .outputMode("append") \
+    .start()
+
+# ============================================
+# KAFKA WITH AUTHENTICATION (SASL/SSL)
+# ============================================
+df_secure = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "secure-kafka:9093") \
+    .option("subscribe", "secure_topic") \
+    .option("kafka.security.protocol", "SASL_SSL") \
+    .option("kafka.sasl.mechanism", "PLAIN") \
+    .option("kafka.sasl.jaas.config", 
+            "org.apache.kafka.common.security.plain.PlainLoginModule required "
+            "username='user' password='password';") \
+    .option("kafka.ssl.truststore.location", "/path/to/truststore.jks") \
+    .option("kafka.ssl.truststore.password", "truststore_password") \
+    .load()
+
+query_kafka_sink.awaitTermination()</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="windows" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Windowed Aggregations)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Windowed Aggregations in Structured Streaming
+- Tumbling windows (non-overlapping)
+- Sliding windows (overlapping)
+- Session windows (gap-based)
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import (
+    col, window, count, sum, avg, min, max,
+    approx_count_distinct, collect_list, first, last
+)
+
+spark = SparkSession.builder \
+    .appName("StreamingPipeline-Windows") \
+    .getOrCreate()
+
+# Assume df_rides is a streaming DataFrame with event_time column
+
+# ============================================
+# TUMBLING WINDOW (Non-overlapping)
+# ============================================
+# 5-minute windows, no overlap
+df_tumbling = df_rides \
+    .groupBy(
+        window(col("event_time"), "5 minutes"),
+        col("event_type")
+    ) \
+    .agg(
+        count("*").alias("ride_count"),
+        sum("fare_amount").alias("total_fare"),
+        avg("fare_amount").alias("avg_fare"),
+        avg("distance_miles").alias("avg_distance"),
+        approx_count_distinct("driver_id").alias("unique_drivers"),
+        approx_count_distinct("rider_id").alias("unique_riders")
+    ) \
+    .select(
+        col("window.start").alias("window_start"),
+        col("window.end").alias("window_end"),
+        col("event_type"),
+        col("ride_count"),
+        col("total_fare"),
+        col("avg_fare"),
+        col("avg_distance"),
+        col("unique_drivers"),
+        col("unique_riders")
+    )
+
+# ============================================
+# SLIDING WINDOW (Overlapping)
+# ============================================
+# 10-minute windows, sliding every 5 minutes
+df_sliding = df_rides \
+    .groupBy(
+        window(col("event_time"), "10 minutes", "5 minutes"),
+        col("event_type")
+    ) \
+    .agg(
+        count("*").alias("ride_count"),
+        avg("fare_amount").alias("avg_fare")
+    )
+
+# ============================================
+# MULTIPLE WINDOW SIZES
+# ============================================
+# Real-time dashboard with different granularities
+df_1min = df_rides.groupBy(
+    window(col("event_time"), "1 minute")
+).agg(count("*").alias("rides_per_minute"))
+
+df_5min = df_rides.groupBy(
+    window(col("event_time"), "5 minutes")
+).agg(count("*").alias("rides_per_5min"))
+
+df_1hour = df_rides.groupBy(
+    window(col("event_time"), "1 hour")
+).agg(count("*").alias("rides_per_hour"))
+
+# ============================================
+# WINDOW WITH MULTIPLE GROUP BY COLUMNS
+# ============================================
+# Rides per zone per 5 minutes
+df_zone_window = df_rides \
+    .groupBy(
+        window(col("event_time"), "5 minutes"),
+        col("pickup_zone"),
+        col("event_type")
+    ) \
+    .agg(
+        count("*").alias("ride_count"),
+        sum("fare_amount").alias("total_fare")
+    )
+
+# ============================================
+# SESSION WINDOW (Gap-based)
+# ============================================
+# Group events with gaps less than 10 minutes
+# Note: Session windows require Spark 3.2+
+df_session = df_rides \
+    .groupBy(
+        session_window(col("event_time"), "10 minutes"),
+        col("driver_id")
+    ) \
+    .agg(
+        count("*").alias("rides_in_session"),
+        sum("fare_amount").alias("session_earnings"),
+        min("event_time").alias("session_start"),
+        max("event_time").alias("session_end")
+    )
+
+# ============================================
+# OUTPUT MODES FOR AGGREGATIONS
+# ============================================
+# Complete mode - output entire result table
+query_complete = df_tumbling \
+    .writeStream \
+    .format("console") \
+    .outputMode("complete") \
+    .trigger(processingTime="30 seconds") \
+    .start()
+
+# Update mode - output only updated rows
+query_update = df_tumbling \
+    .writeStream \
+    .format("console") \
+    .outputMode("update") \
+    .trigger(processingTime="30 seconds") \
+    .start()
+
+# Append mode - only works with watermark (see next section)
+# query_append = df_tumbling_with_watermark \
+#     .writeStream \
+#     .format("parquet") \
+#     .outputMode("append") \
+#     .start()</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="watermark" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Watermarking for Late Data)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Watermarking for Late-Arriving Data
+- Define how late data can arrive
+- Enable append mode for aggregations
+- Handle out-of-order events
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, window, count, sum, avg
+
+spark = SparkSession.builder \
+    .appName("StreamingPipeline-Watermark") \
+    .getOrCreate()
+
+# ============================================
+# WATERMARK BASICS
+# ============================================
+# Allow data to arrive up to 10 minutes late
+df_with_watermark = df_rides \
+    .withWatermark("event_time", "10 minutes") \
+    .groupBy(
+        window(col("event_time"), "5 minutes"),
+        col("event_type")
+    ) \
+    .agg(
+        count("*").alias("ride_count"),
+        sum("fare_amount").alias("total_fare")
+    )
+
+# Now we can use append mode!
+query_append = df_with_watermark \
+    .writeStream \
+    .format("parquet") \
+    .outputMode("append") \
+    .option("path", "/output/windowed_rides") \
+    .option("checkpointLocation", "/checkpoints/windowed_rides") \
+    .trigger(processingTime="1 minute") \
+    .start()
+
+# ============================================
+# HOW WATERMARKING WORKS
+# ============================================
+"""
+Watermark = max(event_time) - threshold
+
+Example with 10-minute watermark:
+- At time T, max event_time seen = 10:30
+- Watermark = 10:30 - 10 min = 10:20
+- Events with event_time < 10:20 are considered "too late"
+- Windows ending before 10:20 are finalized and emitted
+
+Timeline:
+10:00 - Event arrives (event_time=10:05) -> Accepted
+10:01 - Event arrives (event_time=10:08) -> Accepted
+10:02 - Event arrives (event_time=10:15) -> Accepted, watermark=10:05
+10:03 - Event arrives (event_time=10:02) -> Accepted (within watermark)
+10:10 - Event arrives (event_time=10:25) -> Accepted, watermark=10:15
+10:11 - Event arrives (event_time=10:03) -> DROPPED (before watermark 10:15)
+"""
+
+# ============================================
+# DIFFERENT WATERMARK STRATEGIES
+# ============================================
+# Aggressive watermark (low latency, may drop more late data)
+df_aggressive = df_rides \
+    .withWatermark("event_time", "1 minute") \
+    .groupBy(window(col("event_time"), "1 minute")) \
+    .count()
+
+# Conservative watermark (higher latency, accepts more late data)
+df_conservative = df_rides \
+    .withWatermark("event_time", "1 hour") \
+    .groupBy(window(col("event_time"), "5 minutes")) \
+    .count()
+
+# ============================================
+# WATERMARK WITH MULTIPLE AGGREGATIONS
+# ============================================
+# Same watermark applies to all downstream operations
+df_base = df_rides.withWatermark("event_time", "10 minutes")
+
+# Multiple aggregations from same watermarked stream
+df_by_type = df_base.groupBy(
+    window(col("event_time"), "5 minutes"),
+    col("event_type")
+).count()
+
+df_by_zone = df_base.groupBy(
+    window(col("event_time"), "5 minutes"),
+    col("pickup_zone")
+).agg(sum("fare_amount"))
+
+# ============================================
+# MONITORING WATERMARK PROGRESS
+# ============================================
+def process_batch(batch_df, batch_id):
+    """Custom processing with watermark info"""
+    print(f"Batch {batch_id}")
+    print(f"Record count: {batch_df.count()}")
+    batch_df.show(truncate=False)
+
+query_foreachbatch = df_with_watermark \
+    .writeStream \
+    .foreachBatch(process_batch) \
+    .outputMode("update") \
+    .trigger(processingTime="30 seconds") \
+    .start()
+
+# Check watermark in query progress
+# query.lastProgress["eventTime"]["watermark"]
+
+# ============================================
+# HANDLING DROPPED LATE DATA
+# ============================================
+# Option 1: Log dropped records (requires custom sink)
+# Option 2: Use longer watermark
+# Option 3: Separate late data stream
+
+# Create a stream for "on-time" data
+df_ontime = df_rides \
+    .withWatermark("event_time", "10 minutes") \
+    .groupBy(window(col("event_time"), "5 minutes")) \
+    .count()
+
+# Create a separate batch job for late data reconciliation
+# Run periodically to catch any missed late data</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="joins" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Stream Joins)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Stream Joins in Structured Streaming
+- Stream-to-Static joins
+- Stream-to-Stream joins
+- Watermark requirements for stream-stream joins
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, expr, broadcast
+
+spark = SparkSession.builder \
+    .appName("StreamingPipeline-Joins") \
+    .getOrCreate()
+
+# ============================================
+# STREAM-TO-STATIC JOIN
+# ============================================
+# Enrich streaming data with static dimension table
+df_drivers_static = spark.read.parquet("/data/dim_drivers")
+
+df_enriched = df_rides \
+    .join(
+        broadcast(df_drivers_static),  # Broadcast small table
+        df_rides.driver_id == df_drivers_static.driver_id,
+        "left"
+    ) \
+    .select(
+        df_rides["*"],
+        df_drivers_static.driver_name,
+        df_drivers_static.driver_rating,
+        df_drivers_static.vehicle_type
+    )
+
+# Write enriched stream
+query_enriched = df_enriched \
+    .writeStream \
+    .format("parquet") \
+    .outputMode("append") \
+    .option("path", "/output/enriched_rides") \
+    .option("checkpointLocation", "/checkpoints/enriched_rides") \
+    .start()
+
+# ============================================
+# STREAM-TO-STREAM JOIN (Inner)
+# ============================================
+# Join ride events with payment events
+df_rides_stream = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("subscribe", "ride_events") \
+    .load() \
+    .selectExpr("CAST(value AS STRING)") \
+    .select(from_json(col("value"), ride_schema).alias("data")) \
+    .select("data.*") \
+    .withColumn("ride_event_time", to_timestamp(col("event_timestamp"))) \
+    .withWatermark("ride_event_time", "10 minutes")
+
+df_payments_stream = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("subscribe", "payment_events") \
+    .load() \
+    .selectExpr("CAST(value AS STRING)") \
+    .select(from_json(col("value"), payment_schema).alias("data")) \
+    .select("data.*") \
+    .withColumn("payment_event_time", to_timestamp(col("payment_timestamp"))) \
+    .withWatermark("payment_event_time", "10 minutes")
+
+# Stream-Stream Inner Join with time constraint
+df_joined = df_rides_stream.alias("rides").join(
+    df_payments_stream.alias("payments"),
+    expr("""
+        rides.ride_id = payments.ride_id AND
+        payment_event_time >= ride_event_time AND
+        payment_event_time <= ride_event_time + interval 30 minutes
+    """),
+    "inner"
+)
+
+# ============================================
+# STREAM-TO-STREAM JOIN (Left Outer)
+# ============================================
+# Left outer join requires watermark on both sides
+df_left_outer = df_rides_stream.alias("rides").join(
+    df_payments_stream.alias("payments"),
+    expr("""
+        rides.ride_id = payments.ride_id AND
+        payment_event_time >= ride_event_time AND
+        payment_event_time <= ride_event_time + interval 30 minutes
+    """),
+    "leftOuter"
+)
+
+# ============================================
+# MULTIPLE STREAM JOINS
+# ============================================
+# Join rides with driver locations and payments
+df_driver_locations = spark.readStream \
+    .format("kafka") \
+    .option("subscribe", "driver_location") \
+    .load() \
+    .withWatermark("location_time", "5 minutes")
+
+# Chain joins
+df_full_picture = df_rides_stream \
+    .join(
+        df_payments_stream,
+        expr("rides.ride_id = payments.ride_id"),
+        "left"
+    ) \
+    .join(
+        df_driver_locations,
+        expr("rides.driver_id = locations.driver_id"),
+        "left"
+    )
+
+# ============================================
+# JOIN WITH AGGREGATION
+# ============================================
+# Aggregate rides, then join with static data
+df_ride_stats = df_rides_stream \
+    .withWatermark("ride_event_time", "10 minutes") \
+    .groupBy(
+        window(col("ride_event_time"), "5 minutes"),
+        col("driver_id")
+    ) \
+    .agg(
+        count("*").alias("ride_count"),
+        sum("fare_amount").alias("total_earnings")
+    )
+
+# Join aggregated stream with static driver info
+df_driver_performance = df_ride_stats \
+    .join(
+        broadcast(df_drivers_static),
+        "driver_id",
+        "left"
+    )
+
+query_performance = df_driver_performance \
+    .writeStream \
+    .format("console") \
+    .outputMode("update") \
+    .start()</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="production" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Production Patterns)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Production Streaming Patterns
+- Checkpointing and fault tolerance
+- Monitoring and alerting
+- Graceful shutdown
+- Error handling
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, current_timestamp, lit
+from pyspark.sql.streaming import StreamingQueryListener
+import logging
+import signal
+import sys
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("StreamingPipeline")
+
+# ============================================
+# SPARK SESSION WITH PRODUCTION CONFIG
+# ============================================
+spark = SparkSession.builder \
+    .appName("StreamingPipeline-Production") \
+    .config("spark.sql.streaming.checkpointLocation", "/checkpoints") \
+    .config("spark.sql.streaming.minBatchesToRetain", "100") \
+    .config("spark.sql.streaming.stateStore.stateSchemaCheck", "false") \
+    .config("spark.sql.shuffle.partitions", "200") \
+    .config("spark.streaming.stopGracefullyOnShutdown", "true") \
+    .getOrCreate()
+
+# ============================================
+# CUSTOM STREAMING QUERY LISTENER
+# ============================================
+class ProductionQueryListener(StreamingQueryListener):
+    def onQueryStarted(self, event):
+        logger.info(f"Query started: {event.id} - {event.name}")
+    
+    def onQueryProgress(self, event):
+        progress = event.progress
+        logger.info(f"Query progress: {progress.name}")
+        logger.info(f"  Input rows: {progress.numInputRows}")
+        logger.info(f"  Processing rate: {progress.processedRowsPerSecond:.2f} rows/sec")
+        logger.info(f"  Batch duration: {progress.batchDuration} ms")
+        
+        # Alert on processing delays
+        if progress.processedRowsPerSecond < 100:
+            logger.warning("Processing rate below threshold!")
+            # Send alert to monitoring system
+        
+        # Check for data freshness
+        if progress.eventTime:
+            watermark = progress.eventTime.get("watermark")
+            logger.info(f"  Watermark: {watermark}")
+    
+    def onQueryTerminated(self, event):
+        logger.info(f"Query terminated: {event.id}")
+        if event.exception:
+            logger.error(f"Query failed with exception: {event.exception}")
+            # Send alert
+
+# Register listener
+spark.streams.addListener(ProductionQueryListener())
+
+# ============================================
+# CHECKPOINTING BEST PRACTICES
+# ============================================
+def create_streaming_query(df, name, output_path, checkpoint_path):
+    """Create streaming query with proper checkpointing"""
+    return df \
+        .writeStream \
+        .format("parquet") \
+        .outputMode("append") \
+        .option("path", output_path) \
+        .option("checkpointLocation", checkpoint_path) \
+        .queryName(name) \
+        .trigger(processingTime="1 minute") \
+        .start()
+
+# Checkpoint location should be on reliable storage (S3, HDFS, ADLS)
+# Never delete checkpoints while query is running
+# Use different checkpoint locations for different queries
+
+# ============================================
+# ERROR HANDLING WITH FOREACH BATCH
+# ============================================
+def process_batch_with_error_handling(batch_df, batch_id):
+    """Process batch with comprehensive error handling"""
+    try:
+        logger.info(f"Processing batch {batch_id}")
+        
+        # Validate batch
+        if batch_df.isEmpty():
+            logger.info(f"Batch {batch_id} is empty, skipping")
+            return
+        
+        record_count = batch_df.count()
+        logger.info(f"Batch {batch_id} has {record_count} records")
+        
+        # Process valid records
+        valid_df = batch_df.filter(col("ride_id").isNotNull())
+        invalid_df = batch_df.filter(col("ride_id").isNull())
+        
+        # Write valid records
+        valid_df.write \
+            .mode("append") \
+            .parquet("/output/valid_rides")
+        
+        # Write invalid records to dead letter queue
+        if invalid_df.count() > 0:
+            invalid_df \
+                .withColumn("error_reason", lit("null_ride_id")) \
+                .withColumn("error_timestamp", current_timestamp()) \
+                .write \
+                .mode("append") \
+                .parquet("/output/dead_letter_queue")
+            
+            logger.warning(f"Batch {batch_id}: {invalid_df.count()} invalid records sent to DLQ")
+        
+        logger.info(f"Batch {batch_id} processed successfully")
+        
+    except Exception as e:
+        logger.error(f"Batch {batch_id} failed: {str(e)}")
+        # Don't re-raise - this would stop the streaming query
+        # Instead, log and continue, or implement retry logic
+        
+        # Option: Write failed batch to error location for manual review
+        try:
+            batch_df \
+                .withColumn("error_message", lit(str(e))) \
+                .withColumn("error_timestamp", current_timestamp()) \
+                .write \
+                .mode("append") \
+                .parquet("/output/failed_batches")
+        except:
+            logger.error("Failed to write error batch")
+
+query = df_stream \
+    .writeStream \
+    .foreachBatch(process_batch_with_error_handling) \
+    .option("checkpointLocation", "/checkpoints/foreach_batch") \
+    .start()
+
+# ============================================
+# GRACEFUL SHUTDOWN
+# ============================================
+active_queries = []
+
+def graceful_shutdown(signum, frame):
+    """Handle shutdown signals gracefully"""
+    logger.info("Received shutdown signal, stopping queries...")
+    
+    for query in active_queries:
+        try:
+            logger.info(f"Stopping query: {query.name}")
+            query.stop()
+            logger.info(f"Query {query.name} stopped")
+        except Exception as e:
+            logger.error(f"Error stopping query {query.name}: {e}")
+    
+    logger.info("All queries stopped, exiting")
+    sys.exit(0)
+
+# Register signal handlers
+signal.signal(signal.SIGTERM, graceful_shutdown)
+signal.signal(signal.SIGINT, graceful_shutdown)
+
+# ============================================
+# TRIGGER OPTIONS
+# ============================================
+# Fixed interval micro-batch
+query_fixed = df.writeStream.trigger(processingTime="1 minute").start()
+
+# Process all available data then stop (for testing/backfill)
+query_once = df.writeStream.trigger(once=True).start()
+
+# Available now - process all available, then stop (Spark 3.3+)
+query_available = df.writeStream.trigger(availableNow=True).start()
+
+# Continuous processing (experimental, low latency)
+query_continuous = df.writeStream.trigger(continuous="1 second").start()
+
+# ============================================
+# MONITORING METRICS
+# ============================================
+def get_streaming_metrics():
+    """Get metrics from all active streaming queries"""
+    metrics = []
+    for query in spark.streams.active:
+        progress = query.lastProgress
+        if progress:
+            metrics.append({
+                "query_name": query.name,
+                "query_id": str(query.id),
+                "is_active": query.isActive,
+                "input_rows": progress.numInputRows,
+                "processed_rows_per_sec": progress.processedRowsPerSecond,
+                "batch_duration_ms": progress.batchDuration,
+                "state_operators": len(progress.stateOperators) if progress.stateOperators else 0
+            })
+    return metrics
+
+# Log metrics periodically
+import threading
+import time
+
+def metrics_reporter():
+    while True:
+        metrics = get_streaming_metrics()
+        for m in metrics:
+            logger.info(f"Metrics: {m}")
+        time.sleep(60)
+
+metrics_thread = threading.Thread(target=metrics_reporter, daemon=True)
+metrics_thread.start()</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <h2>Production Considerations</h2>
+            <div class="code-container">
+                <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+                    <h3>Exactly-Once Semantics</h3>
+                    <p>Use checkpointing with idempotent sinks (Delta Lake, Kafka with transactions) to achieve exactly-once processing guarantees.</p>
+                    
+                    <h3>State Management</h3>
+                    <p>Monitor state size for aggregations. Use watermarks to bound state growth. Consider RocksDB state store for large state.</p>
+                    
+                    <h3>Backpressure</h3>
+                    <p>Configure maxOffsetsPerTrigger for Kafka to control ingestion rate. Monitor processing time vs trigger interval.</p>
+                    
+                    <h3>Schema Evolution</h3>
+                    <p>Use schema registry with Kafka. Handle schema changes gracefully with try-catch in parsing logic.</p>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../01_lakehouse_pipeline/index.html" style="color: var(--text-muted);">&larr; Previous: Lakehouse Pipeline</a>
+                <a href="../03_cdc_scd_project/index.html" style="color: var(--accent-primary);">Next: CDC/SCD Project &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 8, y: 4, z: 8 } });
+            showStreaming();
+        });
+        
+        function showStreaming() {
+            viz.clear();
+            
+            // Kafka
+            viz.createDataNode({ type: 'cylinder', size: 0.6, color: 0x231F20, position: { x: -3, y: 0.5, z: 0 } });
+            viz.createLabel('Kafka', { x: -3, y: 1.6, z: 0 });
+            
+            // Spark Streaming
+            viz.createDataNode({ type: 'sphere', size: 0.7, color: 0xE25A1C, position: { x: 0, y: 0.5, z: 0 } });
+            viz.createLabel('Spark Streaming', { x: 0, y: 1.7, z: 0 });
+            
+            // Output
+            viz.createDataNode({ type: 'cube', size: 0.6, color: 0x00D4AA, position: { x: 3, y: 0.5, z: 0 } });
+            viz.createLabel('Delta Lake', { x: 3, y: 1.6, z: 0 });
+            
+            // Arrows (animated flow)
+            viz.createArrow({ x: -2.2, y: 0.5, z: 0 }, { x: -0.8, y: 0.5, z: 0 }, { color: 0x4dabf7 });
+            viz.createArrow({ x: 0.8, y: 0.5, z: 0 }, { x: 2.2, y: 0.5, z: 0 }, { color: 0x4dabf7 });
+            
+            viz.createLabel('Real-Time Streaming Pipeline', { x: 0, y: -1.5, z: 0 });
+            viz.createGrid(10, 10);
+        }
+    </script>
+</body>
+</html>

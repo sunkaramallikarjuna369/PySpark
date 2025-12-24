@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error Handling - Data Quality</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#quality" class="nav-link active">Data Quality</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Error Handling Patterns</h1>
+            <p>Build resilient data pipelines with proper error handling. Learn patterns for quarantining bad data, implementing dead-letter queues, and graceful failure recovery.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Code Examples</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="quarantine">Quarantine Pattern</button>
+                <button class="tab" data-tab="deadletter">Dead Letter Queue</button>
+                <button class="tab" data-tab="retry">Retry Logic</button>
+                <button class="tab" data-tab="graceful">Graceful Degradation</button>
+            </div>
+            <div class="tab-contents">
+                <div id="quarantine" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Quarantine Pattern)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Quarantine Pattern for Bad Data
+- Separate good and bad records
+- Store bad records for investigation
+- Continue processing good records
+"""
+from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql.functions import col, when, lit, current_timestamp, struct, to_json
+from pyspark.sql.types import *
+from typing import Tuple
+from dataclasses import dataclass
+
+spark = SparkSession.builder.appName("Quarantine").getOrCreate()
+
+# ============================================
+# BASIC QUARANTINE
+# ============================================
+def quarantine_bad_records(df: DataFrame, validation_col: str, 
+                           condition) -> Tuple[DataFrame, DataFrame]:
+    """Split DataFrame into good and bad records"""
+    
+    df_good = df.filter(condition)
+    df_bad = df.filter(~condition)
+    
+    return df_good, df_bad
+
+# Example: Quarantine records with invalid amounts
+df = spark.read.parquet("/data/transactions")
+
+df_good, df_bad = quarantine_bad_records(
+    df, 
+    "amount",
+    (col("amount") > 0) & (col("amount") < 1000000)
+)
+
+# Save bad records for investigation
+df_bad.withColumn("quarantine_reason", lit("invalid_amount")) \
+    .withColumn("quarantine_time", current_timestamp()) \
+    .write.mode("append").parquet("/quarantine/transactions")
+
+# ============================================
+# MULTI-RULE QUARANTINE
+# ============================================
+@dataclass
+class ValidationRule:
+    name: str
+    condition: str  # SQL expression
+
+def quarantine_with_rules(df: DataFrame, rules: list) -> Tuple[DataFrame, DataFrame]:
+    """Quarantine records failing any validation rule"""
+    
+    # Add validation columns
+    df_validated = df
+    for rule in rules:
+        df_validated = df_validated.withColumn(
+            f"_valid_{rule.name}",
+            expr(rule.condition)
+        )
+    
+    # Combine all validations
+    valid_cols = [f"_valid_{r.name}" for r in rules]
+    all_valid = valid_cols[0]
+    for vc in valid_cols[1:]:
+        all_valid = all_valid & col(vc)
+    
+    df_validated = df_validated.withColumn("_all_valid", all_valid)
+    
+    # Split good and bad
+    df_good = df_validated.filter(col("_all_valid")).drop(*valid_cols, "_all_valid")
+    
+    # For bad records, capture which rules failed
+    df_bad = df_validated.filter(~col("_all_valid"))
+    
+    # Add failure reasons
+    failure_reasons = []
+    for rule in rules:
+        failure_reasons.append(
+            when(~col(f"_valid_{rule.name}"), lit(rule.name))
+        )
+    
+    df_bad = df_bad.withColumn(
+        "failed_rules",
+        array_remove(array(*failure_reasons), None)
+    ).drop(*valid_cols, "_all_valid")
+    
+    return df_good, df_bad
+
+# Example usage
+rules = [
+    ValidationRule("positive_amount", "amount > 0"),
+    ValidationRule("valid_date", "order_date >= '2020-01-01'"),
+    ValidationRule("not_null_customer", "customer_id IS NOT NULL"),
+]
+
+df_good, df_bad = quarantine_with_rules(df, rules)
+
+# ============================================
+# QUARANTINE TABLE MANAGEMENT
+# ============================================
+class QuarantineManager:
+    def __init__(self, quarantine_path: str):
+        self.path = quarantine_path
+    
+    def quarantine(self, df: DataFrame, reason: str, source: str):
+        """Send records to quarantine"""
+        df.withColumn("quarantine_reason", lit(reason)) \
+            .withColumn("quarantine_time", current_timestamp()) \
+            .withColumn("source_table", lit(source)) \
+            .write.mode("append") \
+            .partitionBy("source_table") \
+            .parquet(self.path)
+    
+    def get_quarantined(self, source: str = None, 
+                        start_time: str = None) -> DataFrame:
+        """Retrieve quarantined records"""
+        df = spark.read.parquet(self.path)
+        
+        if source:
+            df = df.filter(col("source_table") == source)
+        if start_time:
+            df = df.filter(col("quarantine_time") >= start_time)
+        
+        return df
+    
+    def reprocess(self, source: str, processor_fn):
+        """Attempt to reprocess quarantined records"""
+        df_quarantined = self.get_quarantined(source)
+        
+        # Remove quarantine metadata
+        original_cols = [c for c in df_quarantined.columns 
+                        if not c.startswith("quarantine_") and c != "source_table"]
+        df_original = df_quarantined.select(original_cols)
+        
+        # Reprocess
+        return processor_fn(df_original)
+
+quarantine = QuarantineManager("/quarantine")
+quarantine.quarantine(df_bad, "validation_failed", "transactions")</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="deadletter" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Dead Letter Queue)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Dead Letter Queue Pattern
+- Capture records that fail processing
+- Store with error context
+- Enable replay and debugging
+"""
+from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql.functions import col, lit, current_timestamp, struct, to_json, from_json
+from pyspark.sql.types import *
+import traceback
+import json
+
+spark = SparkSession.builder.appName("DeadLetterQueue").getOrCreate()
+
+# ============================================
+# DLQ SCHEMA
+# ============================================
+dlq_schema = StructType([
+    StructField("original_record", StringType(), True),
+    StructField("error_message", StringType(), True),
+    StructField("error_type", StringType(), True),
+    StructField("stack_trace", StringType(), True),
+    StructField("source_topic", StringType(), True),
+    StructField("processing_time", TimestampType(), True),
+    StructField("retry_count", IntegerType(), True)
+])
+
+# ============================================
+# DLQ WRITER
+# ============================================
+class DeadLetterQueue:
+    def __init__(self, dlq_path: str):
+        self.path = dlq_path
+    
+    def send(self, record: dict, error: Exception, source: str, retry_count: int = 0):
+        """Send a single record to DLQ"""
+        dlq_record = {
+            "original_record": json.dumps(record),
+            "error_message": str(error),
+            "error_type": type(error).__name__,
+            "stack_trace": traceback.format_exc(),
+            "source_topic": source,
+            "processing_time": datetime.now().isoformat(),
+            "retry_count": retry_count
+        }
+        
+        df = spark.createDataFrame([dlq_record], dlq_schema)
+        df.write.mode("append").parquet(self.path)
+    
+    def send_batch(self, df: DataFrame, error_msg: str, source: str):
+        """Send batch of records to DLQ"""
+        df_dlq = df.select(
+            to_json(struct("*")).alias("original_record"),
+            lit(error_msg).alias("error_message"),
+            lit("BatchError").alias("error_type"),
+            lit("").alias("stack_trace"),
+            lit(source).alias("source_topic"),
+            current_timestamp().alias("processing_time"),
+            lit(0).alias("retry_count")
+        )
+        
+        df_dlq.write.mode("append").parquet(self.path)
+    
+    def get_failed(self, source: str = None, error_type: str = None) -> DataFrame:
+        """Retrieve failed records"""
+        df = spark.read.parquet(self.path)
+        
+        if source:
+            df = df.filter(col("source_topic") == source)
+        if error_type:
+            df = df.filter(col("error_type") == error_type)
+        
+        return df
+    
+    def replay(self, processor_fn, source: str = None, max_retries: int = 3):
+        """Replay failed records"""
+        df_failed = self.get_failed(source)
+        df_retryable = df_failed.filter(col("retry_count") < max_retries)
+        
+        # Parse original records
+        # Assuming we know the original schema
+        original_schema = StructType([...])  # Define based on source
+        
+        df_original = df_retryable.select(
+            from_json(col("original_record"), original_schema).alias("data"),
+            col("retry_count")
+        ).select("data.*", "retry_count")
+        
+        # Increment retry count
+        df_original = df_original.withColumn("retry_count", col("retry_count") + 1)
+        
+        return processor_fn(df_original)
+
+# ============================================
+# STREAMING WITH DLQ
+# ============================================
+dlq = DeadLetterQueue("/dlq/streaming")
+
+def process_with_dlq(batch_df, batch_id):
+    """Process batch with DLQ for failures"""
+    try:
+        # Validate records
+        df_valid = batch_df.filter(col("amount").isNotNull() & (col("amount") > 0))
+        df_invalid = batch_df.filter(col("amount").isNull() | (col("amount") <= 0))
+        
+        # Send invalid to DLQ
+        if df_invalid.count() > 0:
+            dlq.send_batch(df_invalid, "Invalid amount", "transactions")
+        
+        # Process valid records
+        df_valid.write.mode("append").parquet("/output/transactions")
+        
+    except Exception as e:
+        # Send entire batch to DLQ on error
+        dlq.send_batch(batch_df, str(e), "transactions")
+        raise
+
+# Use with foreachBatch
+df_stream.writeStream \
+    .foreachBatch(process_with_dlq) \
+    .start()</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="retry" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Retry Logic)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Retry Patterns for Data Pipelines
+"""
+from pyspark.sql import SparkSession, DataFrame
+import time
+from functools import wraps
+from typing import Callable, TypeVar, Any
+import logging
+
+spark = SparkSession.builder.appName("RetryPatterns").getOrCreate()
+logger = logging.getLogger(__name__)
+
+# ============================================
+# BASIC RETRY DECORATOR
+# ============================================
+def retry(max_attempts: int = 3, delay: float = 1.0, 
+          backoff: float = 2.0, exceptions: tuple = (Exception,)):
+    """Retry decorator with exponential backoff"""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exception = None
+            current_delay = delay
+            
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except exceptions as e:
+                    last_exception = e
+                    logger.warning(f"Attempt {attempt + 1} failed: {e}")
+                    
+                    if attempt < max_attempts - 1:
+                        time.sleep(current_delay)
+                        current_delay *= backoff
+            
+            raise last_exception
+        return wrapper
+    return decorator
+
+# Usage
+@retry(max_attempts=3, delay=1.0, backoff=2.0)
+def read_from_external_source(path: str) -> DataFrame:
+    return spark.read.parquet(path)
+
+# ============================================
+# RETRY WITH CIRCUIT BREAKER
+# ============================================
+class CircuitBreaker:
+    def __init__(self, failure_threshold: int = 5, 
+                 reset_timeout: float = 60.0):
+        self.failure_threshold = failure_threshold
+        self.reset_timeout = reset_timeout
+        self.failures = 0
+        self.last_failure_time = None
+        self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
+    
+    def call(self, func: Callable, *args, **kwargs):
+        if self.state == "OPEN":
+            if time.time() - self.last_failure_time > self.reset_timeout:
+                self.state = "HALF_OPEN"
+            else:
+                raise Exception("Circuit breaker is OPEN")
+        
+        try:
+            result = func(*args, **kwargs)
+            self.on_success()
+            return result
+        except Exception as e:
+            self.on_failure()
+            raise
+    
+    def on_success(self):
+        self.failures = 0
+        self.state = "CLOSED"
+    
+    def on_failure(self):
+        self.failures += 1
+        self.last_failure_time = time.time()
+        
+        if self.failures >= self.failure_threshold:
+            self.state = "OPEN"
+            logger.error("Circuit breaker OPENED")
+
+# Usage
+circuit_breaker = CircuitBreaker(failure_threshold=5)
+
+def safe_read(path: str) -> DataFrame:
+    return circuit_breaker.call(spark.read.parquet, path)
+
+# ============================================
+# BATCH RETRY WITH CHECKPOINTING
+# ============================================
+class BatchProcessor:
+    def __init__(self, checkpoint_path: str):
+        self.checkpoint_path = checkpoint_path
+    
+    def get_last_checkpoint(self) -> dict:
+        """Get last successful checkpoint"""
+        try:
+            df = spark.read.json(self.checkpoint_path)
+            return df.orderBy(col("timestamp").desc()).first().asDict()
+        except:
+            return {"batch_id": 0, "offset": 0}
+    
+    def save_checkpoint(self, batch_id: int, offset: int):
+        """Save checkpoint after successful processing"""
+        checkpoint = {
+            "batch_id": batch_id,
+            "offset": offset,
+            "timestamp": datetime.now().isoformat()
+        }
+        spark.createDataFrame([checkpoint]).write \
+            .mode("append").json(self.checkpoint_path)
+    
+    def process_with_retry(self, df: DataFrame, process_fn: Callable,
+                          batch_size: int = 10000, max_retries: int = 3):
+        """Process DataFrame in batches with retry and checkpointing"""
+        
+        checkpoint = self.get_last_checkpoint()
+        start_offset = checkpoint["offset"]
+        
+        # Add row numbers for batching
+        df_numbered = df.withColumn("_row_num", monotonically_increasing_id())
+        df_remaining = df_numbered.filter(col("_row_num") >= start_offset)
+        
+        total_rows = df_remaining.count()
+        processed = 0
+        
+        while processed < total_rows:
+            batch_df = df_remaining \
+                .filter(col("_row_num") >= start_offset + processed) \
+                .limit(batch_size)
+            
+            for attempt in range(max_retries):
+                try:
+                    process_fn(batch_df.drop("_row_num"))
+                    processed += batch_df.count()
+                    self.save_checkpoint(checkpoint["batch_id"] + 1, 
+                                        start_offset + processed)
+                    break
+                except Exception as e:
+                    logger.error(f"Batch failed (attempt {attempt + 1}): {e}")
+                    if attempt == max_retries - 1:
+                        raise
+                    time.sleep(2 ** attempt)</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="graceful" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-header"><span class="code-language">Python (Graceful Degradation)</span><button class="copy-btn">Copy</button></div>
+                        <div class="code-block">
+<pre>"""
+Graceful Degradation Patterns
+- Continue processing despite partial failures
+- Provide fallback values
+- Log and alert on degraded state
+"""
+from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql.functions import col, lit, when, coalesce, current_timestamp
+from typing import Optional, Callable
+import logging
+
+spark = SparkSession.builder.appName("GracefulDegradation").getOrCreate()
+logger = logging.getLogger(__name__)
+
+# ============================================
+# FALLBACK VALUES
+# ============================================
+def with_fallback(df: DataFrame, column: str, fallback_value) -> DataFrame:
+    """Replace nulls with fallback value"""
+    return df.withColumn(column, coalesce(col(column), lit(fallback_value)))
+
+def with_fallback_column(df: DataFrame, primary_col: str, 
+                         fallback_col: str) -> DataFrame:
+    """Use fallback column when primary is null"""
+    return df.withColumn(
+        primary_col,
+        coalesce(col(primary_col), col(fallback_col))
+    )
+
+# ============================================
+# OPTIONAL DATA SOURCES
+# ============================================
+def read_with_fallback(primary_path: str, fallback_path: str = None,
+                       empty_schema: StructType = None) -> DataFrame:
+    """Read from primary source, fall back to secondary or empty"""
+    try:
+        return spark.read.parquet(primary_path)
+    except Exception as e:
+        logger.warning(f"Primary source failed: {e}")
+        
+        if fallback_path:
+            try:
+                return spark.read.parquet(fallback_path)
+            except Exception as e2:
+                logger.warning(f"Fallback source failed: {e2}")
+        
+        if empty_schema:
+            logger.warning("Returning empty DataFrame")
+            return spark.createDataFrame([], empty_schema)
+        
+        raise
+
+# ============================================
+# PARTIAL PROCESSING
+# ============================================
+class PartialProcessor:
+    """Process data even if some steps fail"""
+    
+    def __init__(self):
+        self.steps = []
+        self.results = {}
+    
+    def add_step(self, name: str, func: Callable, required: bool = True):
+        self.steps.append({
+            "name": name,
+            "func": func,
+            "required": required
+        })
+        return self
+    
+    def process(self, df: DataFrame) -> DataFrame:
+        current_df = df
+        
+        for step in self.steps:
+            try:
+                current_df = step["func"](current_df)
+                self.results[step["name"]] = "success"
+                logger.info(f"Step '{step['name']}' completed")
+            except Exception as e:
+                self.results[step["name"]] = f"failed: {e}"
+                logger.error(f"Step '{step['name']}' failed: {e}")
+                
+                if step["required"]:
+                    raise
+                else:
+                    logger.warning(f"Continuing without '{step['name']}'")
+        
+        return current_df
+
+# Usage
+processor = PartialProcessor() \
+    .add_step("validate", validate_data, required=True) \
+    .add_step("enrich_geo", enrich_with_geo, required=False) \
+    .add_step("enrich_weather", enrich_with_weather, required=False) \
+    .add_step("aggregate", aggregate_data, required=True)
+
+result_df = processor.process(input_df)
+
+# ============================================
+# DEGRADED MODE INDICATOR
+# ============================================
+class DegradedModeTracker:
+    """Track and report degraded processing state"""
+    
+    def __init__(self):
+        self.degradations = []
+    
+    def record(self, component: str, reason: str, impact: str):
+        self.degradations.append({
+            "component": component,
+            "reason": reason,
+            "impact": impact,
+            "timestamp": datetime.now().isoformat()
+        })
+    
+    def is_degraded(self) -> bool:
+        return len(self.degradations) > 0
+    
+    def get_report(self) -> dict:
+        return {
+            "is_degraded": self.is_degraded(),
+            "degradation_count": len(self.degradations),
+            "degradations": self.degradations
+        }
+    
+    def add_to_output(self, df: DataFrame) -> DataFrame:
+        """Add degradation metadata to output"""
+        return df.withColumn(
+            "_processing_degraded",
+            lit(self.is_degraded())
+        ).withColumn(
+            "_degradation_count",
+            lit(len(self.degradations))
+        )
+
+# Usage
+tracker = DegradedModeTracker()
+
+try:
+    df_enriched = enrich_with_external_api(df)
+except Exception as e:
+    tracker.record("external_api", str(e), "Missing enrichment data")
+    df_enriched = df  # Continue without enrichment
+
+# Add metadata to output
+df_output = tracker.add_to_output(df_enriched)
+
+# Log degradation report
+if tracker.is_degraded():
+    logger.warning(f"Processing completed in degraded mode: {tracker.get_report()}")</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../03_schema_evolution/index.html" style="color: var(--text-muted);">&larr; Previous: Schema Evolution</a>
+                <a href="../../index.html#quality" style="color: var(--accent-primary);">Back to Data Quality &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showErrorHandling();
+        });
+        
+        function showErrorHandling() {
+            viz.clear();
+            
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x4dabf7, position: { x: -2, y: 0.4, z: 0 } });
+            viz.createLabel('Input', { x: -2, y: 1.2, z: 0 });
+            
+            viz.createDataNode({ type: 'sphere', size: 0.4, color: 0xffd43b, position: { x: 0, y: 0.4, z: 0 } });
+            viz.createLabel('Process', { x: 0, y: 1.1, z: 0 });
+            
+            viz.createDataNode({ type: 'cube', size: 0.4, color: 0x51cf66, position: { x: 2, y: 0.6, z: -0.8 } });
+            viz.createLabel('Success', { x: 2, y: 1.3, z: -0.8 });
+            
+            viz.createDataNode({ type: 'cube', size: 0.4, color: 0xff6b6b, position: { x: 2, y: 0.3, z: 0.8 } });
+            viz.createLabel('DLQ', { x: 2, y: 1, z: 0.8 });
+            
+            viz.createArrow({ x: -1.3, y: 0.4, z: 0 }, { x: -0.5, y: 0.4, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.5, y: 0.5, z: 0 }, { x: 1.4, y: 0.6, z: -0.5 }, { color: 0x51cf66 });
+            viz.createArrow({ x: 0.5, y: 0.3, z: 0 }, { x: 1.4, y: 0.3, z: 0.5 }, { color: 0xff6b6b });
+            
+            viz.createGrid(8, 8);
+        }
+    </script>
+</body>
+</html>

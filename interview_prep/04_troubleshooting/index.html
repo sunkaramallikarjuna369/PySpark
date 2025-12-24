@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Troubleshooting - Interview Prep</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="../../index.html" class="logo"><span>Data Engineering Hub</span></a>
+            <nav class="nav"><a href="../../index.html#interview" class="nav-link active">Interview Prep</a><button class="theme-toggle">&#127769;</button></nav>
+        </div>
+    </header>
+    <main class="container">
+        <section class="section">
+            <h1>Troubleshooting Spark Jobs</h1>
+            <p>Learn to diagnose and fix common Spark issues. These troubleshooting scenarios are frequently asked in interviews and are essential skills for production data engineering.</p>
+            
+            <div id="visualization" class="visualization-container"></div>
+
+            <h2>Common Issues</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="oom">Out of Memory</button>
+                <button class="tab" data-tab="slow">Slow Jobs</button>
+                <button class="tab" data-tab="skew">Data Skew</button>
+                <button class="tab" data-tab="shuffle">Shuffle Issues</button>
+                <button class="tab" data-tab="debug">Debugging Tips</button>
+            </div>
+            <div class="tab-contents">
+                <div id="oom" class="tab-content active">
+                    <div class="code-container">
+                        <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+<h3>Scenario: OutOfMemoryError</h3>
+<p><strong>Symptoms:</strong></p>
+<ul>
+    <li>Job fails with "java.lang.OutOfMemoryError: Java heap space"</li>
+    <li>Executor lost, exit code 137 (OOM killed)</li>
+    <li>GC overhead limit exceeded</li>
+</ul>
+
+<h4>Diagnosis Steps:</h4>
+<ol>
+    <li><strong>Check Spark UI:</strong> Executors tab for memory usage</li>
+    <li><strong>Identify the stage:</strong> Which operation is failing?</li>
+    <li><strong>Check data size:</strong> Is input larger than expected?</li>
+    <li><strong>Look for skew:</strong> One partition much larger than others?</li>
+</ol>
+
+<h4>Common Causes & Solutions:</h4>
+
+<p><strong>1. Driver OOM (collect() on large data):</strong></p>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
+# BAD: Collecting all data to driver
+all_data = df.collect()  # OOM if df is large!
+
+# GOOD: Process in Spark, only collect aggregates
+result = df.groupBy("category").count().collect()
+
+# GOOD: Use take() or limit()
+sample = df.take(1000)
+
+# GOOD: Write to storage instead
+df.write.parquet("/output/path")
+</pre>
+
+<p><strong>2. Executor OOM (large partitions):</strong></p>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
+# Increase partitions to reduce data per partition
+df.repartition(1000).write.parquet("/output")
+
+# Increase executor memory
+spark.conf.set("spark.executor.memory", "8g")
+
+# Use memory-efficient storage
+df.persist(StorageLevel.MEMORY_AND_DISK_SER)
+</pre>
+
+<p><strong>3. Broadcast OOM:</strong></p>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
+# Check broadcast threshold
+spark.conf.get("spark.sql.autoBroadcastJoinThreshold")
+
+# Disable auto-broadcast for large tables
+spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "-1")
+
+# Or increase driver memory for large broadcasts
+spark.conf.set("spark.driver.memory", "8g")
+</pre>
+
+<p><strong>4. Shuffle OOM:</strong></p>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
+# Increase shuffle partitions
+spark.conf.set("spark.sql.shuffle.partitions", "500")
+
+# Enable external shuffle service
+spark.conf.set("spark.shuffle.service.enabled", "true")
+
+# Increase memory fraction for execution
+spark.conf.set("spark.memory.fraction", "0.8")
+</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="slow" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+<h3>Scenario: Job Running Slowly</h3>
+<p><strong>Symptoms:</strong></p>
+<ul>
+    <li>Job takes hours instead of minutes</li>
+    <li>Some tasks take much longer than others</li>
+    <li>Low CPU utilization despite available resources</li>
+</ul>
+
+<h4>Diagnosis Checklist:</h4>
+
+<p><strong>1. Check Spark UI - Stages Tab:</strong></p>
+<ul>
+    <li>Which stage is slow?</li>
+    <li>Task duration distribution (min/median/max)</li>
+    <li>Shuffle read/write sizes</li>
+    <li>GC time per task</li>
+</ul>
+
+<p><strong>2. Check Execution Plan:</strong></p>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
+# View execution plan
+df.explain(True)
+
+# Look for:
+# - Multiple Exchange (shuffle) operations
+# - SortMergeJoin instead of BroadcastHashJoin
+# - Missing filter pushdown
+# - CartesianProduct (cross join)
+</pre>
+
+<h4>Common Causes & Solutions:</h4>
+
+<p><strong>1. Too few partitions:</strong></p>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
+# Check partition count
+print(df.rdd.getNumPartitions())
+
+# Rule of thumb: 2-4 partitions per CPU core
+# For 100 cores, use 200-400 partitions
+df = df.repartition(400)
+</pre>
+
+<p><strong>2. Inefficient joins:</strong></p>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
+# Use broadcast for small tables
+from pyspark.sql.functions import broadcast
+df_result = df_large.join(broadcast(df_small), "key")
+
+# Filter before join
+df_filtered = df_large.filter(col("date") > "2024-01-01")
+df_result = df_filtered.join(df_small, "key")
+</pre>
+
+<p><strong>3. UDFs instead of built-in functions:</strong></p>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
+# BAD: Python UDF (slow, no optimization)
+@udf
+def my_upper(s):
+    return s.upper() if s else None
+
+# GOOD: Built-in function (optimized)
+from pyspark.sql.functions import upper
+df.withColumn("name_upper", upper(col("name")))
+</pre>
+
+<p><strong>4. Reading too much data:</strong></p>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
+# Use partition pruning
+df = spark.read.parquet("/data").filter(col("date") == "2024-01-01")
+
+# Select only needed columns
+df = spark.read.parquet("/data").select("id", "name", "amount")
+
+# Use predicate pushdown
+df = spark.read.parquet("/data").filter(col("status") == "active")
+</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="skew" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+<h3>Scenario: Data Skew</h3>
+<p><strong>Symptoms:</strong></p>
+<ul>
+    <li>One task takes 10-100x longer than others</li>
+    <li>Spark UI shows uneven task durations</li>
+    <li>One executor has high memory/CPU while others idle</li>
+</ul>
+
+<h4>Diagnosis:</h4>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
+# Check key distribution
+df.groupBy("join_key").count().orderBy(col("count").desc()).show(20)
+
+# Look for:
+# - Null values (all go to one partition)
+# - Hot keys (one key has millions of records)
+# - Default values ("Unknown", "Other", etc.)
+</pre>
+
+<h4>Solutions:</h4>
+
+<p><strong>1. Handle null keys separately:</strong></p>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
+# Split null and non-null
+df_null = df.filter(col("key").isNull())
+df_not_null = df.filter(col("key").isNotNull())
+
+# Process separately
+result_not_null = df_not_null.join(df_other, "key")
+result = result_not_null.union(df_null.crossJoin(df_other))
+</pre>
+
+<p><strong>2. Salting for hot keys:</strong></p>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
+from pyspark.sql.functions import rand, floor, concat, lit, explode, array
+
+# Add salt to large side
+num_salts = 10
+df_large_salted = df_large.withColumn(
+    "salt", floor(rand() * num_salts).cast("int")
+).withColumn(
+    "salted_key", concat(col("key"), lit("_"), col("salt"))
+)
+
+# Explode small side with all salts
+df_small_exploded = df_small.withColumn(
+    "salt", explode(array([lit(i) for i in range(num_salts)]))
+).withColumn(
+    "salted_key", concat(col("key"), lit("_"), col("salt"))
+)
+
+# Join on salted key
+result = df_large_salted.join(df_small_exploded, "salted_key")
+</pre>
+
+<p><strong>3. Enable AQE skew handling (Spark 3.0+):</strong></p>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
+spark.conf.set("spark.sql.adaptive.enabled", "true")
+spark.conf.set("spark.sql.adaptive.skewJoin.enabled", "true")
+spark.conf.set("spark.sql.adaptive.skewJoin.skewedPartitionFactor", "5")
+spark.conf.set("spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes", "256MB")
+</pre>
+
+<p><strong>4. Broadcast join for skewed keys:</strong></p>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
+# Identify hot keys
+hot_keys = df_large.groupBy("key").count() \
+    .filter(col("count") > 100000) \
+    .select("key").collect()
+hot_keys = [row["key"] for row in hot_keys]
+
+# Broadcast join for hot keys
+df_large_hot = df_large.filter(col("key").isin(hot_keys))
+df_small_hot = df_small.filter(col("key").isin(hot_keys))
+result_hot = df_large_hot.join(broadcast(df_small_hot), "key")
+
+# Regular join for rest
+df_large_normal = df_large.filter(~col("key").isin(hot_keys))
+result_normal = df_large_normal.join(df_small, "key")
+
+# Union results
+result = result_hot.union(result_normal)
+</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="shuffle" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+<h3>Scenario: Shuffle Issues</h3>
+<p><strong>Symptoms:</strong></p>
+<ul>
+    <li>"Shuffle block fetch failure"</li>
+    <li>"Connection reset by peer"</li>
+    <li>Slow shuffle read/write</li>
+    <li>Disk space issues on executors</li>
+</ul>
+
+<h4>Common Shuffle Problems:</h4>
+
+<p><strong>1. FetchFailedException:</strong></p>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
+# Causes:
+# - Executor died during shuffle
+# - Network timeout
+# - Disk full
+
+# Solutions:
+# Increase retry attempts
+spark.conf.set("spark.shuffle.io.maxRetries", "10")
+spark.conf.set("spark.shuffle.io.retryWait", "60s")
+
+# Enable external shuffle service (survives executor death)
+spark.conf.set("spark.shuffle.service.enabled", "true")
+
+# Increase network timeout
+spark.conf.set("spark.network.timeout", "600s")
+</pre>
+
+<p><strong>2. Too many shuffle partitions:</strong></p>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
+# Default is 200, may be too many for small data
+# Results in many small files
+
+# Reduce for small datasets
+spark.conf.set("spark.sql.shuffle.partitions", "50")
+
+# Or use AQE to auto-coalesce
+spark.conf.set("spark.sql.adaptive.enabled", "true")
+spark.conf.set("spark.sql.adaptive.coalescePartitions.enabled", "true")
+</pre>
+
+<p><strong>3. Shuffle spill to disk:</strong></p>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
+# Check Spark UI for "Spill (Memory)" and "Spill (Disk)"
+
+# Increase memory fraction for execution
+spark.conf.set("spark.memory.fraction", "0.8")
+
+# Use more partitions to reduce data per partition
+spark.conf.set("spark.sql.shuffle.partitions", "500")
+
+# Increase executor memory
+spark.conf.set("spark.executor.memory", "8g")
+</pre>
+
+<p><strong>4. Reduce shuffle data:</strong></p>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
+# Filter before shuffle
+df_filtered = df.filter(col("date") > "2024-01-01")
+df_grouped = df_filtered.groupBy("category").count()
+
+# Select only needed columns before join
+df1_slim = df1.select("key", "value1")
+df2_slim = df2.select("key", "value2")
+result = df1_slim.join(df2_slim, "key")
+
+# Use broadcast to avoid shuffle
+result = df_large.join(broadcast(df_small), "key")
+
+# Combine multiple aggregations
+df.groupBy("category").agg(
+    sum("amount"),
+    count("*"),
+    avg("price")
+)  # One shuffle instead of three
+</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="debug" class="tab-content">
+                    <div class="code-container">
+                        <div class="code-block" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+<h3>Debugging Tips & Tools</h3>
+
+<h4>1. Spark UI Navigation:</h4>
+<ul>
+    <li><strong>Jobs tab:</strong> Overall job progress, failed jobs</li>
+    <li><strong>Stages tab:</strong> Task metrics, shuffle sizes, GC time</li>
+    <li><strong>Storage tab:</strong> Cached DataFrames, memory usage</li>
+    <li><strong>Executors tab:</strong> Memory/disk per executor, failed tasks</li>
+    <li><strong>SQL tab:</strong> Query plans, metrics per operator</li>
+</ul>
+
+<h4>2. Useful Configurations for Debugging:</h4>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
+# Enable detailed logging
+spark.conf.set("spark.eventLog.enabled", "true")
+spark.conf.set("spark.eventLog.dir", "/path/to/logs")
+
+# Show more in explain
+df.explain(mode="formatted")
+df.explain(mode="cost")
+
+# Enable query plan visualization
+spark.conf.set("spark.sql.planChangeLog.level", "WARN")
+</pre>
+
+<h4>3. Common Debug Patterns:</h4>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
+# Check partition count
+print(f"Partitions: {df.rdd.getNumPartitions()}")
+
+# Check data distribution
+df.withColumn("partition_id", spark_partition_id()) \
+    .groupBy("partition_id").count().show()
+
+# Sample data for inspection
+df.sample(0.01).show(20, truncate=False)
+
+# Check schema
+df.printSchema()
+
+# Verify row counts at each step
+print(f"After filter: {df_filtered.count()}")
+print(f"After join: {df_joined.count()}")
+</pre>
+
+<h4>4. Performance Profiling:</h4>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
+import time
+
+# Time operations
+start = time.time()
+df.count()
+print(f"Count took: {time.time() - start:.2f}s")
+
+# Use explain to understand plan
+df.explain(True)
+
+# Check for expensive operations in plan:
+# - Exchange (shuffle)
+# - Sort
+# - BroadcastNestedLoopJoin
+# - CartesianProduct
+</pre>
+
+<h4>5. Log Analysis:</h4>
+<pre style="background: var(--bg-primary); padding: 1rem; border-radius: 4px;">
+# Key log patterns to search for:
+# - "OutOfMemoryError"
+# - "FetchFailedException"
+# - "Lost executor"
+# - "Task failed"
+# - "GC overhead"
+
+# YARN logs
+yarn logs -applicationId application_xxx
+
+# Check driver logs for errors
+# Check executor logs for OOM, task failures
+</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                <a href="../03_system_design/index.html" style="color: var(--text-muted);">&larr; Previous: System Design</a>
+                <a href="../../index.html#interview" style="color: var(--accent-primary);">Back to Interview Prep &rarr;</a>
+            </div>
+        </section>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/visualization.js"></script>
+    <script>
+        let viz;
+        document.addEventListener('DOMContentLoaded', function() {
+            viz = new DataVisualization('visualization', { cameraPosition: { x: 6, y: 4, z: 6 } });
+            showTroubleshooting();
+        });
+        
+        function showTroubleshooting() {
+            viz.clear();
+            
+            // Problem
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0xff6b6b, position: { x: -2, y: 0.4, z: 0 } });
+            viz.createLabel('Problem', { x: -2, y: 1.2, z: 0 });
+            
+            // Diagnose
+            viz.createDataNode({ type: 'sphere', size: 0.4, color: 0xffd43b, position: { x: 0, y: 0.4, z: 0 } });
+            viz.createLabel('Diagnose', { x: 0, y: 1.1, z: 0 });
+            
+            // Solution
+            viz.createDataNode({ type: 'cube', size: 0.5, color: 0x51cf66, position: { x: 2, y: 0.4, z: 0 } });
+            viz.createLabel('Solution', { x: 2, y: 1.2, z: 0 });
+            
+            viz.createArrow({ x: -1.3, y: 0.4, z: 0 }, { x: -0.6, y: 0.4, z: 0 }, { color: 0x888888 });
+            viz.createArrow({ x: 0.6, y: 0.4, z: 0 }, { x: 1.3, y: 0.4, z: 0 }, { color: 0x888888 });
+            
+            viz.createGrid(6, 6);
+        }
+    </script>
+</body>
+</html>
