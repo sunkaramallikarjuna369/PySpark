@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Sharing</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand"><a href="../../index.html">PySpark Learning Hub</a></div>
+        <div class="nav-links">
+            <a href="../10_data_apis/index.html">Prev: Data APIs</a>
+            <a href="../12_best_practices/index.html">Next: Best Practices</a>
+        </div>
+    </nav>
+    <main class="topic-container">
+        <header class="topic-header">
+            <div class="category-icon consumption">CL</div>
+            <h1>Data Sharing</h1>
+            <p class="topic-description">Share data securely with external partners using Delta Sharing and other protocols.</p>
+        </header>
+        <div class="content-tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="code">PySpark Code</button>
+        </div>
+        <div class="visualization-container"><div id="viz-container"></div></div>
+        <div class="tab-content active" id="overview">
+            <h2>Secure Data Sharing</h2>
+            <p>Data sharing enables secure, governed sharing of data with external partners, customers, or other business units without copying data.</p>
+            <h3>Sharing Methods</h3>
+            <ul>
+                <li><strong>Delta Sharing:</strong> Open protocol for secure data sharing</li>
+                <li><strong>Data Exports:</strong> Scheduled exports to cloud storage</li>
+                <li><strong>Live Connections:</strong> Direct query access with governance</li>
+                <li><strong>Data Marketplaces:</strong> Publish data products for discovery</li>
+            </ul>
+        </div>
+        <div class="tab-content" id="code">
+            <h2>Data Sharing with PySpark</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, current_timestamp
+import json
+
+spark = SparkSession.builder.appName("DataSharing").getOrCreate()
+
+class DataSharingManager:
+    """Manage data sharing with external parties."""
+    
+    def __init__(self, share_path: str):
+        self.share_path = share_path
+        self.shares = {}
+        self.recipients = {}
+    
+    def create_share(self, name: str, description: str, tables: list):
+        """Create a new data share."""
+        self.shares[name] = {
+            "name": name,
+            "description": description,
+            "tables": tables,
+            "created_at": str(current_timestamp())
+        }
+        print(f"Created share: {name}")
+        return self.shares[name]
+    
+    def add_recipient(self, share_name: str, recipient_name: str, permissions: list):
+        """Add recipient to a share."""
+        if share_name not in self.shares:
+            raise ValueError(f"Share {share_name} not found")
+        
+        self.recipients[f"{share_name}_{recipient_name}"] = {
+            "share": share_name,
+            "recipient": recipient_name,
+            "permissions": permissions,
+            "token": self._generate_token()
+        }
+        print(f"Added recipient {recipient_name} to share {share_name}")
+    
+    def _generate_token(self):
+        """Generate access token for recipient."""
+        import hashlib
+        import time
+        return hashlib.sha256(str(time.time()).encode()).hexdigest()[:32]
+    
+    def publish_to_share(self, share_name: str, table_name: str, source_path: str):
+        """Publish a table to a share."""
+        df = spark.read.format("delta").load(source_path)
+        
+        # Apply any sharing transformations (e.g., remove PII)
+        share_df = df.drop("email", "phone", "ssn")  # Remove sensitive columns
+        
+        output_path = f"{self.share_path}/{share_name}/{table_name}"
+        share_df.write.format("delta").mode("overwrite").save(output_path)
+        
+        print(f"Published {table_name} to share {share_name}")
+        return output_path
+    
+    def export_to_storage(self, source_path: str, dest_path: str, format: str = "parquet"):
+        """Export data to external storage."""
+        df = spark.read.format("delta").load(source_path)
+        
+        df.write \
+            .format(format) \
+            .mode("overwrite") \
+            .option("compression", "snappy") \
+            .save(dest_path)
+        
+        print(f"Exported to {dest_path} in {format} format")
+
+# Create and manage shares
+sharing = DataSharingManager("/lakehouse/shares")
+
+# Create a share for partners
+sharing.create_share(
+    name="partner_analytics",
+    description="Aggregated analytics data for partners",
+    tables=["daily_sales_summary", "product_performance"]
+)
+
+# Add recipients
+sharing.add_recipient(
+    share_name="partner_analytics",
+    recipient_name="partner_corp",
+    permissions=["SELECT"]
+)
+
+# Publish tables to share
+sharing.publish_to_share(
+    share_name="partner_analytics",
+    table_name="daily_sales_summary",
+    source_path="/lakehouse/gold/daily_sales_summary"
+)
+
+# Export for external consumption
+sharing.export_to_storage(
+    source_path="/lakehouse/gold/product_performance",
+    dest_path="s3://exports/product_performance/",
+    format="parquet"
+)</code></pre>
+        </div>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script>
+        const container = document.getElementById('viz-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+        const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        container.appendChild(renderer.domElement);
+        
+        // Central data hub
+        const hubGeo = new THREE.IcosahedronGeometry(1);
+        const hubMat = new THREE.MeshPhongMaterial({ color: 0xffd700 });
+        const hub = new THREE.Mesh(hubGeo, hubMat);
+        scene.add(hub);
+        
+        // Partner organizations
+        const partnerColors = [0x4caf50, 0x2196f3, 0xff5722, 0x9c27b0];
+        const partners = [];
+        for (let i = 0; i < 4; i++) {
+            const geo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
+            const mat = new THREE.MeshPhongMaterial({ color: partnerColors[i] });
+            const partner = new THREE.Mesh(geo, mat);
+            const angle = (i / 4) * Math.PI * 2;
+            partner.position.set(Math.cos(angle) * 3, 0, Math.sin(angle) * 3);
+            scene.add(partner);
+            partners.push(partner);
+            
+            // Connection lines
+            const lineGeo = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(0, 0, 0),
+                new THREE.Vector3(Math.cos(angle) * 2.5, 0, Math.sin(angle) * 2.5)
+            ]);
+            const lineMat = new THREE.LineBasicMaterial({ color: 0x00ff00 });
+            scene.add(new THREE.Line(lineGeo, lineMat));
+        }
+        
+        scene.add(new THREE.AmbientLight(0x404040, 0.5));
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(5, 5, 5);
+        scene.add(light);
+        
+        camera.position.set(4, 3, 4);
+        camera.lookAt(0, 0, 0);
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            hub.rotation.x += 0.005;
+            hub.rotation.y += 0.01;
+            partners.forEach(p => p.rotation.y += 0.02);
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>

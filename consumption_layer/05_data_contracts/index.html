@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Contracts & Certified Datasets</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand"><a href="../../index.html">PySpark Learning Hub</a></div>
+        <div class="nav-links">
+            <a href="../04_star_schema_lakehouse/index.html">Prev: Star Schema</a>
+            <a href="../06_row_column_security/index.html">Next: Row/Column Security</a>
+        </div>
+    </nav>
+    <main class="topic-container">
+        <header class="topic-header">
+            <div class="category-icon consumption">CL</div>
+            <h1>Data Contracts & Certified Datasets</h1>
+            <p class="topic-description">Define and enforce agreements between data producers and consumers for reliable data products.</p>
+        </header>
+        <div class="content-tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="code">PySpark Code</button>
+        </div>
+        <div class="visualization-container"><div id="viz-container"></div></div>
+        <div class="tab-content active" id="overview">
+            <h2>What are Data Contracts?</h2>
+            <p>Data contracts are formal agreements that define the structure, quality, and SLAs of data products. They ensure producers and consumers have clear expectations.</p>
+            <h3>Contract Components</h3>
+            <ul>
+                <li><strong>Schema:</strong> Column names, types, and constraints</li>
+                <li><strong>Quality Rules:</strong> Validation checks that must pass</li>
+                <li><strong>SLAs:</strong> Freshness, availability, latency guarantees</li>
+                <li><strong>Ownership:</strong> Team responsible for the data</li>
+            </ul>
+        </div>
+        <div class="tab-content" id="code">
+            <h2>Implementing Data Contracts with PySpark</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, count, when, isnan, isnull
+from dataclasses import dataclass
+from typing import List, Dict
+import json
+
+spark = SparkSession.builder.appName("DataContracts").getOrCreate()
+
+@dataclass
+class QualityRule:
+    name: str
+    column: str
+    check_type: str  # not_null, unique, range, regex
+    params: Dict = None
+
+@dataclass
+class DataContract:
+    name: str
+    version: str
+    owner: str
+    description: str
+    schema: Dict
+    quality_rules: List[QualityRule]
+    sla_freshness_hours: int
+    
+class ContractValidator:
+    """Validate data against contracts."""
+    
+    def __init__(self, contract: DataContract):
+        self.contract = contract
+        self.validation_results = []
+    
+    def validate_schema(self, df) -> bool:
+        """Validate DataFrame schema against contract."""
+        expected_cols = set(self.contract.schema.keys())
+        actual_cols = set(df.columns)
+        
+        missing = expected_cols - actual_cols
+        extra = actual_cols - expected_cols
+        
+        passed = len(missing) == 0
+        self.validation_results.append({
+            "check": "schema_validation",
+            "passed": passed,
+            "missing_columns": list(missing),
+            "extra_columns": list(extra)
+        })
+        return passed
+    
+    def validate_quality(self, df) -> bool:
+        """Run quality rules."""
+        all_passed = True
+        total_rows = df.count()
+        
+        for rule in self.contract.quality_rules:
+            if rule.check_type == "not_null":
+                null_count = df.filter(col(rule.column).isNull()).count()
+                passed = null_count == 0
+                
+            elif rule.check_type == "unique":
+                distinct_count = df.select(rule.column).distinct().count()
+                passed = distinct_count == total_rows
+                
+            elif rule.check_type == "range":
+                min_val, max_val = rule.params["min"], rule.params["max"]
+                out_of_range = df.filter(
+                    (col(rule.column) < min_val) | (col(rule.column) > max_val)
+                ).count()
+                passed = out_of_range == 0
+            
+            self.validation_results.append({
+                "check": f"quality_{rule.name}",
+                "passed": passed,
+                "rule": rule.check_type
+            })
+            all_passed = all_passed and passed
+        
+        return all_passed
+    
+    def validate(self, df) -> Dict:
+        """Run all validations."""
+        schema_ok = self.validate_schema(df)
+        quality_ok = self.validate_quality(df)
+        
+        return {
+            "contract": self.contract.name,
+            "version": self.contract.version,
+            "all_passed": schema_ok and quality_ok,
+            "results": self.validation_results
+        }
+
+# Define a contract
+sales_contract = DataContract(
+    name="sales_transactions",
+    version="1.0",
+    owner="data-platform-team",
+    description="Daily sales transaction data",
+    schema={
+        "transaction_id": "string",
+        "customer_id": "string",
+        "amount": "double",
+        "transaction_date": "timestamp"
+    },
+    quality_rules=[
+        QualityRule("tx_id_not_null", "transaction_id", "not_null"),
+        QualityRule("tx_id_unique", "transaction_id", "unique"),
+        QualityRule("amount_positive", "amount", "range", {"min": 0, "max": 1000000})
+    ],
+    sla_freshness_hours=6
+)
+
+# Validate data
+validator = ContractValidator(sales_contract)
+df = spark.read.format("delta").load("/lakehouse/gold/transactions")
+results = validator.validate(df)
+print(json.dumps(results, indent=2))</code></pre>
+        </div>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script>
+        const container = document.getElementById('viz-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+        const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        container.appendChild(renderer.domElement);
+        
+        // Contract document
+        const docGeo = new THREE.BoxGeometry(2, 2.5, 0.2);
+        const docMat = new THREE.MeshPhongMaterial({ color: 0xffffff });
+        const doc = new THREE.Mesh(docGeo, docMat);
+        scene.add(doc);
+        
+        // Checkmarks for validation
+        const checkMat = new THREE.MeshPhongMaterial({ color: 0x4caf50 });
+        for (let i = 0; i < 3; i++) {
+            const checkGeo = new THREE.BoxGeometry(0.3, 0.1, 0.1);
+            const check = new THREE.Mesh(checkGeo, checkMat);
+            check.position.set(-0.5, 0.8 - i * 0.6, 0.15);
+            scene.add(check);
+        }
+        
+        // Seal of certification
+        const sealGeo = new THREE.TorusGeometry(0.4, 0.1, 8, 16);
+        const sealMat = new THREE.MeshPhongMaterial({ color: 0xffd700 });
+        const seal = new THREE.Mesh(sealGeo, sealMat);
+        seal.position.set(0.5, -0.8, 0.2);
+        scene.add(seal);
+        
+        scene.add(new THREE.AmbientLight(0x404040, 0.5));
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(5, 5, 5);
+        scene.add(light);
+        
+        camera.position.set(0, 0, 5);
+        camera.lookAt(0, 0, 0);
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            doc.rotation.y = Math.sin(Date.now() * 0.001) * 0.2;
+            seal.rotation.z += 0.02;
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>

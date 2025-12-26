@@ -6,7 +6,7 @@ An enterprise-grade, comprehensive learning repository covering PySpark, Pandas,
 
 This repository provides 360-degree coverage of essential data engineering concepts, designed for students, professionals, and enterprises. Each concept includes interactive 3D HTML visualizations to help understand complex data flows and transformations, along with production-ready Python/PySpark code examples.
 
-**122 Concepts across 12 Categories**
+**134 Concepts across 13 Categories**
 
 ## Features
 
@@ -159,11 +159,24 @@ PySpark/
 │   ├── 02_data_validation/
 │   ├── 03_schema_evolution/
 │   └── 04_error_handling/
-└── interview_prep/            # Interview Preparation (4 topics)
-    ├── 01_concepts/
-    ├── 02_coding_challenges/
-    ├── 03_system_design/
-    └── 04_troubleshooting/
+├── interview_prep/            # Interview Preparation (4 topics)
+│   ├── 01_concepts/
+│   ├── 02_coding_challenges/
+│   ├── 03_system_design/
+│   └── 04_troubleshooting/
+└── consumption_layer/         # Consumption Layer (12 topics)
+    ├── 01_introduction/
+    ├── 02_semantic_layer/
+    ├── 03_data_marts/
+    ├── 04_star_schema_lakehouse/
+    ├── 05_data_contracts/
+    ├── 06_row_column_security/
+    ├── 07_serving_performance/
+    ├── 08_reverse_etl/
+    ├── 09_feature_store/
+    ├── 10_data_apis/
+    ├── 11_data_sharing/
+    └── 12_best_practices/
 ```
 
 ## Categories
@@ -182,6 +195,7 @@ PySpark/
 | Performance Lab | 4 | Spark optimization and debugging |
 | Data Quality | 4 | Testing and validation patterns |
 | Interview Prep | 4 | Interview questions and system design |
+| Consumption Layer | 12 | Data products, semantic layer, serving patterns |
 
 ## Getting Started
 

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serving Performance</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand"><a href="../../index.html">PySpark Learning Hub</a></div>
+        <div class="nav-links">
+            <a href="../06_row_column_security/index.html">Prev: Row/Column Security</a>
+            <a href="../08_reverse_etl/index.html">Next: Reverse ETL</a>
+        </div>
+    </nav>
+    <main class="topic-container">
+        <header class="topic-header">
+            <div class="category-icon consumption">CL</div>
+            <h1>Serving Performance</h1>
+            <p class="topic-description">Optimize data serving with aggregations, materialized views, and caching strategies.</p>
+        </header>
+        <div class="content-tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="code">PySpark Code</button>
+        </div>
+        <div class="visualization-container"><div id="viz-container"></div></div>
+        <div class="tab-content active" id="overview">
+            <h2>Performance Optimization Strategies</h2>
+            <p>Optimize query performance for consumption layer by pre-computing aggregations, creating materialized views, and implementing intelligent caching.</p>
+            <h3>Techniques</h3>
+            <ul>
+                <li><strong>Pre-Aggregations:</strong> Compute common aggregations ahead of time</li>
+                <li><strong>Materialized Views:</strong> Persist query results for fast access</li>
+                <li><strong>Caching:</strong> Keep frequently accessed data in memory</li>
+                <li><strong>Partitioning:</strong> Organize data for efficient pruning</li>
+            </ul>
+        </div>
+        <div class="tab-content" id="code">
+            <h2>Performance Optimization with PySpark</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, sum as spark_sum, avg, count, date_trunc, current_timestamp
+from delta.tables import DeltaTable
+
+spark = SparkSession.builder.appName("ServingPerformance").getOrCreate()
+
+class PerformanceOptimizer:
+    """Optimize serving layer performance."""
+    
+    def __init__(self, source_path: str, cache_path: str):
+        self.source_path = source_path
+        self.cache_path = cache_path
+    
+    def create_pre_aggregation(self, name: str, group_cols: list, agg_exprs: dict):
+        """Create pre-aggregated table for common queries."""
+        source_df = spark.read.format("delta").load(self.source_path)
+        
+        agg_list = [eval(expr).alias(alias) for alias, expr in agg_exprs.items()]
+        
+        agg_df = source_df.groupBy(group_cols).agg(*agg_list) \
+            .withColumn("_aggregated_at", current_timestamp())
+        
+        output_path = f"{self.cache_path}/agg_{name}"
+        agg_df.write.format("delta").mode("overwrite").save(output_path)
+        
+        # Optimize the table
+        spark.sql(f"OPTIMIZE delta.`{output_path}`")
+        
+        print(f"Pre-aggregation '{name}' created with {agg_df.count()} rows")
+        return agg_df
+    
+    def create_materialized_view(self, name: str, query: str):
+        """Create materialized view from SQL query."""
+        result_df = spark.sql(query) \
+            .withColumn("_materialized_at", current_timestamp())
+        
+        output_path = f"{self.cache_path}/mv_{name}"
+        result_df.write.format("delta").mode("overwrite").save(output_path)
+        
+        print(f"Materialized view '{name}' created")
+        return result_df
+    
+    def refresh_materialized_view(self, name: str, query: str):
+        """Refresh an existing materialized view."""
+        return self.create_materialized_view(name, query)
+    
+    def optimize_table(self, table_path: str, z_order_cols: list = None):
+        """Optimize Delta table with compaction and Z-ordering."""
+        if z_order_cols:
+            z_order_clause = ", ".join(z_order_cols)
+            spark.sql(f"OPTIMIZE delta.`{table_path}` ZORDER BY ({z_order_clause})")
+        else:
+            spark.sql(f"OPTIMIZE delta.`{table_path}`")
+        
+        # Vacuum old files
+        spark.sql(f"VACUUM delta.`{table_path}` RETAIN 168 HOURS")
+        print(f"Table optimized: {table_path}")
+
+# Create optimizations
+optimizer = PerformanceOptimizer(
+    "/lakehouse/gold/transactions",
+    "/lakehouse/consumption/cache"
+)
+
+# Pre-aggregate daily sales
+optimizer.create_pre_aggregation(
+    name="daily_sales",
+    group_cols=["store_id", date_trunc("day", col("transaction_date")).alias("date")],
+    agg_exprs={
+        "total_revenue": "spark_sum(col('total_amount'))",
+        "transaction_count": "count('*')",
+        "avg_order_value": "avg(col('total_amount'))"
+    }
+)
+
+# Create materialized view for top products
+optimizer.create_materialized_view(
+    name="top_products",
+    query="""
+        SELECT product_id, SUM(total_amount) as revenue
+        FROM delta.`/lakehouse/gold/transactions`
+        GROUP BY product_id
+        ORDER BY revenue DESC
+        LIMIT 100
+    """
+)</code></pre>
+        </div>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script>
+        const container = document.getElementById('viz-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+        const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        container.appendChild(renderer.domElement);
+        
+        // Speed meter visualization
+        const meterGeo = new THREE.RingGeometry(1.5, 2, 32, 1, 0, Math.PI);
+        const meterMat = new THREE.MeshPhongMaterial({ color: 0x333333, side: THREE.DoubleSide });
+        const meter = new THREE.Mesh(meterGeo, meterMat);
+        meter.rotation.x = -Math.PI / 2;
+        scene.add(meter);
+        
+        // Speed indicator
+        const needleGeo = new THREE.BoxGeometry(0.1, 1.5, 0.05);
+        const needleMat = new THREE.MeshPhongMaterial({ color: 0xff5722 });
+        const needle = new THREE.Mesh(needleGeo, needleMat);
+        needle.position.y = 0.75;
+        const needlePivot = new THREE.Object3D();
+        needlePivot.add(needle);
+        needlePivot.rotation.x = -Math.PI / 2;
+        scene.add(needlePivot);
+        
+        // Cache blocks
+        const cacheColors = [0x4caf50, 0x2196f3, 0xffd700];
+        for (let i = 0; i < 3; i++) {
+            const geo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
+            const mat = new THREE.MeshPhongMaterial({ color: cacheColors[i] });
+            const cache = new THREE.Mesh(geo, mat);
+            cache.position.set(-2 + i * 2, -1.5, 0);
+            scene.add(cache);
+        }
+        
+        scene.add(new THREE.AmbientLight(0x404040, 0.5));
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(5, 5, 5);
+        scene.add(light);
+        
+        camera.position.set(0, 3, 5);
+        camera.lookAt(0, 0, 0);
+        
+        let time = 0;
+        function animate() {
+            requestAnimationFrame(animate);
+            time += 0.02;
+            needlePivot.rotation.z = Math.sin(time) * 0.8 + 0.5;
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data APIs & Serving</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand"><a href="../../index.html">PySpark Learning Hub</a></div>
+        <div class="nav-links">
+            <a href="../09_feature_store/index.html">Prev: Feature Store</a>
+            <a href="../11_data_sharing/index.html">Next: Data Sharing</a>
+        </div>
+    </nav>
+    <main class="topic-container">
+        <header class="topic-header">
+            <div class="category-icon consumption">CL</div>
+            <h1>Data APIs & Serving</h1>
+            <p class="topic-description">Build REST and GraphQL APIs to serve data products to applications.</p>
+        </header>
+        <div class="content-tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="code">PySpark Code</button>
+        </div>
+        <div class="visualization-container"><div id="viz-container"></div></div>
+        <div class="tab-content active" id="overview">
+            <h2>Data APIs for Applications</h2>
+            <p>Data APIs provide programmatic access to curated datasets, enabling applications to consume data products without direct database access.</p>
+            <h3>API Patterns</h3>
+            <ul>
+                <li><strong>REST APIs:</strong> Standard HTTP endpoints for CRUD operations</li>
+                <li><strong>GraphQL:</strong> Flexible queries with schema introspection</li>
+                <li><strong>gRPC:</strong> High-performance binary protocol</li>
+                <li><strong>Streaming APIs:</strong> Real-time data subscriptions</li>
+            </ul>
+        </div>
+        <div class="tab-content" id="code">
+            <h2>Building Data APIs with PySpark</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, to_json, struct
+from flask import Flask, jsonify, request
+import json
+
+spark = SparkSession.builder.appName("DataAPI").getOrCreate()
+
+class DataAPIService:
+    """Serve data products via REST API."""
+    
+    def __init__(self, data_path: str):
+        self.data_path = data_path
+        self.cache = {}
+    
+    def load_dataset(self, name: str):
+        """Load dataset into cache."""
+        if name not in self.cache:
+            df = spark.read.format("delta").load(f"{self.data_path}/{name}")
+            self.cache[name] = df
+        return self.cache[name]
+    
+    def query_dataset(self, name: str, filters: dict = None, limit: int = 100):
+        """Query dataset with optional filters."""
+        df = self.load_dataset(name)
+        
+        if filters:
+            for col_name, value in filters.items():
+                df = df.filter(col(col_name) == value)
+        
+        result = df.limit(limit).toJSON().collect()
+        return [json.loads(r) for r in result]
+    
+    def get_aggregation(self, name: str, group_by: list, metrics: list):
+        """Get aggregated data."""
+        df = self.load_dataset(name)
+        
+        from pyspark.sql.functions import sum as spark_sum, avg, count
+        
+        agg_exprs = []
+        for metric in metrics:
+            if metric["type"] == "sum":
+                agg_exprs.append(spark_sum(col(metric["column"])).alias(metric["alias"]))
+            elif metric["type"] == "avg":
+                agg_exprs.append(avg(col(metric["column"])).alias(metric["alias"]))
+            elif metric["type"] == "count":
+                agg_exprs.append(count("*").alias(metric["alias"]))
+        
+        result = df.groupBy(group_by).agg(*agg_exprs)
+        return [json.loads(r) for r in result.toJSON().collect()]
+
+# Flask API wrapper
+app = Flask(__name__)
+api_service = DataAPIService("/lakehouse/consumption")
+
+@app.route("/api/v1/datasets/<name>", methods=["GET"])
+def get_dataset(name):
+    filters = request.args.to_dict()
+    limit = int(filters.pop("limit", 100))
+    data = api_service.query_dataset(name, filters, limit)
+    return jsonify({"data": data, "count": len(data)})
+
+@app.route("/api/v1/datasets/<name>/aggregate", methods=["POST"])
+def aggregate_dataset(name):
+    body = request.json
+    data = api_service.get_aggregation(
+        name,
+        body.get("group_by", []),
+        body.get("metrics", [])
+    )
+    return jsonify({"data": data})
+
+# Example API calls
+# GET /api/v1/datasets/customer_360?customer_tier=GOLD&limit=50
+# POST /api/v1/datasets/transactions/aggregate
+#   {"group_by": ["store_id"], "metrics": [{"type": "sum", "column": "amount", "alias": "total"}]}</code></pre>
+        </div>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script>
+        const container = document.getElementById('viz-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+        const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        container.appendChild(renderer.domElement);
+        
+        // API Gateway
+        const gatewayGeo = new THREE.BoxGeometry(1.5, 2, 0.5);
+        const gatewayMat = new THREE.MeshPhongMaterial({ color: 0x2196f3 });
+        const gateway = new THREE.Mesh(gatewayGeo, gatewayMat);
+        scene.add(gateway);
+        
+        // Client apps
+        const clientColors = [0x4caf50, 0xff5722, 0x9c27b0];
+        const clients = [];
+        for (let i = 0; i < 3; i++) {
+            const geo = new THREE.SphereGeometry(0.4, 16, 16);
+            const mat = new THREE.MeshPhongMaterial({ color: clientColors[i] });
+            const client = new THREE.Mesh(geo, mat);
+            client.position.set(-3, 1 - i, 0);
+            scene.add(client);
+            clients.push(client);
+        }
+        
+        // Data sources
+        const dataGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.8, 16);
+        const dataMat = new THREE.MeshPhongMaterial({ color: 0xffd700 });
+        for (let i = 0; i < 2; i++) {
+            const data = new THREE.Mesh(dataGeo, dataMat);
+            data.position.set(3, 0.5 - i, 0);
+            scene.add(data);
+        }
+        
+        scene.add(new THREE.AmbientLight(0x404040, 0.5));
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(5, 5, 5);
+        scene.add(light);
+        
+        camera.position.set(0, 1, 6);
+        camera.lookAt(0, 0, 0);
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            gateway.rotation.y += 0.01;
+            clients.forEach(c => c.rotation.y += 0.02);
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>

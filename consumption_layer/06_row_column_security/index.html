@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Row/Column Level Security</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand"><a href="../../index.html">PySpark Learning Hub</a></div>
+        <div class="nav-links">
+            <a href="../05_data_contracts/index.html">Prev: Data Contracts</a>
+            <a href="../07_serving_performance/index.html">Next: Serving Performance</a>
+        </div>
+    </nav>
+    <main class="topic-container">
+        <header class="topic-header">
+            <div class="category-icon consumption">CL</div>
+            <h1>Row/Column Level Security</h1>
+            <p class="topic-description">Implement fine-grained access controls to protect sensitive data at row and column level.</p>
+        </header>
+        <div class="content-tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="code">PySpark Code</button>
+        </div>
+        <div class="visualization-container"><div id="viz-container"></div></div>
+        <div class="tab-content active" id="overview">
+            <h2>Fine-Grained Access Control</h2>
+            <p>Row-level security (RLS) and column-level security (CLS) ensure users only see data they're authorized to access, enabling secure self-service analytics.</p>
+            <h3>Security Types</h3>
+            <ul>
+                <li><strong>Row-Level Security:</strong> Filter rows based on user attributes</li>
+                <li><strong>Column-Level Security:</strong> Hide or mask sensitive columns</li>
+                <li><strong>Dynamic Data Masking:</strong> Obfuscate sensitive values</li>
+            </ul>
+        </div>
+        <div class="tab-content" id="code">
+            <h2>Implementing Security with PySpark</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, when, lit, sha2, concat, regexp_replace
+
+spark = SparkSession.builder.appName("DataSecurity").getOrCreate()
+
+class DataSecurityManager:
+    """Manage row and column level security."""
+    
+    def __init__(self):
+        self.row_policies = {}
+        self.column_policies = {}
+        self.masking_rules = {}
+    
+    def add_row_policy(self, table: str, policy_name: str, filter_column: str, allowed_values: list):
+        """Add row-level security policy."""
+        self.row_policies[f"{table}_{policy_name}"] = {
+            "column": filter_column,
+            "allowed": allowed_values
+        }
+    
+    def add_column_mask(self, table: str, column: str, mask_type: str):
+        """Add column masking rule."""
+        self.masking_rules[f"{table}_{column}"] = mask_type
+    
+    def apply_row_security(self, df, table: str, user_context: dict):
+        """Apply row-level filtering based on user context."""
+        for key, policy in self.row_policies.items():
+            if key.startswith(table):
+                user_allowed = user_context.get(policy["column"], [])
+                if user_allowed:
+                    df = df.filter(col(policy["column"]).isin(user_allowed))
+        return df
+    
+    def apply_column_masking(self, df, table: str):
+        """Apply column masking rules."""
+        for key, mask_type in self.masking_rules.items():
+            if key.startswith(table):
+                column = key.replace(f"{table}_", "")
+                if column in df.columns:
+                    if mask_type == "hash":
+                        df = df.withColumn(column, sha2(col(column), 256))
+                    elif mask_type == "partial":
+                        df = df.withColumn(column, 
+                            concat(lit("***"), col(column).substr(-4, 4)))
+                    elif mask_type == "redact":
+                        df = df.withColumn(column, lit("[REDACTED]"))
+                    elif mask_type == "email":
+                        df = df.withColumn(column,
+                            regexp_replace(col(column), "(.{2}).*@", "$1***@"))
+        return df
+    
+    def secure_query(self, df, table: str, user_context: dict):
+        """Apply all security policies."""
+        df = self.apply_row_security(df, table, user_context)
+        df = self.apply_column_masking(df, table)
+        return df
+
+# Configure security
+security = DataSecurityManager()
+
+# Row-level: Users can only see their region's data
+security.add_row_policy("customers", "region_filter", "region", ["US", "EU"])
+
+# Column-level: Mask sensitive columns
+security.add_column_mask("customers", "email", "email")
+security.add_column_mask("customers", "ssn", "partial")
+security.add_column_mask("customers", "credit_card", "redact")
+
+# Apply security
+df = spark.read.format("delta").load("/lakehouse/gold/customers")
+user_context = {"region": ["US"]}  # User can only see US data
+
+secured_df = security.secure_query(df, "customers", user_context)
+secured_df.show()</code></pre>
+        </div>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script>
+        const container = document.getElementById('viz-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+        const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        container.appendChild(renderer.domElement);
+        
+        // Data table grid
+        const rows = 5, cols = 4;
+        const cells = [];
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const geo = new THREE.BoxGeometry(0.8, 0.4, 0.1);
+                const isHidden = (r > 2) || (c === 3);
+                const mat = new THREE.MeshPhongMaterial({ 
+                    color: isHidden ? 0xff5722 : 0x4caf50,
+                    transparent: true,
+                    opacity: isHidden ? 0.3 : 0.9
+                });
+                const cell = new THREE.Mesh(geo, mat);
+                cell.position.set(c - 1.5, 1 - r * 0.5, 0);
+                scene.add(cell);
+                cells.push(cell);
+            }
+        }
+        
+        // Lock icon
+        const lockGeo = new THREE.TorusGeometry(0.3, 0.08, 8, 16, Math.PI);
+        const lockMat = new THREE.MeshPhongMaterial({ color: 0xffd700 });
+        const lock = new THREE.Mesh(lockGeo, lockMat);
+        lock.position.set(2.5, 0, 0);
+        lock.rotation.z = Math.PI;
+        scene.add(lock);
+        
+        scene.add(new THREE.AmbientLight(0x404040, 0.5));
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(5, 5, 5);
+        scene.add(light);
+        
+        camera.position.set(0, 0, 5);
+        camera.lookAt(0, 0, 0);
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            lock.rotation.y += 0.02;
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>

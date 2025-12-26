@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Feature Store Basics</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand"><a href="../../index.html">PySpark Learning Hub</a></div>
+        <div class="nav-links">
+            <a href="../08_reverse_etl/index.html">Prev: Reverse ETL</a>
+            <a href="../10_data_apis/index.html">Next: Data APIs</a>
+        </div>
+    </nav>
+    <main class="topic-container">
+        <header class="topic-header">
+            <div class="category-icon consumption">CL</div>
+            <h1>Feature Store Basics</h1>
+            <p class="topic-description">Centralized repository for ML features with point-in-time correctness for training and serving.</p>
+        </header>
+        <div class="content-tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="code">PySpark Code</button>
+        </div>
+        <div class="visualization-container"><div id="viz-container"></div></div>
+        <div class="tab-content active" id="overview">
+            <h2>What is a Feature Store?</h2>
+            <p>A feature store is a centralized repository for storing, managing, and serving ML features. It ensures consistency between training and inference.</p>
+            <h3>Key Capabilities</h3>
+            <ul>
+                <li><strong>Feature Registry:</strong> Catalog of all features with metadata</li>
+                <li><strong>Offline Store:</strong> Historical features for training</li>
+                <li><strong>Online Store:</strong> Low-latency features for inference</li>
+                <li><strong>Point-in-Time Joins:</strong> Prevent data leakage</li>
+            </ul>
+        </div>
+        <div class="tab-content" id="code">
+            <h2>Building a Feature Store with PySpark</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, sum as spark_sum, avg, count, max as spark_max, datediff, current_date
+from pyspark.sql.window import Window
+from dataclasses import dataclass
+from typing import List
+
+spark = SparkSession.builder.appName("FeatureStore").getOrCreate()
+
+@dataclass
+class FeatureDefinition:
+    name: str
+    description: str
+    entity: str
+    expression: str
+    timestamp_column: str
+
+class FeatureStore:
+    """Simple feature store implementation."""
+    
+    def __init__(self, offline_path: str):
+        self.offline_path = offline_path
+        self.feature_registry = {}
+    
+    def register_feature(self, feature: FeatureDefinition):
+        """Register a feature definition."""
+        self.feature_registry[feature.name] = feature
+        print(f"Registered feature: {feature.name}")
+    
+    def compute_features(self, entity: str, source_df):
+        """Compute all features for an entity."""
+        entity_features = [f for f in self.feature_registry.values() if f.entity == entity]
+        
+        result_df = source_df
+        for feature in entity_features:
+            result_df = result_df.withColumn(feature.name, eval(feature.expression))
+        
+        return result_df
+    
+    def save_to_offline_store(self, entity: str, df):
+        """Save features to offline store."""
+        output_path = f"{self.offline_path}/{entity}_features"
+        df.write.format("delta").mode("overwrite").save(output_path)
+        print(f"Saved {entity} features to {output_path}")
+    
+    def get_training_features(self, entity: str, entity_df, as_of_column: str):
+        """Get features with point-in-time correctness."""
+        features_df = spark.read.format("delta").load(f"{self.offline_path}/{entity}_features")
+        
+        # Point-in-time join
+        result = entity_df.alias("e").join(
+            features_df.alias("f"),
+            (col("e.entity_id") == col("f.entity_id")) &
+            (col(f"f.{as_of_column}") <= col(f"e.{as_of_column}")),
+            "left"
+        )
+        
+        # Get latest feature values before the as_of timestamp
+        window = Window.partitionBy("e.entity_id").orderBy(col(f"f.{as_of_column}").desc())
+        from pyspark.sql.functions import row_number
+        result = result.withColumn("rn", row_number().over(window)).filter(col("rn") == 1)
+        
+        return result
+
+# Create feature store
+fs = FeatureStore("/lakehouse/consumption/features")
+
+# Register customer features
+fs.register_feature(FeatureDefinition(
+    name="total_purchases_30d",
+    description="Total purchases in last 30 days",
+    entity="customer",
+    expression="spark_sum(col('amount')).over(Window.partitionBy('customer_id').orderBy('date').rangeBetween(-30, 0))",
+    timestamp_column="date"
+))
+
+fs.register_feature(FeatureDefinition(
+    name="avg_order_value",
+    description="Average order value",
+    entity="customer",
+    expression="avg(col('amount')).over(Window.partitionBy('customer_id'))",
+    timestamp_column="date"
+))
+
+# Compute and save features
+transactions = spark.read.format("delta").load("/lakehouse/gold/transactions")
+customer_features = fs.compute_features("customer", transactions)
+fs.save_to_offline_store("customer", customer_features)</code></pre>
+        </div>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script>
+        const container = document.getElementById('viz-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+        const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        container.appendChild(renderer.domElement);
+        
+        // Feature store central hub
+        const hubGeo = new THREE.DodecahedronGeometry(1.2);
+        const hubMat = new THREE.MeshPhongMaterial({ color: 0x9c27b0 });
+        const hub = new THREE.Mesh(hubGeo, hubMat);
+        scene.add(hub);
+        
+        // Feature vectors
+        const featureColors = [0x4caf50, 0x2196f3, 0xffd700, 0xff5722];
+        const features = [];
+        for (let i = 0; i < 8; i++) {
+            const geo = new THREE.SphereGeometry(0.2, 16, 16);
+            const mat = new THREE.MeshPhongMaterial({ color: featureColors[i % 4] });
+            const feature = new THREE.Mesh(geo, mat);
+            const angle = (i / 8) * Math.PI * 2;
+            feature.position.set(Math.cos(angle) * 2.5, Math.sin(angle) * 2.5, 0);
+            scene.add(feature);
+            features.push({ mesh: feature, angle: angle });
+        }
+        
+        scene.add(new THREE.AmbientLight(0x404040, 0.5));
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(5, 5, 5);
+        scene.add(light);
+        
+        camera.position.set(0, 0, 6);
+        camera.lookAt(0, 0, 0);
+        
+        let time = 0;
+        function animate() {
+            requestAnimationFrame(animate);
+            time += 0.01;
+            hub.rotation.x += 0.005;
+            hub.rotation.y += 0.01;
+            features.forEach((f, i) => {
+                const angle = f.angle + time;
+                f.mesh.position.x = Math.cos(angle) * 2.5;
+                f.mesh.position.y = Math.sin(angle) * 2.5;
+            });
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>

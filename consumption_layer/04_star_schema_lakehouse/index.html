@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Star Schema in Lakehouse</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand"><a href="../../index.html">PySpark Learning Hub</a></div>
+        <div class="nav-links">
+            <a href="../03_data_marts/index.html">Prev: Data Marts</a>
+            <a href="../05_data_contracts/index.html">Next: Data Contracts</a>
+        </div>
+    </nav>
+    <main class="topic-container">
+        <header class="topic-header">
+            <div class="category-icon consumption">CL</div>
+            <h1>Star Schema in Lakehouse</h1>
+            <p class="topic-description">Implement dimensional modeling with star schemas on top of Gold layer for optimal BI performance.</p>
+        </header>
+        <div class="content-tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="code">PySpark Code</button>
+        </div>
+        <div class="visualization-container"><div id="viz-container"></div></div>
+        <div class="tab-content active" id="overview">
+            <h2>Star Schema in Modern Lakehouse</h2>
+            <p>Star schema remains the gold standard for BI-optimized data models. In a lakehouse, we build star schemas on top of Gold layer tables using Delta Lake.</p>
+            <h3>Components</h3>
+            <ul>
+                <li><strong>Fact Tables:</strong> Measurable business events (sales, orders)</li>
+                <li><strong>Dimension Tables:</strong> Descriptive attributes (customer, product, time)</li>
+                <li><strong>Surrogate Keys:</strong> System-generated unique identifiers</li>
+            </ul>
+        </div>
+        <div class="tab-content" id="code">
+            <h2>Building Star Schema with PySpark</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, monotonically_increasing_id, current_timestamp, lit, date_format
+
+spark = SparkSession.builder.appName("StarSchema").getOrCreate()
+
+class StarSchemaBuilder:
+    """Build star schema from Gold layer."""
+    
+    def __init__(self, gold_path: str, star_path: str):
+        self.gold_path = gold_path
+        self.star_path = star_path
+    
+    def build_dim_date(self, start_date: str, end_date: str):
+        """Build date dimension."""
+        from pyspark.sql.functions import explode, sequence, to_date
+        
+        date_df = spark.sql(f"""
+            SELECT explode(sequence(
+                to_date('{start_date}'), 
+                to_date('{end_date}'), 
+                interval 1 day
+            )) as date
+        """)
+        
+        dim_date = date_df \
+            .withColumn("date_key", date_format(col("date"), "yyyyMMdd").cast("int")) \
+            .withColumn("year", date_format(col("date"), "yyyy").cast("int")) \
+            .withColumn("quarter", ((date_format(col("date"), "M").cast("int") - 1) / 3 + 1).cast("int")) \
+            .withColumn("month", date_format(col("date"), "M").cast("int")) \
+            .withColumn("month_name", date_format(col("date"), "MMMM")) \
+            .withColumn("day", date_format(col("date"), "d").cast("int")) \
+            .withColumn("day_of_week", date_format(col("date"), "u").cast("int")) \
+            .withColumn("day_name", date_format(col("date"), "EEEE")) \
+            .withColumn("is_weekend", col("day_of_week").isin(6, 7))
+        
+        dim_date.write.format("delta").mode("overwrite") \
+            .save(f"{self.star_path}/dim_date")
+        return dim_date
+    
+    def build_dim_customer(self):
+        """Build customer dimension with surrogate key."""
+        customers = spark.read.format("delta").load(f"{self.gold_path}/customers")
+        
+        dim_customer = customers \
+            .withColumn("customer_sk", monotonically_increasing_id()) \
+            .select(
+                "customer_sk", "customer_id", "name", "email",
+                "segment", "created_at"
+            )
+        
+        dim_customer.write.format("delta").mode("overwrite") \
+            .save(f"{self.star_path}/dim_customer")
+        return dim_customer
+    
+    def build_dim_product(self):
+        """Build product dimension."""
+        products = spark.read.format("delta").load(f"{self.gold_path}/products")
+        
+        dim_product = products \
+            .withColumn("product_sk", monotonically_increasing_id()) \
+            .select("product_sk", "product_id", "name", "category", "subcategory", "price")
+        
+        dim_product.write.format("delta").mode("overwrite") \
+            .save(f"{self.star_path}/dim_product")
+        return dim_product
+    
+    def build_fact_sales(self):
+        """Build sales fact table with dimension keys."""
+        transactions = spark.read.format("delta").load(f"{self.gold_path}/transactions")
+        dim_customer = spark.read.format("delta").load(f"{self.star_path}/dim_customer")
+        dim_product = spark.read.format("delta").load(f"{self.star_path}/dim_product")
+        
+        fact_sales = transactions \
+            .join(dim_customer.select("customer_sk", "customer_id"), "customer_id", "left") \
+            .join(dim_product.select("product_sk", "product_id"), "product_id", "left") \
+            .withColumn("date_key", date_format(col("transaction_date"), "yyyyMMdd").cast("int")) \
+            .select(
+                "transaction_id", "date_key", "customer_sk", "product_sk",
+                "store_id", "quantity", "unit_price", "total_amount"
+            )
+        
+        fact_sales.write.format("delta").mode("overwrite") \
+            .partitionBy("date_key") \
+            .save(f"{self.star_path}/fact_sales")
+        return fact_sales
+
+# Build star schema
+builder = StarSchemaBuilder("/lakehouse/gold", "/lakehouse/consumption/star")
+builder.build_dim_date("2020-01-01", "2025-12-31")
+builder.build_dim_customer()
+builder.build_dim_product()
+builder.build_fact_sales()</code></pre>
+        </div>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script>
+        const container = document.getElementById('viz-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+        const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        container.appendChild(renderer.domElement);
+        
+        // Central fact table (star center)
+        const factGeo = new THREE.OctahedronGeometry(1.2);
+        const factMat = new THREE.MeshPhongMaterial({ color: 0xffd700 });
+        const fact = new THREE.Mesh(factGeo, factMat);
+        scene.add(fact);
+        
+        // Dimension tables (star points)
+        const dimColors = [0x4caf50, 0x2196f3, 0xff5722, 0x9c27b0, 0x00bcd4];
+        const dims = [];
+        for (let i = 0; i < 5; i++) {
+            const geo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+            const mat = new THREE.MeshPhongMaterial({ color: dimColors[i] });
+            const dim = new THREE.Mesh(geo, mat);
+            const angle = (i / 5) * Math.PI * 2;
+            dim.position.set(Math.cos(angle) * 3, 0, Math.sin(angle) * 3);
+            scene.add(dim);
+            dims.push(dim);
+            
+            // Connection lines
+            const lineGeo = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(0, 0, 0),
+                new THREE.Vector3(Math.cos(angle) * 2.5, 0, Math.sin(angle) * 2.5)
+            ]);
+            const lineMat = new THREE.LineBasicMaterial({ color: 0x888888 });
+            scene.add(new THREE.Line(lineGeo, lineMat));
+        }
+        
+        scene.add(new THREE.AmbientLight(0x404040, 0.5));
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(5, 5, 5);
+        scene.add(light);
+        
+        camera.position.set(5, 4, 5);
+        camera.lookAt(0, 0, 0);
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            fact.rotation.y += 0.01;
+            fact.rotation.x += 0.005;
+            dims.forEach(d => d.rotation.y += 0.02);
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>

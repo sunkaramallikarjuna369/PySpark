@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Introduction to Consumption Layer</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand"><a href="../../index.html">PySpark Learning Hub</a></div>
+        <div class="nav-links"><a href="../02_semantic_layer/index.html">Next: Semantic Layer</a></div>
+    </nav>
+    <main class="topic-container">
+        <header class="topic-header">
+            <div class="category-icon consumption">CL</div>
+            <h1>Introduction to Consumption Layer</h1>
+            <p class="topic-description">The Consumption Layer sits on top of the Gold layer, serving curated data products to end users, BI tools, APIs, and applications.</p>
+        </header>
+        <div class="content-tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="architecture">Architecture</button>
+            <button class="tab-btn" data-tab="patterns">Patterns</button>
+            <button class="tab-btn" data-tab="code">PySpark Code</button>
+        </div>
+        <div class="visualization-container"><div id="viz-container"></div></div>
+        <div class="tab-content active" id="overview">
+            <h2>What is the Consumption Layer?</h2>
+            <p>The Consumption Layer is the final layer in the data lakehouse architecture where curated, business-ready data is served to consumers. While Bronze/Silver/Gold focus on storage and processing, the Consumption Layer focuses on serving and productization.</p>
+            <h3>Key Characteristics</h3>
+            <ul>
+                <li><strong>User-Centric:</strong> Optimized for how consumers access data</li>
+                <li><strong>Performance:</strong> Pre-aggregated, cached, and indexed for fast queries</li>
+                <li><strong>Governed:</strong> Access controls, data contracts, and SLAs</li>
+                <li><strong>Discoverable:</strong> Well-documented with clear ownership</li>
+            </ul>
+            <h3>Consumer Types</h3>
+            <ul>
+                <li>BI Analysts using dashboards and reports</li>
+                <li>Data Scientists accessing feature stores</li>
+                <li>Applications consuming via APIs</li>
+                <li>External partners via data sharing</li>
+            </ul>
+        </div>
+        <div class="tab-content" id="architecture">
+            <h2>Consumption Layer Architecture</h2>
+            <pre><code class="language-text">
+┌─────────────────────────────────────────────────────────────┐
+│                    CONSUMPTION LAYER                         │
+├─────────────────────────────────────────────────────────────┤
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
+│  │ Semantic │  │   Data   │  │ Feature  │  │   Data   │    │
+│  │  Layer   │  │   Marts  │  │  Store   │  │   APIs   │    │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘    │
+│       │             │             │             │           │
+│  ┌────┴─────────────┴─────────────┴─────────────┴────┐     │
+│  │              Data Products Catalog                 │     │
+│  │         (Contracts, SLAs, Documentation)          │     │
+│  └───────────────────────┬───────────────────────────┘     │
+├──────────────────────────┼──────────────────────────────────┤
+│                          │                                   │
+│                    GOLD LAYER                                │
+│              (Curated Business Tables)                       │
+└──────────────────────────────────────────────────────────────┘
+            </code></pre>
+        </div>
+        <div class="tab-content" id="patterns">
+            <h2>Common Consumption Patterns</h2>
+            <h3>1. Direct Query</h3>
+            <p>Users query Gold tables directly with row/column security applied.</p>
+            <h3>2. Semantic Layer</h3>
+            <p>Metrics and dimensions defined once, consumed everywhere.</p>
+            <h3>3. Data Marts</h3>
+            <p>Subject-specific star schemas optimized for BI tools.</p>
+            <h3>4. Feature Store</h3>
+            <p>ML features with point-in-time correctness for training and serving.</p>
+            <h3>5. Data APIs</h3>
+            <p>REST/GraphQL endpoints for application integration.</p>
+            <h3>6. Data Sharing</h3>
+            <p>Secure sharing with external partners via Delta Sharing.</p>
+        </div>
+        <div class="tab-content" id="code">
+            <h2>PySpark Code Examples</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, sum as spark_sum, avg, count, current_timestamp
+
+spark = SparkSession.builder \
+    .appName("ConsumptionLayer") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .getOrCreate()
+
+class ConsumptionLayerManager:
+    """Manage consumption layer data products."""
+    
+    def __init__(self, gold_path, consumption_path):
+        self.gold_path = gold_path
+        self.consumption_path = consumption_path
+    
+    def create_data_product(self, name, source_table, transformations=None):
+        """Create a data product from Gold layer."""
+        gold_df = spark.read.format("delta").load(f"{self.gold_path}/{source_table}")
+        
+        if transformations:
+            for transform in transformations:
+                gold_df = transform(gold_df)
+        
+        product_df = gold_df \
+            .withColumn("_product_name", lit(name)) \
+            .withColumn("_created_at", current_timestamp()) \
+            .withColumn("_version", lit("1.0"))
+        
+        output_path = f"{self.consumption_path}/{name}"
+        product_df.write \
+            .format("delta") \
+            .mode("overwrite") \
+            .option("overwriteSchema", "true") \
+            .save(output_path)
+        
+        print(f"Data product '{name}' created at {output_path}")
+        return product_df
+    
+    def register_in_catalog(self, name, description, owner, sla_hours=24):
+        """Register data product in catalog."""
+        catalog_entry = {
+            "name": name,
+            "description": description,
+            "owner": owner,
+            "sla_hours": sla_hours,
+            "path": f"{self.consumption_path}/{name}",
+            "created_at": str(current_timestamp())
+        }
+        print(f"Registered: {catalog_entry}")
+        return catalog_entry
+    
+    def apply_access_controls(self, name, allowed_groups):
+        """Apply row/column level security."""
+        print(f"Access controls applied to {name}: {allowed_groups}")
+
+# Example usage
+from pyspark.sql.functions import lit
+
+manager = ConsumptionLayerManager("/lakehouse/gold", "/lakehouse/consumption")
+
+# Create a sales data product
+sales_product = manager.create_data_product(
+    name="sales_summary",
+    source_table="daily_sales_summary"
+)
+
+# Register in catalog
+manager.register_in_catalog(
+    name="sales_summary",
+    description="Daily sales aggregations by store and category",
+    owner="data-platform-team",
+    sla_hours=6
+)</code></pre>
+        </div>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script>
+        const container = document.getElementById('viz-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+        const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        container.appendChild(renderer.domElement);
+        
+        // Create layered architecture visualization
+        const layers = [
+            { name: 'Bronze', color: 0xcd7f32, y: -3, size: 4 },
+            { name: 'Silver', color: 0xc0c0c0, y: -1.5, size: 3.5 },
+            { name: 'Gold', color: 0xffd700, y: 0, size: 3 },
+            { name: 'Consumption', color: 0x00bcd4, y: 1.5, size: 2.5 }
+        ];
+        
+        const meshes = [];
+        layers.forEach(layer => {
+            const geo = new THREE.CylinderGeometry(layer.size, layer.size, 0.4, 32);
+            const mat = new THREE.MeshPhongMaterial({ color: layer.color, shininess: 100, transparent: true, opacity: 0.85 });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.y = layer.y;
+            scene.add(mesh);
+            meshes.push(mesh);
+        });
+        
+        // Add consumer icons on top
+        const consumerGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+        const consumerMat = new THREE.MeshPhongMaterial({ color: 0x4caf50 });
+        for (let i = 0; i < 4; i++) {
+            const consumer = new THREE.Mesh(consumerGeo, consumerMat);
+            consumer.position.set(Math.cos(i * Math.PI / 2) * 1.5, 2.5, Math.sin(i * Math.PI / 2) * 1.5);
+            scene.add(consumer);
+        }
+        
+        scene.add(new THREE.AmbientLight(0x404040, 0.5));
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(5, 5, 5);
+        scene.add(light);
+        
+        camera.position.set(6, 4, 6);
+        camera.lookAt(0, 0, 0);
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            meshes.forEach((m, i) => m.rotation.y += 0.003 * (i + 1));
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>
