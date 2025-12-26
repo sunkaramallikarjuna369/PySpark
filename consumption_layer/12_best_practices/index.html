@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consumption Layer Best Practices</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand"><a href="../../index.html">PySpark Learning Hub</a></div>
+        <div class="nav-links">
+            <a href="../11_data_sharing/index.html">Prev: Data Sharing</a>
+        </div>
+    </nav>
+    <main class="topic-container">
+        <header class="topic-header">
+            <div class="category-icon consumption">CL</div>
+            <h1>Consumption Layer Best Practices</h1>
+            <p class="topic-description">Guidelines for building reliable, performant, and governed consumption layer.</p>
+        </header>
+        <div class="content-tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="code">PySpark Code</button>
+        </div>
+        <div class="visualization-container"><div id="viz-container"></div></div>
+        <div class="tab-content active" id="overview">
+            <h2>Best Practices Summary</h2>
+            <h3>1. Data Product Thinking</h3>
+            <ul>
+                <li>Treat datasets as products with clear ownership</li>
+                <li>Define SLAs for freshness and availability</li>
+                <li>Document thoroughly with examples</li>
+            </ul>
+            <h3>2. Performance</h3>
+            <ul>
+                <li>Pre-aggregate common queries</li>
+                <li>Use materialized views strategically</li>
+                <li>Implement caching for hot data</li>
+            </ul>
+            <h3>3. Governance</h3>
+            <ul>
+                <li>Implement row/column level security</li>
+                <li>Use data contracts for quality</li>
+                <li>Track lineage and usage</li>
+            </ul>
+            <h3>4. Observability</h3>
+            <ul>
+                <li>Monitor query patterns and performance</li>
+                <li>Alert on SLA breaches</li>
+                <li>Track data freshness</li>
+            </ul>
+        </div>
+        <div class="tab-content" id="code">
+            <h2>Implementing Best Practices</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, current_timestamp, datediff, lit
+from dataclasses import dataclass
+from typing import List, Dict
+from datetime import datetime
+
+spark = SparkSession.builder.appName("BestPractices").getOrCreate()
+
+@dataclass
+class DataProduct:
+    name: str
+    owner: str
+    description: str
+    sla_freshness_hours: int
+    quality_rules: List[str]
+    documentation_url: str
+
+class ConsumptionLayerManager:
+    """Manage consumption layer with best practices."""
+    
+    def __init__(self, consumption_path: str):
+        self.consumption_path = consumption_path
+        self.products = {}
+        self.metrics = []
+    
+    def register_product(self, product: DataProduct):
+        """Register a data product with metadata."""
+        self.products[product.name] = product
+        print(f"Registered product: {product.name} (Owner: {product.owner})")
+    
+    def check_freshness(self, product_name: str) -> Dict:
+        """Check if data product meets freshness SLA."""
+        product = self.products.get(product_name)
+        if not product:
+            return {"error": "Product not found"}
+        
+        df = spark.read.format("delta").load(f"{self.consumption_path}/{product_name}")
+        
+        # Get latest update timestamp
+        latest_update = df.agg({"_updated_at": "max"}).collect()[0][0]
+        
+        hours_since_update = (datetime.now() - latest_update).total_seconds() / 3600
+        meets_sla = hours_since_update <= product.sla_freshness_hours
+        
+        result = {
+            "product": product_name,
+            "sla_hours": product.sla_freshness_hours,
+            "hours_since_update": round(hours_since_update, 2),
+            "meets_sla": meets_sla
+        }
+        
+        self.metrics.append({
+            "check": "freshness",
+            "product": product_name,
+            "result": meets_sla,
+            "timestamp": str(datetime.now())
+        })
+        
+        return result
+    
+    def monitor_usage(self, product_name: str) -> Dict:
+        """Monitor product usage patterns."""
+        # In production, query audit logs
+        return {
+            "product": product_name,
+            "queries_last_24h": 150,
+            "unique_users": 25,
+            "avg_query_time_ms": 450
+        }
+    
+    def generate_documentation(self, product_name: str) -> str:
+        """Generate documentation for a data product."""
+        product = self.products.get(product_name)
+        df = spark.read.format("delta").load(f"{self.consumption_path}/{product_name}")
+        
+        doc = f"""
+# {product.name}
+
+## Overview
+{product.description}
+
+## Owner
+{product.owner}
+
+## SLA
+- Freshness: {product.sla_freshness_hours} hours
+
+## Schema
+| Column | Type |
+|--------|------|
+"""
+        for field in df.schema.fields:
+            doc += f"| {field.name} | {field.dataType.simpleString()} |\n"
+        
+        doc += f"\n## Quality Rules\n"
+        for rule in product.quality_rules:
+            doc += f"- {rule}\n"
+        
+        return doc
+
+# Register products with best practices
+manager = ConsumptionLayerManager("/lakehouse/consumption")
+
+manager.register_product(DataProduct(
+    name="customer_360",
+    owner="data-platform-team",
+    description="Unified customer view with lifetime metrics",
+    sla_freshness_hours=6,
+    quality_rules=[
+        "customer_id must be unique",
+        "email must be valid format",
+        "lifetime_value must be >= 0"
+    ],
+    documentation_url="https://docs.company.com/data/customer_360"
+))
+
+# Check freshness
+freshness = manager.check_freshness("customer_360")
+print(f"Freshness check: {freshness}")
+
+# Monitor usage
+usage = manager.monitor_usage("customer_360")
+print(f"Usage stats: {usage}")
+
+# Generate docs
+docs = manager.generate_documentation("customer_360")
+print(docs)</code></pre>
+        </div>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script>
+        const container = document.getElementById('viz-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+        const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        container.appendChild(renderer.domElement);
+        
+        // Best practices pillars
+        const pillarLabels = ['Product', 'Performance', 'Governance', 'Observability'];
+        const pillarColors = [0x4caf50, 0x2196f3, 0xffd700, 0xff5722];
+        const pillars = [];
+        
+        for (let i = 0; i < 4; i++) {
+            const geo = new THREE.CylinderGeometry(0.4, 0.4, 2, 16);
+            const mat = new THREE.MeshPhongMaterial({ color: pillarColors[i] });
+            const pillar = new THREE.Mesh(geo, mat);
+            pillar.position.set(-2 + i * 1.3, 0, 0);
+            scene.add(pillar);
+            pillars.push(pillar);
+        }
+        
+        // Foundation
+        const foundationGeo = new THREE.BoxGeometry(6, 0.3, 2);
+        const foundationMat = new THREE.MeshPhongMaterial({ color: 0x333333 });
+        const foundation = new THREE.Mesh(foundationGeo, foundationMat);
+        foundation.position.y = -1.15;
+        scene.add(foundation);
+        
+        // Roof
+        const roofGeo = new THREE.BoxGeometry(6, 0.2, 2);
+        const roofMat = new THREE.MeshPhongMaterial({ color: 0x9c27b0 });
+        const roof = new THREE.Mesh(roofGeo, roofMat);
+        roof.position.y = 1.1;
+        scene.add(roof);
+        
+        scene.add(new THREE.AmbientLight(0x404040, 0.5));
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(5, 5, 5);
+        scene.add(light);
+        
+        camera.position.set(0, 2, 6);
+        camera.lookAt(0, 0, 0);
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            pillars.forEach((p, i) => {
+                p.scale.y = 0.9 + Math.sin(Date.now() * 0.002 + i) * 0.1;
+            });
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>

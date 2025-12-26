@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traditional Architecture - Source Systems Layer</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <div class="logo">
+                <a href="../../index.html" style="text-decoration: none; display: flex; align-items: center; gap: 0.5rem;">
+                    <svg class="logo-icon" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="40" height="40" rx="8" fill="#795548"/>
+                        <circle cx="20" cy="20" r="10" fill="white" opacity="0.3"/>
+                        <circle cx="20" cy="20" r="5" fill="white"/>
+                    </svg>
+                    <span>Source Systems</span>
+                </a>
+            </div>
+            <nav class="nav">
+                <a href="../01_introduction/index.html" class="nav-link">Previous</a>
+                <a href="../../index.html" class="nav-link">Home</a>
+                <a href="../03_etl_integration/index.html" class="nav-link">Next</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container" style="padding: 2rem;">
+        <h1>Source Systems Layer</h1>
+        
+        <div id="visualization" style="width: 100%; height: 400px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 12px; margin: 2rem 0;"></div>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="types">Source Types</button>
+            <button class="tab-btn" data-tab="code">PySpark Code</button>
+        </div>
+
+        <div id="overview" class="tab-content active">
+            <h2>Understanding Source Systems</h2>
+            <p>In traditional data warehouse architecture, source systems are the operational databases and applications that generate business data. These systems were never designed for analytics - they were built for transaction processing (OLTP).</p>
+            
+            <h3>Key Characteristics</h3>
+            <p><strong>Transactional Focus:</strong> Source systems are optimized for INSERT, UPDATE, DELETE operations with ACID compliance. They use normalized schemas (3NF) to minimize data redundancy.</p>
+            <p><strong>Operational Data:</strong> Data represents current state of business operations - orders, customers, inventory, financials. Historical data is often purged or archived.</p>
+            <p><strong>Diverse Technologies:</strong> Enterprises typically had multiple source systems: mainframes (COBOL/DB2), ERP systems (SAP, Oracle), CRM (Siebel, Salesforce), custom applications, and flat files.</p>
+            
+            <h3>Challenges</h3>
+            <p>Extracting data from source systems presented challenges: different data formats, varying update frequencies, limited extraction windows (batch windows), and impact on operational performance.</p>
+        </div>
+
+        <div id="types" class="tab-content">
+            <h2>Types of Source Systems</h2>
+            
+            <h3>Enterprise Resource Planning (ERP)</h3>
+            <p>Systems like SAP, Oracle E-Business Suite, and Microsoft Dynamics managed core business processes: finance, HR, manufacturing, supply chain. These were often the primary data sources for enterprise DW.</p>
+            
+            <h3>Customer Relationship Management (CRM)</h3>
+            <p>Siebel, Salesforce, and custom CRM systems tracked customer interactions, sales pipelines, and marketing campaigns. Customer data was critical for sales and marketing analytics.</p>
+            
+            <h3>Legacy Mainframes</h3>
+            <p>Many enterprises still ran core systems on IBM mainframes with COBOL programs and DB2/IMS databases. Extracting data required specialized connectors and often involved VSAM files or flat file exports.</p>
+            
+            <h3>Flat Files</h3>
+            <p>CSV, fixed-width, and XML files were common for data exchange. External data (market data, third-party feeds) often arrived as files via FTP or SFTP.</p>
+            
+            <h3>Spreadsheets</h3>
+            <p>Despite best efforts, Excel spreadsheets remained a significant data source, especially for financial data, budgets, and manual adjustments.</p>
+        </div>
+
+        <div id="code" class="tab-content">
+            <h2>PySpark Source Extraction</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+from pyspark.sql.types import *
+from datetime import datetime, timedelta
+import os
+
+class SourceSystemExtractor:
+    """
+    Extract data from various source systems in traditional architecture.
+    Simulates common extraction patterns used before modern data lakes.
+    """
+    
+    def __init__(self, staging_path):
+        self.spark = SparkSession.builder \
+            .appName("SourceSystemExtraction") \
+            .config("spark.jars", "ojdbc8.jar,mysql-connector.jar") \
+            .getOrCreate()
+        self.staging_path = staging_path
+        self.batch_id = datetime.now().strftime("%Y%m%d%H%M%S")
+    
+    # ==========================================
+    # RDBMS EXTRACTION (Oracle, SQL Server, MySQL)
+    # ==========================================
+    
+    def extract_from_jdbc(self, source_name, jdbc_url, table_name, 
+                          username, password, extract_type="full"):
+        """
+        Extract data from relational databases using JDBC.
+        Traditional DW relied heavily on JDBC/ODBC connections.
+        """
+        if extract_type == "full":
+            query = f"(SELECT * FROM {table_name}) as t"
+        elif extract_type == "incremental":
+            yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+            query = f"(SELECT * FROM {table_name} WHERE modified_date >= '{yesterday}') as t"
+        else:
+            query = f"(SELECT * FROM {table_name}) as t"
+        
+        df = self.spark.read \
+            .format("jdbc") \
+            .option("url", jdbc_url) \
+            .option("dbtable", query) \
+            .option("user", username) \
+            .option("password", password) \
+            .option("fetchsize", "10000") \
+            .option("numPartitions", "10") \
+            .load()
+        
+        staged_df = self._add_staging_metadata(df, source_name)
+        self._write_to_staging(staged_df, source_name)
+        
+        return staged_df
+    
+    def extract_from_oracle(self, source_name, host, port, service_name,
+                           table_name, username, password):
+        """Extract from Oracle database - most common enterprise source."""
+        jdbc_url = f"jdbc:oracle:thin:@{host}:{port}/{service_name}"
+        return self.extract_from_jdbc(
+            source_name, jdbc_url, table_name, username, password
+        )
+    
+    def extract_from_sqlserver(self, source_name, host, database,
+                               table_name, username, password):
+        """Extract from SQL Server - common for Microsoft shops."""
+        jdbc_url = f"jdbc:sqlserver://{host};databaseName={database}"
+        return self.extract_from_jdbc(
+            source_name, jdbc_url, table_name, username, password
+        )
+    
+    # ==========================================
+    # FLAT FILE EXTRACTION
+    # ==========================================
+    
+    def extract_from_csv(self, source_name, file_path, delimiter=",",
+                        header=True, schema=None):
+        """
+        Extract from CSV files - common for external data feeds.
+        Traditional ETL often processed files from FTP servers.
+        """
+        reader = self.spark.read \
+            .option("delimiter", delimiter) \
+            .option("header", str(header).lower())
+        
+        if schema:
+            reader = reader.schema(schema)
+        else:
+            reader = reader.option("inferSchema", "true")
+        
+        df = reader.csv(file_path)
+        
+        staged_df = self._add_staging_metadata(df, source_name)
+        self._write_to_staging(staged_df, source_name)
+        
+        return staged_df
+    
+    def extract_from_fixed_width(self, source_name, file_path, column_specs):
+        """
+        Extract from fixed-width files - common for mainframe exports.
+        Column specs: [(name, start, length), ...]
+        """
+        raw_df = self.spark.read.text(file_path)
+        
+        for col_name, start, length in column_specs:
+            raw_df = raw_df.withColumn(
+                col_name,
+                trim(substring(col("value"), start, length))
+            )
+        
+        df = raw_df.drop("value")
+        
+        staged_df = self._add_staging_metadata(df, source_name)
+        self._write_to_staging(staged_df, source_name)
+        
+        return staged_df
+    
+    def extract_from_xml(self, source_name, file_path, row_tag):
+        """Extract from XML files - common for B2B data exchange."""
+        df = self.spark.read \
+            .format("xml") \
+            .option("rowTag", row_tag) \
+            .load(file_path)
+        
+        staged_df = self._add_staging_metadata(df, source_name)
+        self._write_to_staging(staged_df, source_name)
+        
+        return staged_df
+    
+    # ==========================================
+    # MAINFRAME EXTRACTION
+    # ==========================================
+    
+    def extract_from_mainframe_export(self, source_name, file_path, 
+                                      copybook_path=None):
+        """
+        Extract from mainframe COBOL copybook exports.
+        Mainframes often exported data as EBCDIC fixed-width files.
+        """
+        if copybook_path:
+            schema = self._parse_copybook(copybook_path)
+        else:
+            schema = None
+        
+        raw_df = self.spark.read.text(file_path)
+        
+        staged_df = self._add_staging_metadata(raw_df, source_name)
+        self._write_to_staging(staged_df, source_name)
+        
+        return staged_df
+    
+    def _parse_copybook(self, copybook_path):
+        """Parse COBOL copybook to extract field definitions."""
+        return None
+    
+    # ==========================================
+    # ERP SYSTEM EXTRACTION
+    # ==========================================
+    
+    def extract_from_sap(self, source_name, sap_config, table_name):
+        """
+        Extract from SAP using RFC or database connection.
+        SAP was a primary source for many enterprise DWs.
+        """
+        df = self.spark.read \
+            .format("jdbc") \
+            .option("url", sap_config["jdbc_url"]) \
+            .option("dbtable", table_name) \
+            .option("user", sap_config["user"]) \
+            .option("password", sap_config["password"]) \
+            .load()
+        
+        staged_df = self._add_staging_metadata(df, source_name)
+        self._write_to_staging(staged_df, source_name)
+        
+        return staged_df
+    
+    # ==========================================
+    # HELPER METHODS
+    # ==========================================
+    
+    def _add_staging_metadata(self, df, source_name):
+        """Add standard staging metadata columns."""
+        return df \
+            .withColumn("_source_system", lit(source_name)) \
+            .withColumn("_extract_timestamp", current_timestamp()) \
+            .withColumn("_batch_id", lit(self.batch_id)) \
+            .withColumn("_record_hash", md5(
+                concat_ws("|", *[col(c) for c in df.columns])
+            ))
+    
+    def _write_to_staging(self, df, source_name):
+        """Write extracted data to staging area."""
+        staging_table = f"{self.staging_path}/stg_{source_name}"
+        
+        df.write \
+            .mode("overwrite") \
+            .option("compression", "snappy") \
+            .parquet(staging_table)
+        
+        record_count = df.count()
+        print(f"Extracted {record_count} records from {source_name} to staging")
+        
+        self._log_extraction(source_name, record_count)
+    
+    def _log_extraction(self, source_name, record_count):
+        """Log extraction metadata for audit trail."""
+        log_entry = self.spark.createDataFrame([{
+            "source_name": source_name,
+            "batch_id": self.batch_id,
+            "record_count": record_count,
+            "extract_timestamp": datetime.now().isoformat(),
+            "status": "SUCCESS"
+        }])
+        
+        log_path = f"{self.staging_path}/_extraction_log"
+        log_entry.write.mode("append").parquet(log_path)
+
+
+# Example Usage
+if __name__ == "__main__":
+    extractor = SourceSystemExtractor(staging_path="/data/staging")
+    
+    # Extract from Oracle ERP
+    erp_df = extractor.extract_from_oracle(
+        source_name="erp_orders",
+        host="erp-db.company.com",
+        port=1521,
+        service_name="ERPDB",
+        table_name="SALES_ORDERS",
+        username="etl_user",
+        password=os.environ.get("ETL_PASSWORD")
+    )
+    
+    # Extract from CSV file (external vendor data)
+    vendor_df = extractor.extract_from_csv(
+        source_name="vendor_products",
+        file_path="/data/incoming/vendor_catalog.csv",
+        delimiter="|"
+    )
+    
+    # Extract from fixed-width mainframe export
+    mainframe_df = extractor.extract_from_fixed_width(
+        source_name="legacy_customers",
+        file_path="/data/incoming/CUST_MASTER.DAT",
+        column_specs=[
+            ("customer_id", 1, 10),
+            ("customer_name", 11, 50),
+            ("address", 61, 100),
+            ("phone", 161, 15)
+        ]
+    )
+</code></pre>
+        </div>
+
+        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+            <a href="../01_introduction/index.html" class="nav-button" style="padding: 1rem 2rem; background: var(--bg-secondary); color: var(--text-primary); text-decoration: none; border-radius: 8px;">Previous: Introduction</a>
+            <a href="../03_etl_integration/index.html" class="nav-button" style="padding: 1rem 2rem; background: var(--accent-primary); color: white; text-decoration: none; border-radius: 8px;">Next: ETL/Integration Layer</a>
+        </div>
+    </main>
+
+    <script>
+        // Tab functionality
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab).classList.add('active');
+            });
+        });
+
+        // 3D Visualization - Source Systems
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, document.getElementById('visualization').offsetWidth / 400, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(document.getElementById('visualization').offsetWidth, 400);
+        document.getElementById('visualization').appendChild(renderer.domElement);
+
+        // Create source system nodes
+        const sources = [];
+        const sourcePositions = [
+            { x: -4, y: 2, label: 'ERP' },
+            { x: -4, y: 0, label: 'CRM' },
+            { x: -4, y: -2, label: 'Mainframe' },
+            { x: 0, y: 2, label: 'Files' },
+            { x: 0, y: -2, label: 'Excel' }
+        ];
+
+        sourcePositions.forEach((pos, i) => {
+            const geometry = new THREE.BoxGeometry(1.5, 1, 1);
+            const material = new THREE.MeshPhongMaterial({ 
+                color: 0x795548,
+                transparent: true,
+                opacity: 0.9
+            });
+            const source = new THREE.Mesh(geometry, material);
+            source.position.set(pos.x, pos.y, 0);
+            scene.add(source);
+            sources.push(source);
+        });
+
+        // Create staging area (target)
+        const stagingGeom = new THREE.CylinderGeometry(1.5, 1.5, 0.5, 32);
+        const stagingMat = new THREE.MeshPhongMaterial({ color: 0x5d4037 });
+        const staging = new THREE.Mesh(stagingGeom, stagingMat);
+        staging.position.set(4, 0, 0);
+        staging.rotation.z = Math.PI / 2;
+        scene.add(staging);
+
+        // Create data flow arrows
+        const arrowMaterial = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+        sourcePositions.forEach((pos) => {
+            const points = [
+                new THREE.Vector3(pos.x + 0.8, pos.y, 0),
+                new THREE.Vector3(3, 0, 0)
+            ];
+            const lineGeom = new THREE.BufferGeometry().setFromPoints(points);
+            const line = new THREE.Line(lineGeom, new THREE.LineBasicMaterial({ color: 0xffd700, opacity: 0.6, transparent: true }));
+            scene.add(line);
+        });
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 5, 5);
+        scene.add(directionalLight);
+
+        camera.position.set(0, 0, 10);
+        camera.lookAt(0, 0, 0);
+
+        function animate() {
+            requestAnimationFrame(animate);
+            sources.forEach((source, i) => {
+                source.rotation.y += 0.01;
+            });
+            staging.rotation.x += 0.02;
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            const width = document.getElementById('visualization').offsetWidth;
+            renderer.setSize(width, 400);
+            camera.aspect = width / 400;
+            camera.updateProjectionMatrix();
+        });
+    </script>
+</body>
+</html>

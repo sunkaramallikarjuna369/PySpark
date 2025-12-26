@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traditional Architecture - Data Marts Layer</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <div class="logo">
+                <a href="../../index.html" style="text-decoration: none; display: flex; align-items: center; gap: 0.5rem;">
+                    <svg class="logo-icon" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="40" height="40" rx="8" fill="#795548"/>
+                        <circle cx="20" cy="20" r="8" fill="white"/>
+                        <circle cx="10" cy="10" r="4" fill="white" opacity="0.6"/>
+                        <circle cx="30" cy="10" r="4" fill="white" opacity="0.6"/>
+                        <circle cx="10" cy="30" r="4" fill="white" opacity="0.6"/>
+                        <circle cx="30" cy="30" r="4" fill="white" opacity="0.6"/>
+                    </svg>
+                    <span>Data Marts</span>
+                </a>
+            </div>
+            <nav class="nav">
+                <a href="../04_data_warehouse/index.html" class="nav-link">Previous</a>
+                <a href="../../index.html" class="nav-link">Home</a>
+                <a href="../06_bi_reporting/index.html" class="nav-link">Next</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container" style="padding: 2rem;">
+        <h1>Data Marts Layer</h1>
+        
+        <div id="visualization" style="width: 100%; height: 400px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 12px; margin: 2rem 0;"></div>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="types">Mart Types</button>
+            <button class="tab-btn" data-tab="code">PySpark Code</button>
+        </div>
+
+        <div id="overview" class="tab-content active">
+            <h2>Understanding Data Marts</h2>
+            <p>Data marts are subject-specific subsets of the data warehouse, designed to serve the analytical needs of specific business departments or functions. They represent the "last mile" of traditional data warehouse architecture.</p>
+            
+            <h3>Key Characteristics</h3>
+            <p><strong>Subject-Specific:</strong> Each mart focuses on a single business area - Sales, Finance, Marketing, HR, etc. This specialization enables optimized schemas and faster queries.</p>
+            <p><strong>Denormalized:</strong> Data marts typically use star or snowflake schemas with denormalized dimension tables for query performance.</p>
+            <p><strong>Aggregated:</strong> Pre-computed aggregations at various grain levels (daily, weekly, monthly) to speed up common queries.</p>
+            <p><strong>User-Friendly:</strong> Column names and structures designed for business users, not technical staff.</p>
+            
+            <h3>Dependent vs Independent</h3>
+            <p>Dependent data marts are populated from the enterprise data warehouse (recommended). Independent data marts are populated directly from source systems (creates silos and inconsistency).</p>
+        </div>
+
+        <div id="types" class="tab-content">
+            <h2>Common Data Mart Types</h2>
+            
+            <h3>Sales Data Mart</h3>
+            <p>Tracks sales transactions, revenue, units sold, discounts. Dimensions include Customer, Product, Time, Geography, Sales Rep. Supports sales performance analysis, forecasting, and territory management.</p>
+            
+            <h3>Finance Data Mart</h3>
+            <p>Contains general ledger, accounts payable/receivable, budgets. Dimensions include Account, Cost Center, Time, Entity. Supports financial reporting, variance analysis, and compliance.</p>
+            
+            <h3>Marketing Data Mart</h3>
+            <p>Tracks campaigns, leads, conversions, customer segments. Dimensions include Campaign, Channel, Customer Segment, Time. Supports campaign ROI analysis and customer analytics.</p>
+            
+            <h3>HR Data Mart</h3>
+            <p>Contains employee data, headcount, turnover, compensation. Dimensions include Employee, Department, Job, Time. Supports workforce analytics and HR reporting.</p>
+            
+            <h3>Inventory Data Mart</h3>
+            <p>Tracks stock levels, movements, turns. Dimensions include Product, Location, Supplier, Time. Supports inventory optimization and supply chain analytics.</p>
+        </div>
+
+        <div id="code" class="tab-content">
+            <h2>PySpark Data Mart Implementation</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+from pyspark.sql.types import *
+from pyspark.sql.window import Window
+
+class DataMartBuilder:
+    """
+    Build subject-specific data marts from enterprise data warehouse.
+    Implements star schema patterns with aggregations.
+    """
+    
+    def __init__(self, edw_path, mart_path):
+        self.spark = SparkSession.builder \
+            .appName("DataMartBuilder") \
+            .getOrCreate()
+        self.edw_path = edw_path
+        self.mart_path = mart_path
+    
+    # ==========================================
+    # SALES DATA MART
+    # ==========================================
+    
+    def build_sales_mart(self):
+        """
+        Build Sales Data Mart with star schema.
+        Central fact table surrounded by dimensions.
+        """
+        fact_sales = self.spark.read.parquet(f"{self.edw_path}/fact_sales")
+        dim_customer = self.spark.read.parquet(f"{self.edw_path}/dim_customer")
+        dim_product = self.spark.read.parquet(f"{self.edw_path}/dim_product")
+        dim_date = self.spark.read.parquet(f"{self.edw_path}/dim_date")
+        dim_store = self.spark.read.parquet(f"{self.edw_path}/dim_store")
+        
+        sales_mart = fact_sales \
+            .join(dim_customer.filter(col("_is_current") == True),
+                  fact_sales.customer_sk == dim_customer.customer_sk, "left") \
+            .join(dim_product.filter(col("_is_current") == True),
+                  fact_sales.product_sk == dim_product.product_sk, "left") \
+            .join(dim_date, fact_sales.date_sk == dim_date.date_sk, "left") \
+            .join(dim_store, fact_sales.store_sk == dim_store.store_sk, "left") \
+            .select(
+                fact_sales.sale_id,
+                dim_date.full_date.alias("sale_date"),
+                dim_date.year,
+                dim_date.quarter,
+                dim_date.month,
+                dim_date.month_name,
+                dim_customer.customer_name,
+                dim_customer.customer_segment,
+                dim_customer.city.alias("customer_city"),
+                dim_customer.state.alias("customer_state"),
+                dim_product.product_name,
+                dim_product.category,
+                dim_product.subcategory,
+                dim_product.brand,
+                dim_store.store_name,
+                dim_store.region,
+                fact_sales.quantity,
+                fact_sales.unit_price,
+                fact_sales.discount_amount,
+                fact_sales.sales_amount,
+                fact_sales.cost_amount,
+                (fact_sales.sales_amount - fact_sales.cost_amount).alias("gross_profit")
+            )
+        
+        sales_mart.write \
+            .mode("overwrite") \
+            .partitionBy("year", "month") \
+            .parquet(f"{self.mart_path}/sales_mart")
+        
+        print("Built Sales Data Mart")
+        return sales_mart
+    
+    def build_sales_aggregates(self):
+        """
+        Build pre-aggregated tables for common queries.
+        Speeds up BI tool performance significantly.
+        """
+        sales_mart = self.spark.read.parquet(f"{self.mart_path}/sales_mart")
+        
+        daily_sales = sales_mart.groupBy(
+            "sale_date", "year", "month", "region", "category"
+        ).agg(
+            count("sale_id").alias("transaction_count"),
+            sum("quantity").alias("total_units"),
+            sum("sales_amount").alias("total_sales"),
+            sum("gross_profit").alias("total_profit"),
+            avg("sales_amount").alias("avg_transaction_value")
+        )
+        
+        daily_sales.write \
+            .mode("overwrite") \
+            .partitionBy("year", "month") \
+            .parquet(f"{self.mart_path}/agg_daily_sales")
+        
+        monthly_sales = sales_mart.groupBy(
+            "year", "month", "month_name", "region", "category", "customer_segment"
+        ).agg(
+            countDistinct("sale_id").alias("transaction_count"),
+            countDistinct("customer_name").alias("unique_customers"),
+            sum("quantity").alias("total_units"),
+            sum("sales_amount").alias("total_sales"),
+            sum("gross_profit").alias("total_profit")
+        )
+        
+        monthly_sales.write \
+            .mode("overwrite") \
+            .parquet(f"{self.mart_path}/agg_monthly_sales")
+        
+        print("Built Sales Aggregates")
+        return daily_sales, monthly_sales
+    
+    # ==========================================
+    # FINANCE DATA MART
+    # ==========================================
+    
+    def build_finance_mart(self):
+        """
+        Build Finance Data Mart for financial reporting.
+        Supports GL analysis and budget variance.
+        """
+        fact_gl = self.spark.read.parquet(f"{self.edw_path}/fact_general_ledger")
+        dim_account = self.spark.read.parquet(f"{self.edw_path}/dim_account")
+        dim_cost_center = self.spark.read.parquet(f"{self.edw_path}/dim_cost_center")
+        dim_date = self.spark.read.parquet(f"{self.edw_path}/dim_date")
+        
+        finance_mart = fact_gl \
+            .join(dim_account, "account_sk", "left") \
+            .join(dim_cost_center, "cost_center_sk", "left") \
+            .join(dim_date, "date_sk", "left") \
+            .select(
+                dim_date.full_date.alias("posting_date"),
+                dim_date.year.alias("fiscal_year"),
+                dim_date.month.alias("fiscal_month"),
+                dim_account.account_number,
+                dim_account.account_name,
+                dim_account.account_type,
+                dim_account.account_category,
+                dim_cost_center.cost_center_code,
+                dim_cost_center.cost_center_name,
+                dim_cost_center.department,
+                fact_gl.debit_amount,
+                fact_gl.credit_amount,
+                (fact_gl.debit_amount - fact_gl.credit_amount).alias("net_amount"),
+                fact_gl.budget_amount,
+                (fact_gl.debit_amount - fact_gl.credit_amount - fact_gl.budget_amount).alias("variance")
+            )
+        
+        finance_mart.write \
+            .mode("overwrite") \
+            .partitionBy("fiscal_year", "fiscal_month") \
+            .parquet(f"{self.mart_path}/finance_mart")
+        
+        print("Built Finance Data Mart")
+        return finance_mart
+    
+    # ==========================================
+    # MARKETING DATA MART
+    # ==========================================
+    
+    def build_marketing_mart(self):
+        """
+        Build Marketing Data Mart for campaign analytics.
+        Tracks campaign performance and customer acquisition.
+        """
+        fact_campaigns = self.spark.read.parquet(f"{self.edw_path}/fact_campaigns")
+        dim_campaign = self.spark.read.parquet(f"{self.edw_path}/dim_campaign")
+        dim_channel = self.spark.read.parquet(f"{self.edw_path}/dim_channel")
+        dim_date = self.spark.read.parquet(f"{self.edw_path}/dim_date")
+        
+        marketing_mart = fact_campaigns \
+            .join(dim_campaign, "campaign_sk", "left") \
+            .join(dim_channel, "channel_sk", "left") \
+            .join(dim_date, "date_sk", "left") \
+            .select(
+                dim_date.full_date.alias("activity_date"),
+                dim_date.year,
+                dim_date.month,
+                dim_campaign.campaign_name,
+                dim_campaign.campaign_type,
+                dim_campaign.start_date,
+                dim_campaign.end_date,
+                dim_channel.channel_name,
+                dim_channel.channel_type,
+                fact_campaigns.impressions,
+                fact_campaigns.clicks,
+                fact_campaigns.conversions,
+                fact_campaigns.spend,
+                fact_campaigns.revenue,
+                (fact_campaigns.clicks / fact_campaigns.impressions * 100).alias("ctr"),
+                (fact_campaigns.conversions / fact_campaigns.clicks * 100).alias("conversion_rate"),
+                (fact_campaigns.spend / fact_campaigns.conversions).alias("cost_per_conversion"),
+                (fact_campaigns.revenue - fact_campaigns.spend).alias("roi")
+            )
+        
+        marketing_mart.write \
+            .mode("overwrite") \
+            .partitionBy("year", "month") \
+            .parquet(f"{self.mart_path}/marketing_mart")
+        
+        print("Built Marketing Data Mart")
+        return marketing_mart
+    
+    # ==========================================
+    # INVENTORY DATA MART
+    # ==========================================
+    
+    def build_inventory_mart(self):
+        """
+        Build Inventory Data Mart for supply chain analytics.
+        Tracks stock levels, movements, and turns.
+        """
+        fact_inventory = self.spark.read.parquet(f"{self.edw_path}/fact_inventory")
+        dim_product = self.spark.read.parquet(f"{self.edw_path}/dim_product")
+        dim_location = self.spark.read.parquet(f"{self.edw_path}/dim_location")
+        dim_date = self.spark.read.parquet(f"{self.edw_path}/dim_date")
+        
+        inventory_mart = fact_inventory \
+            .join(dim_product.filter(col("_is_current") == True), "product_sk", "left") \
+            .join(dim_location, "location_sk", "left") \
+            .join(dim_date, "date_sk", "left") \
+            .select(
+                dim_date.full_date.alias("snapshot_date"),
+                dim_date.year,
+                dim_date.month,
+                dim_product.product_name,
+                dim_product.category,
+                dim_product.sku,
+                dim_location.location_name,
+                dim_location.location_type,
+                dim_location.region,
+                fact_inventory.quantity_on_hand,
+                fact_inventory.quantity_reserved,
+                fact_inventory.quantity_available,
+                fact_inventory.reorder_point,
+                fact_inventory.unit_cost,
+                (fact_inventory.quantity_on_hand * fact_inventory.unit_cost).alias("inventory_value"),
+                when(fact_inventory.quantity_available < fact_inventory.reorder_point, "REORDER")
+                    .otherwise("OK").alias("stock_status")
+            )
+        
+        inventory_mart.write \
+            .mode("overwrite") \
+            .partitionBy("year", "month") \
+            .parquet(f"{self.mart_path}/inventory_mart")
+        
+        print("Built Inventory Data Mart")
+        return inventory_mart
+
+
+# Example Usage
+if __name__ == "__main__":
+    builder = DataMartBuilder(
+        edw_path="/data/edw/dimensional",
+        mart_path="/data/marts"
+    )
+    
+    # Build all data marts
+    builder.build_sales_mart()
+    builder.build_sales_aggregates()
+    builder.build_finance_mart()
+    builder.build_marketing_mart()
+    builder.build_inventory_mart()
+</code></pre>
+        </div>
+
+        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+            <a href="../04_data_warehouse/index.html" class="nav-button" style="padding: 1rem 2rem; background: var(--bg-secondary); color: var(--text-primary); text-decoration: none; border-radius: 8px;">Previous: Data Warehouse</a>
+            <a href="../06_bi_reporting/index.html" class="nav-button" style="padding: 1rem 2rem; background: var(--accent-primary); color: white; text-decoration: none; border-radius: 8px;">Next: BI/Reporting</a>
+        </div>
+    </main>
+
+    <script>
+        // Tab functionality
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab).classList.add('active');
+            });
+        });
+
+        // 3D Visualization - Data Marts (Hub and Spoke)
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, document.getElementById('visualization').offsetWidth / 400, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(document.getElementById('visualization').offsetWidth, 400);
+        document.getElementById('visualization').appendChild(renderer.domElement);
+
+        // Central EDW
+        const edwGeom = new THREE.SphereGeometry(1.5, 32, 32);
+        const edwMat = new THREE.MeshPhongMaterial({ 
+            color: 0x795548,
+            transparent: true,
+            opacity: 0.9
+        });
+        const edw = new THREE.Mesh(edwGeom, edwMat);
+        scene.add(edw);
+
+        // Data Marts around EDW
+        const marts = [];
+        const martColors = [0x4caf50, 0x2196f3, 0xff9800, 0x9c27b0, 0xe91e63];
+        const martLabels = ['Sales', 'Finance', 'Marketing', 'HR', 'Inventory'];
+        const martCount = 5;
+
+        for (let i = 0; i < martCount; i++) {
+            const angle = (i / martCount) * Math.PI * 2;
+            const radius = 4;
+            
+            const martGeom = new THREE.BoxGeometry(1.2, 1.2, 1.2);
+            const martMat = new THREE.MeshPhongMaterial({ 
+                color: martColors[i],
+                transparent: true,
+                opacity: 0.85
+            });
+            const mart = new THREE.Mesh(martGeom, martMat);
+            mart.position.x = Math.cos(angle) * radius;
+            mart.position.z = Math.sin(angle) * radius;
+            scene.add(mart);
+            marts.push(mart);
+
+            // Connection line to EDW
+            const points = [
+                new THREE.Vector3(0, 0, 0),
+                new THREE.Vector3(Math.cos(angle) * radius * 0.6, 0, Math.sin(angle) * radius * 0.6)
+            ];
+            const lineGeom = new THREE.BufferGeometry().setFromPoints(points);
+            const line = new THREE.Line(lineGeom, new THREE.LineBasicMaterial({ color: 0xffd700, opacity: 0.6, transparent: true }));
+            scene.add(line);
+        }
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 5, 5);
+        scene.add(directionalLight);
+
+        camera.position.set(0, 6, 8);
+        camera.lookAt(0, 0, 0);
+
+        function animate() {
+            requestAnimationFrame(animate);
+            edw.rotation.y += 0.005;
+            marts.forEach((mart, i) => {
+                mart.rotation.y += 0.01;
+                mart.rotation.x += 0.005;
+            });
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            const width = document.getElementById('visualization').offsetWidth;
+            renderer.setSize(width, 400);
+            camera.aspect = width / 400;
+            camera.updateProjectionMatrix();
+        });
+    </script>
+</body>
+</html>

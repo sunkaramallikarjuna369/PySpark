@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traditional Architecture - BI/Reporting Layer</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <div class="logo">
+                <a href="../../index.html" style="text-decoration: none; display: flex; align-items: center; gap: 0.5rem;">
+                    <svg class="logo-icon" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="40" height="40" rx="8" fill="#795548"/>
+                        <rect x="8" y="20" width="6" height="12" fill="white"/>
+                        <rect x="17" y="14" width="6" height="18" fill="white" opacity="0.8"/>
+                        <rect x="26" y="8" width="6" height="24" fill="white" opacity="0.6"/>
+                    </svg>
+                    <span>BI/Reporting</span>
+                </a>
+            </div>
+            <nav class="nav">
+                <a href="../05_data_marts/index.html" class="nav-link">Previous</a>
+                <a href="../../index.html" class="nav-link">Home</a>
+                <a href="../07_traditional_vs_medallion/index.html" class="nav-link">Next</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container" style="padding: 2rem;">
+        <h1>BI/Reporting Layer</h1>
+        
+        <div id="visualization" style="width: 100%; height: 400px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 12px; margin: 2rem 0;"></div>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="tools">BI Tools</button>
+            <button class="tab-btn" data-tab="code">PySpark Code</button>
+        </div>
+
+        <div id="overview" class="tab-content active">
+            <h2>The BI/Reporting Layer</h2>
+            <p>The Business Intelligence and Reporting layer was the user-facing component of traditional data warehouse architecture. This layer transformed raw data into actionable insights through reports, dashboards, and analytical tools.</p>
+            
+            <h3>Key Components</h3>
+            <p><strong>Enterprise Reporting:</strong> Scheduled, parameterized reports distributed via email or portal. Pixel-perfect formatting for printing and regulatory compliance.</p>
+            <p><strong>OLAP Cubes:</strong> Multidimensional data structures enabling fast slice-and-dice analysis. Users could drill down, roll up, and pivot across dimensions.</p>
+            <p><strong>Ad-Hoc Query:</strong> Self-service tools allowing business users to create their own queries without IT involvement.</p>
+            <p><strong>Dashboards:</strong> Visual displays of key performance indicators (KPIs) with drill-down capabilities.</p>
+            
+            <h3>User Personas</h3>
+            <p>Executives consumed high-level dashboards and scorecards. Analysts performed ad-hoc analysis and created reports. Operations staff used operational reports for daily activities.</p>
+        </div>
+
+        <div id="tools" class="tab-content">
+            <h2>Traditional BI Tools</h2>
+            
+            <h3>IBM Cognos</h3>
+            <p>Enterprise BI platform with Report Studio, Query Studio, and Analysis Studio. Strong in enterprise reporting with pixel-perfect output. Integrated with IBM's data warehouse offerings.</p>
+            
+            <h3>SAP BusinessObjects</h3>
+            <p>Comprehensive BI suite including Crystal Reports, Web Intelligence, and Lumira. Universe layer provided semantic abstraction. Widely used in SAP environments.</p>
+            
+            <h3>Microsoft SQL Server Reporting Services (SSRS)</h3>
+            <p>Enterprise reporting platform integrated with SQL Server. Paginated reports with subscriptions and delivery. Analysis Services provided OLAP capabilities.</p>
+            
+            <h3>Oracle BI (OBIEE)</h3>
+            <p>Oracle Business Intelligence Enterprise Edition. Common Semantic Layer for consistent metrics. Strong integration with Oracle databases and applications.</p>
+            
+            <h3>MicroStrategy</h3>
+            <p>High-performance BI platform known for scalability. In-memory analytics and mobile BI capabilities. Enterprise-grade security and governance.</p>
+            
+            <h3>Tableau (Emerging)</h3>
+            <p>Visual analytics platform that disrupted traditional BI in the 2010s. Drag-and-drop interface democratized data analysis. Represented the shift toward self-service BI.</p>
+        </div>
+
+        <div id="code" class="tab-content">
+            <h2>PySpark BI Support Implementation</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+from pyspark.sql.types import *
+from pyspark.sql.window import Window
+
+class BIReportingSupport:
+    """
+    Support BI and Reporting layer with PySpark.
+    Provides data preparation, aggregations, and export capabilities.
+    """
+    
+    def __init__(self, mart_path, report_path):
+        self.spark = SparkSession.builder \
+            .appName("BIReportingSupport") \
+            .getOrCreate()
+        self.mart_path = mart_path
+        self.report_path = report_path
+    
+    # ==========================================
+    # REPORT DATA PREPARATION
+    # ==========================================
+    
+    def prepare_executive_dashboard(self):
+        """
+        Prepare data for executive dashboard.
+        High-level KPIs and trends.
+        """
+        sales_mart = self.spark.read.parquet(f"{self.mart_path}/sales_mart")
+        
+        current_month = sales_mart.filter(
+            (col("year") == year(current_date())) &
+            (col("month") == month(current_date()))
+        )
+        
+        kpis = current_month.agg(
+            sum("sales_amount").alias("mtd_revenue"),
+            sum("gross_profit").alias("mtd_profit"),
+            countDistinct("customer_name").alias("active_customers"),
+            count("sale_id").alias("transaction_count"),
+            avg("sales_amount").alias("avg_order_value")
+        )
+        
+        monthly_trend = sales_mart \
+            .filter(col("year") == year(current_date())) \
+            .groupBy("year", "month", "month_name") \
+            .agg(
+                sum("sales_amount").alias("revenue"),
+                sum("gross_profit").alias("profit")
+            ) \
+            .orderBy("year", "month")
+        
+        regional_performance = current_month \
+            .groupBy("region") \
+            .agg(
+                sum("sales_amount").alias("revenue"),
+                sum("gross_profit").alias("profit"),
+                countDistinct("customer_name").alias("customers")
+            ) \
+            .orderBy(col("revenue").desc())
+        
+        return {
+            "kpis": kpis,
+            "monthly_trend": monthly_trend,
+            "regional_performance": regional_performance
+        }
+    
+    def prepare_sales_report(self, start_date, end_date, 
+                            group_by_cols, filters=None):
+        """
+        Prepare parameterized sales report.
+        Supports flexible grouping and filtering.
+        """
+        sales_mart = self.spark.read.parquet(f"{self.mart_path}/sales_mart")
+        
+        report_df = sales_mart.filter(
+            (col("sale_date") >= start_date) &
+            (col("sale_date") <= end_date)
+        )
+        
+        if filters:
+            for col_name, values in filters.items():
+                if isinstance(values, list):
+                    report_df = report_df.filter(col(col_name).isin(values))
+                else:
+                    report_df = report_df.filter(col(col_name) == values)
+        
+        report_df = report_df.groupBy(group_by_cols).agg(
+            count("sale_id").alias("transactions"),
+            sum("quantity").alias("units_sold"),
+            sum("sales_amount").alias("gross_sales"),
+            sum("discount_amount").alias("discounts"),
+            sum("gross_profit").alias("profit"),
+            (sum("gross_profit") / sum("sales_amount") * 100).alias("margin_pct")
+        )
+        
+        window = Window.orderBy(col("gross_sales").desc())
+        report_df = report_df \
+            .withColumn("rank", row_number().over(window)) \
+            .withColumn("cumulative_sales", 
+                       sum("gross_sales").over(window.rowsBetween(Window.unboundedPreceding, 0)))
+        
+        return report_df
+    
+    # ==========================================
+    # OLAP CUBE SIMULATION
+    # ==========================================
+    
+    def build_olap_cube(self, fact_table, dimensions, measures):
+        """
+        Build OLAP-style aggregations at multiple grain levels.
+        Simulates traditional OLAP cube functionality.
+        """
+        fact_df = self.spark.read.parquet(f"{self.mart_path}/{fact_table}")
+        
+        aggregations = {}
+        
+        for i in range(len(dimensions) + 1):
+            from itertools import combinations
+            for combo in combinations(dimensions, i):
+                if len(combo) == 0:
+                    grain_name = "grand_total"
+                    group_cols = []
+                else:
+                    grain_name = "_".join(combo)
+                    group_cols = list(combo)
+                
+                agg_exprs = [sum(m).alias(f"sum_{m}") for m in measures]
+                agg_exprs += [avg(m).alias(f"avg_{m}") for m in measures]
+                agg_exprs += [count("*").alias("record_count")]
+                
+                if group_cols:
+                    agg_df = fact_df.groupBy(group_cols).agg(*agg_exprs)
+                else:
+                    agg_df = fact_df.agg(*agg_exprs)
+                
+                aggregations[grain_name] = agg_df
+        
+        return aggregations
+    
+    def drill_down(self, cube_aggregations, from_dimension, to_dimension,
+                   filter_value):
+        """
+        Simulate OLAP drill-down operation.
+        Navigate from summary to detail.
+        """
+        parent_key = from_dimension
+        child_key = f"{from_dimension}_{to_dimension}"
+        
+        if child_key in cube_aggregations:
+            detail_df = cube_aggregations[child_key]
+            return detail_df.filter(col(from_dimension) == filter_value)
+        
+        return None
+    
+    # ==========================================
+    # REPORT EXPORT
+    # ==========================================
+    
+    def export_to_csv(self, df, report_name, include_header=True):
+        """
+        Export report to CSV for distribution.
+        Traditional reports often delivered as CSV/Excel.
+        """
+        output_path = f"{self.report_path}/{report_name}"
+        
+        df.coalesce(1).write \
+            .mode("overwrite") \
+            .option("header", str(include_header).lower()) \
+            .csv(output_path)
+        
+        print(f"Exported report to: {output_path}")
+        return output_path
+    
+    def export_to_excel(self, df, report_name, sheet_name="Report"):
+        """
+        Export report to Excel format.
+        Requires pandas for Excel writing.
+        """
+        import pandas as pd
+        
+        pandas_df = df.toPandas()
+        
+        output_path = f"{self.report_path}/{report_name}.xlsx"
+        pandas_df.to_excel(output_path, sheet_name=sheet_name, index=False)
+        
+        print(f"Exported Excel report to: {output_path}")
+        return output_path
+    
+    def generate_scheduled_reports(self, report_configs):
+        """
+        Generate multiple scheduled reports.
+        Simulates enterprise report scheduling.
+        """
+        from datetime import datetime
+        
+        results = []
+        
+        for config in report_configs:
+            report_name = config["name"]
+            report_type = config["type"]
+            
+            print(f"Generating report: {report_name}")
+            
+            if report_type == "sales_summary":
+                df = self.prepare_sales_report(
+                    start_date=config.get("start_date"),
+                    end_date=config.get("end_date"),
+                    group_by_cols=config.get("group_by", ["region"]),
+                    filters=config.get("filters")
+                )
+            elif report_type == "executive_dashboard":
+                data = self.prepare_executive_dashboard()
+                df = data["kpis"]
+            else:
+                continue
+            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_name = f"{report_name}_{timestamp}"
+            
+            if config.get("format", "csv") == "excel":
+                path = self.export_to_excel(df, output_name)
+            else:
+                path = self.export_to_csv(df, output_name)
+            
+            results.append({
+                "report": report_name,
+                "path": path,
+                "records": df.count(),
+                "generated_at": timestamp
+            })
+        
+        return results
+    
+    # ==========================================
+    # AD-HOC QUERY SUPPORT
+    # ==========================================
+    
+    def create_semantic_view(self, view_name, base_table, 
+                            friendly_names, calculated_fields):
+        """
+        Create semantic view for ad-hoc querying.
+        Provides business-friendly column names.
+        """
+        base_df = self.spark.read.parquet(f"{self.mart_path}/{base_table}")
+        
+        for original, friendly in friendly_names.items():
+            if original in base_df.columns:
+                base_df = base_df.withColumnRenamed(original, friendly)
+        
+        for field_name, expression in calculated_fields.items():
+            base_df = base_df.withColumn(field_name, expr(expression))
+        
+        base_df.createOrReplaceTempView(view_name)
+        
+        print(f"Created semantic view: {view_name}")
+        return base_df
+
+
+# Example Usage
+if __name__ == "__main__":
+    bi = BIReportingSupport(
+        mart_path="/data/marts",
+        report_path="/data/reports"
+    )
+    
+    # Prepare executive dashboard
+    dashboard_data = bi.prepare_executive_dashboard()
+    dashboard_data["kpis"].show()
+    
+    # Generate sales report
+    sales_report = bi.prepare_sales_report(
+        start_date="2024-01-01",
+        end_date="2024-12-31",
+        group_by_cols=["region", "category"],
+        filters={"customer_segment": ["Enterprise", "SMB"]}
+    )
+    
+    # Build OLAP cube
+    cube = bi.build_olap_cube(
+        fact_table="sales_mart",
+        dimensions=["year", "region", "category"],
+        measures=["sales_amount", "gross_profit"]
+    )
+    
+    # Generate scheduled reports
+    report_configs = [
+        {
+            "name": "daily_sales_summary",
+            "type": "sales_summary",
+            "start_date": "2024-01-01",
+            "end_date": "2024-01-31",
+            "group_by": ["region", "category"],
+            "format": "csv"
+        },
+        {
+            "name": "executive_kpis",
+            "type": "executive_dashboard",
+            "format": "excel"
+        }
+    ]
+    
+    results = bi.generate_scheduled_reports(report_configs)
+</code></pre>
+        </div>
+
+        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+            <a href="../05_data_marts/index.html" class="nav-button" style="padding: 1rem 2rem; background: var(--bg-secondary); color: var(--text-primary); text-decoration: none; border-radius: 8px;">Previous: Data Marts</a>
+            <a href="../07_traditional_vs_medallion/index.html" class="nav-button" style="padding: 1rem 2rem; background: var(--accent-primary); color: white; text-decoration: none; border-radius: 8px;">Next: Traditional vs Medallion</a>
+        </div>
+    </main>
+
+    <script>
+        // Tab functionality
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab).classList.add('active');
+            });
+        });
+
+        // 3D Visualization - BI Dashboard
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, document.getElementById('visualization').offsetWidth / 400, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(document.getElementById('visualization').offsetWidth, 400);
+        document.getElementById('visualization').appendChild(renderer.domElement);
+
+        // Dashboard screen
+        const screenGeom = new THREE.BoxGeometry(8, 5, 0.2);
+        const screenMat = new THREE.MeshPhongMaterial({ color: 0x1a1a2e });
+        const screen = new THREE.Mesh(screenGeom, screenMat);
+        scene.add(screen);
+
+        // Chart bars
+        const barColors = [0x4caf50, 0x2196f3, 0xff9800, 0x9c27b0];
+        const barHeights = [2, 3, 1.5, 2.5];
+        
+        for (let i = 0; i < 4; i++) {
+            const barGeom = new THREE.BoxGeometry(0.8, barHeights[i], 0.3);
+            const barMat = new THREE.MeshPhongMaterial({ color: barColors[i] });
+            const bar = new THREE.Mesh(barGeom, barMat);
+            bar.position.set(-2.5 + i * 1.2, -1.5 + barHeights[i] / 2, 0.2);
+            scene.add(bar);
+        }
+
+        // Pie chart (simplified as circle segments)
+        const pieGeom = new THREE.CircleGeometry(1, 32);
+        const pieMat = new THREE.MeshPhongMaterial({ color: 0x2196f3 });
+        const pie = new THREE.Mesh(pieGeom, pieMat);
+        pie.position.set(2.5, 0.5, 0.2);
+        scene.add(pie);
+
+        // KPI boxes
+        for (let i = 0; i < 3; i++) {
+            const kpiGeom = new THREE.BoxGeometry(1.5, 0.8, 0.1);
+            const kpiMat = new THREE.MeshPhongMaterial({ color: 0x795548 });
+            const kpi = new THREE.Mesh(kpiGeom, kpiMat);
+            kpi.position.set(-2.5 + i * 2, 1.8, 0.2);
+            scene.add(kpi);
+        }
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 5, 5);
+        scene.add(directionalLight);
+
+        camera.position.set(0, 0, 8);
+        camera.lookAt(0, 0, 0);
+
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            const width = document.getElementById('visualization').offsetWidth;
+            renderer.setSize(width, 400);
+            camera.aspect = width / 400;
+            camera.updateProjectionMatrix();
+        });
+    </script>
+</body>
+</html>

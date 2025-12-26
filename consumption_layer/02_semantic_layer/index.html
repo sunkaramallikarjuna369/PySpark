@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Semantic Layer & Metrics Store</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand"><a href="../../index.html">PySpark Learning Hub</a></div>
+        <div class="nav-links">
+            <a href="../01_introduction/index.html">Prev: Introduction</a>
+            <a href="../03_data_marts/index.html">Next: Data Marts</a>
+        </div>
+    </nav>
+    <main class="topic-container">
+        <header class="topic-header">
+            <div class="category-icon consumption">CL</div>
+            <h1>Semantic Layer & Metrics Store</h1>
+            <p class="topic-description">Define metrics and dimensions once, consume them everywhere with consistent business logic.</p>
+        </header>
+        <div class="content-tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="metrics">Metrics Definition</button>
+            <button class="tab-btn" data-tab="code">PySpark Code</button>
+        </div>
+        <div class="visualization-container"><div id="viz-container"></div></div>
+        <div class="tab-content active" id="overview">
+            <h2>What is a Semantic Layer?</h2>
+            <p>A semantic layer provides a unified, business-friendly view of data by abstracting complex data structures into meaningful metrics and dimensions. It ensures consistency across all consumers.</p>
+            <h3>Benefits</h3>
+            <ul>
+                <li><strong>Single Source of Truth:</strong> One definition for each metric</li>
+                <li><strong>Self-Service:</strong> Business users can explore without SQL knowledge</li>
+                <li><strong>Governance:</strong> Centralized control over metric definitions</li>
+                <li><strong>Consistency:</strong> Same calculations everywhere</li>
+            </ul>
+        </div>
+        <div class="tab-content" id="metrics">
+            <h2>Metrics Store Concepts</h2>
+            <h3>Metric Types</h3>
+            <ul>
+                <li><strong>Simple Metrics:</strong> Direct aggregations (SUM, COUNT, AVG)</li>
+                <li><strong>Derived Metrics:</strong> Calculations using other metrics</li>
+                <li><strong>Cumulative Metrics:</strong> Running totals over time</li>
+                <li><strong>Ratio Metrics:</strong> Metric A / Metric B</li>
+            </ul>
+        </div>
+        <div class="tab-content" id="code">
+            <h2>PySpark Semantic Layer Implementation</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, sum as spark_sum, avg, count, countDistinct, when
+from dataclasses import dataclass
+from typing import List, Dict, Callable
+
+spark = SparkSession.builder.appName("SemanticLayer").getOrCreate()
+
+@dataclass
+class Metric:
+    name: str
+    description: str
+    expression: str
+    dimensions: List[str]
+    filters: Dict[str, str] = None
+
+class SemanticLayer:
+    """Semantic layer for consistent metric definitions."""
+    
+    def __init__(self, base_table_path: str):
+        self.base_df = spark.read.format("delta").load(base_table_path)
+        self.metrics = {}
+        self.dimensions = {}
+    
+    def register_metric(self, metric: Metric):
+        """Register a metric definition."""
+        self.metrics[metric.name] = metric
+        print(f"Registered metric: {metric.name}")
+    
+    def register_dimension(self, name: str, expression: str):
+        """Register a dimension."""
+        self.dimensions[name] = expression
+    
+    def query(self, metric_names: List[str], dimensions: List[str] = None, filters: Dict = None):
+        """Query metrics with optional dimensions and filters."""
+        df = self.base_df
+        
+        if filters:
+            for col_name, value in filters.items():
+                df = df.filter(col(col_name) == value)
+        
+        agg_exprs = []
+        for name in metric_names:
+            metric = self.metrics[name]
+            agg_exprs.append(eval(metric.expression).alias(name))
+        
+        if dimensions:
+            result = df.groupBy(dimensions).agg(*agg_exprs)
+        else:
+            result = df.agg(*agg_exprs)
+        
+        return result
+
+# Define metrics
+semantic = SemanticLayer("/lakehouse/gold/transactions")
+
+semantic.register_metric(Metric(
+    name="total_revenue",
+    description="Sum of all transaction amounts",
+    expression="spark_sum(col('total_amount'))",
+    dimensions=["store_id", "category", "date"]
+))
+
+semantic.register_metric(Metric(
+    name="avg_order_value",
+    description="Average transaction amount",
+    expression="avg(col('total_amount'))",
+    dimensions=["store_id", "category"]
+))
+
+semantic.register_metric(Metric(
+    name="unique_customers",
+    description="Count of distinct customers",
+    expression="countDistinct(col('customer_id'))",
+    dimensions=["store_id", "date"]
+))
+
+# Query metrics
+result = semantic.query(
+    metric_names=["total_revenue", "avg_order_value"],
+    dimensions=["store_id"],
+    filters={"category": "Electronics"}
+)
+result.show()</code></pre>
+        </div>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script>
+        const container = document.getElementById('viz-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+        const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        container.appendChild(renderer.domElement);
+        
+        // Central semantic layer hub
+        const hubGeo = new THREE.SphereGeometry(1, 32, 32);
+        const hubMat = new THREE.MeshPhongMaterial({ color: 0x00bcd4, shininess: 100 });
+        const hub = new THREE.Mesh(hubGeo, hubMat);
+        scene.add(hub);
+        
+        // Metric nodes around the hub
+        const metricColors = [0xffd700, 0x4caf50, 0xff5722, 0x9c27b0];
+        const metrics = [];
+        for (let i = 0; i < 4; i++) {
+            const geo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
+            const mat = new THREE.MeshPhongMaterial({ color: metricColors[i] });
+            const metric = new THREE.Mesh(geo, mat);
+            const angle = (i / 4) * Math.PI * 2;
+            metric.position.set(Math.cos(angle) * 2.5, 0, Math.sin(angle) * 2.5);
+            scene.add(metric);
+            metrics.push(metric);
+        }
+        
+        scene.add(new THREE.AmbientLight(0x404040, 0.5));
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(5, 5, 5);
+        scene.add(light);
+        
+        camera.position.set(4, 3, 4);
+        camera.lookAt(0, 0, 0);
+        
+        let time = 0;
+        function animate() {
+            requestAnimationFrame(animate);
+            time += 0.02;
+            hub.rotation.y += 0.01;
+            metrics.forEach((m, i) => {
+                const angle = time + (i / 4) * Math.PI * 2;
+                m.position.x = Math.cos(angle) * 2.5;
+                m.position.z = Math.sin(angle) * 2.5;
+                m.rotation.y += 0.02;
+            });
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>

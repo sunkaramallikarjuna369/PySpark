@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reverse ETL</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand"><a href="../../index.html">PySpark Learning Hub</a></div>
+        <div class="nav-links">
+            <a href="../07_serving_performance/index.html">Prev: Serving Performance</a>
+            <a href="../09_feature_store/index.html">Next: Feature Store</a>
+        </div>
+    </nav>
+    <main class="topic-container">
+        <header class="topic-header">
+            <div class="category-icon consumption">CL</div>
+            <h1>Reverse ETL</h1>
+            <p class="topic-description">Sync data from your lakehouse back to operational systems and SaaS tools.</p>
+        </header>
+        <div class="content-tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="code">PySpark Code</button>
+        </div>
+        <div class="visualization-container"><div id="viz-container"></div></div>
+        <div class="tab-content active" id="overview">
+            <h2>What is Reverse ETL?</h2>
+            <p>Reverse ETL syncs data from your data warehouse/lakehouse back to operational tools like CRMs, marketing platforms, and customer support systems.</p>
+            <h3>Common Use Cases</h3>
+            <ul>
+                <li><strong>CRM Enrichment:</strong> Push customer scores to Salesforce</li>
+                <li><strong>Marketing:</strong> Sync segments to ad platforms</li>
+                <li><strong>Support:</strong> Send customer health to Zendesk</li>
+                <li><strong>Product:</strong> Push recommendations to apps</li>
+            </ul>
+        </div>
+        <div class="tab-content" id="code">
+            <h2>Reverse ETL with PySpark</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, to_json, struct, current_timestamp
+import requests
+import json
+
+spark = SparkSession.builder.appName("ReverseETL").getOrCreate()
+
+class ReverseETLPipeline:
+    """Sync data from lakehouse to operational systems."""
+    
+    def __init__(self, source_path: str):
+        self.source_path = source_path
+        self.sync_log = []
+    
+    def prepare_payload(self, df, id_column: str, fields: list):
+        """Prepare data for sync."""
+        return df.select(
+            col(id_column).alias("id"),
+            to_json(struct(*fields)).alias("payload")
+        )
+    
+    def sync_to_api(self, df, endpoint: str, batch_size: int = 100):
+        """Sync data to REST API endpoint."""
+        records = df.collect()
+        
+        for i in range(0, len(records), batch_size):
+            batch = records[i:i + batch_size]
+            payload = [{"id": r.id, "data": json.loads(r.payload)} for r in batch]
+            
+            # In production, make actual API call
+            # response = requests.post(endpoint, json=payload)
+            print(f"Synced batch {i//batch_size + 1}: {len(batch)} records to {endpoint}")
+        
+        self.sync_log.append({
+            "endpoint": endpoint,
+            "records": len(records),
+            "timestamp": str(current_timestamp())
+        })
+    
+    def sync_customer_scores_to_crm(self):
+        """Sync customer scores to CRM."""
+        customers = spark.read.format("delta").load(f"{self.source_path}/customer_360")
+        
+        crm_payload = customers.select(
+            "customer_id",
+            "customer_tier",
+            "lifetime_value",
+            "churn_risk",
+            "last_purchase_date"
+        )
+        
+        prepared = self.prepare_payload(
+            crm_payload, 
+            "customer_id",
+            ["customer_tier", "lifetime_value", "churn_risk"]
+        )
+        
+        self.sync_to_api(prepared, "https://api.crm.com/customers/update")
+        return prepared
+    
+    def sync_segments_to_marketing(self):
+        """Sync customer segments to marketing platform."""
+        customers = spark.read.format("delta").load(f"{self.source_path}/customer_360")
+        
+        high_value = customers.filter(col("customer_tier").isin("GOLD", "PLATINUM"))
+        
+        segment_payload = high_value.select(
+            "customer_id",
+            "email",
+            "customer_tier",
+            "lifetime_value"
+        )
+        
+        prepared = self.prepare_payload(
+            segment_payload,
+            "customer_id", 
+            ["email", "customer_tier", "lifetime_value"]
+        )
+        
+        self.sync_to_api(prepared, "https://api.marketing.com/audiences/sync")
+        return prepared
+
+# Run reverse ETL
+pipeline = ReverseETLPipeline("/lakehouse/gold")
+pipeline.sync_customer_scores_to_crm()
+pipeline.sync_segments_to_marketing()
+
+print("Sync log:", pipeline.sync_log)</code></pre>
+        </div>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script>
+        const container = document.getElementById('viz-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+        const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        container.appendChild(renderer.domElement);
+        
+        // Lakehouse (source)
+        const lakeGeo = new THREE.CylinderGeometry(1, 1, 1.5, 32);
+        const lakeMat = new THREE.MeshPhongMaterial({ color: 0xffd700 });
+        const lake = new THREE.Mesh(lakeGeo, lakeMat);
+        lake.position.set(-3, 0, 0);
+        scene.add(lake);
+        
+        // Destination systems
+        const destColors = [0x4caf50, 0x2196f3, 0xff5722];
+        const dests = [];
+        for (let i = 0; i < 3; i++) {
+            const geo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+            const mat = new THREE.MeshPhongMaterial({ color: destColors[i] });
+            const dest = new THREE.Mesh(geo, mat);
+            dest.position.set(3, 1.5 - i * 1.5, 0);
+            scene.add(dest);
+            dests.push(dest);
+        }
+        
+        // Data flow arrows (reverse direction)
+        const arrowMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        const arrows = [];
+        for (let i = 0; i < 3; i++) {
+            const arrowGeo = new THREE.ConeGeometry(0.15, 0.4, 8);
+            const arrow = new THREE.Mesh(arrowGeo, arrowMat);
+            arrow.rotation.z = -Math.PI / 2;
+            arrow.position.set(0, 1.5 - i * 1.5, 0);
+            scene.add(arrow);
+            arrows.push(arrow);
+        }
+        
+        scene.add(new THREE.AmbientLight(0x404040, 0.5));
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(5, 5, 5);
+        scene.add(light);
+        
+        camera.position.set(0, 2, 7);
+        camera.lookAt(0, 0, 0);
+        
+        let time = 0;
+        function animate() {
+            requestAnimationFrame(animate);
+            time += 0.03;
+            lake.rotation.y += 0.01;
+            arrows.forEach((a, i) => {
+                a.position.x = -2 + Math.sin(time + i) * 2 + 2;
+            });
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>

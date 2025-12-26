@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CDC/SCD Implementation - Capstone Project</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand"><a href="../../index.html">PySpark Learning Hub</a></div>
+        <div class="nav-links">
+            <a href="../02_streaming_pipeline/index.html">Prev: Streaming Pipeline</a>
+        </div>
+    </nav>
+    <main class="topic-container">
+        <header class="topic-header">
+            <div class="category-icon projects">CP</div>
+            <h1>Capstone Project 3: CDC/SCD Implementation</h1>
+            <p class="topic-description">Implement Change Data Capture (CDC) and Slowly Changing Dimensions (SCD Type 1, 2, 3) patterns using PySpark and Delta Lake.</p>
+        </header>
+        <div class="content-tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="cdc">CDC Pattern</button>
+            <button class="tab-btn" data-tab="scd1">SCD Type 1</button>
+            <button class="tab-btn" data-tab="scd2">SCD Type 2</button>
+        </div>
+        <div class="visualization-container"><div id="viz-container"></div></div>
+        <div class="tab-content active" id="overview">
+            <h2>Project Overview</h2>
+            <p>This capstone project demonstrates implementing enterprise-grade Change Data Capture and Slowly Changing Dimension patterns for data warehouse management.</p>
+            <h3>CDC Patterns</h3>
+            <ul>
+                <li>Log-based CDC using Delta Lake Change Data Feed</li>
+                <li>Timestamp-based incremental extraction</li>
+                <li>Hash-based change detection</li>
+            </ul>
+            <h3>SCD Types</h3>
+            <ul>
+                <li>SCD Type 1: Overwrite (no history)</li>
+                <li>SCD Type 2: Add new row (full history)</li>
+                <li>SCD Type 3: Add new column (limited history)</li>
+            </ul>
+        </div>
+        <div class="tab-content" id="cdc">
+            <h2>Change Data Capture Implementation</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, current_timestamp, sha2, concat_ws, when, lit
+from delta.tables import DeltaTable
+
+spark = SparkSession.builder \
+    .appName("CDC_Implementation") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.databricks.delta.properties.defaults.enableChangeDataFeed", "true") \
+    .getOrCreate()
+
+class CDCProcessor:
+    def __init__(self, source_path, target_path):
+        self.source_path = source_path
+        self.target_path = target_path
+    
+    def extract_changes_by_timestamp(self, last_processed_ts):
+        """Extract changes since last processed timestamp."""
+        source_df = spark.read.format("delta").load(self.source_path)
+        changes = source_df.filter(col("updated_at") > last_processed_ts)
+        return changes
+    
+    def extract_changes_by_hash(self, key_columns, value_columns):
+        """Detect changes using hash comparison."""
+        source_df = spark.read.format("delta").load(self.source_path)
+        target_df = spark.read.format("delta").load(self.target_path)
+        
+        source_with_hash = source_df.withColumn(
+            "row_hash", sha2(concat_ws("||", *value_columns), 256)
+        )
+        target_with_hash = target_df.withColumn(
+            "row_hash", sha2(concat_ws("||", *value_columns), 256)
+        )
+        
+        changes = source_with_hash.join(
+            target_with_hash.select(key_columns + ["row_hash"]),
+            key_columns,
+            "left_anti"
+        )
+        return changes
+    
+    def read_cdf_changes(self, start_version):
+        """Read changes using Delta Lake Change Data Feed."""
+        changes = spark.read.format("delta") \
+            .option("readChangeFeed", "true") \
+            .option("startingVersion", start_version) \
+            .load(self.source_path)
+        
+        inserts = changes.filter(col("_change_type") == "insert")
+        updates = changes.filter(col("_change_type").isin("update_postimage"))
+        deletes = changes.filter(col("_change_type") == "delete")
+        
+        return {"inserts": inserts, "updates": updates, "deletes": deletes}
+
+cdc = CDCProcessor("/data/source/customers", "/data/target/customers")
+changes = cdc.read_cdf_changes(start_version=5)</code></pre>
+        </div>
+        <div class="tab-content" id="scd1">
+            <h2>SCD Type 1 - Overwrite</h2>
+            <pre><code class="language-python">from delta.tables import DeltaTable
+from pyspark.sql.functions import col, current_timestamp
+
+class SCDType1:
+    """SCD Type 1: Overwrite existing records with new values."""
+    
+    def __init__(self, target_path, key_columns):
+        self.target_path = target_path
+        self.key_columns = key_columns
+    
+    def apply_changes(self, source_df):
+        """Apply SCD Type 1 changes using Delta Lake MERGE."""
+        target_table = DeltaTable.forPath(spark, self.target_path)
+        
+        merge_condition = " AND ".join([
+            f"target.{c} = source.{c}" for c in self.key_columns
+        ])
+        
+        update_columns = [c for c in source_df.columns if c not in self.key_columns]
+        update_set = {c: f"source.{c}" for c in update_columns}
+        update_set["updated_at"] = "current_timestamp()"
+        
+        insert_values = {c: f"source.{c}" for c in source_df.columns}
+        insert_values["created_at"] = "current_timestamp()"
+        insert_values["updated_at"] = "current_timestamp()"
+        
+        target_table.alias("target").merge(
+            source_df.alias("source"),
+            merge_condition
+        ).whenMatchedUpdate(
+            set=update_set
+        ).whenNotMatchedInsert(
+            values=insert_values
+        ).execute()
+        
+        print(f"SCD Type 1 merge completed for {self.target_path}")
+
+scd1 = SCDType1("/warehouse/dim_customer", ["customer_id"])
+scd1.apply_changes(new_customer_data)</code></pre>
+        </div>
+        <div class="tab-content" id="scd2">
+            <h2>SCD Type 2 - Historical Tracking</h2>
+            <pre><code class="language-python">from delta.tables import DeltaTable
+from pyspark.sql.functions import col, current_timestamp, lit, sha2, concat_ws
+
+class SCDType2:
+    """SCD Type 2: Maintain full history with effective dates."""
+    
+    def __init__(self, target_path, key_columns, tracked_columns):
+        self.target_path = target_path
+        self.key_columns = key_columns
+        self.tracked_columns = tracked_columns
+    
+    def apply_changes(self, source_df):
+        """Apply SCD Type 2 changes with history tracking."""
+        target_table = DeltaTable.forPath(spark, self.target_path)
+        target_df = target_table.toDF()
+        
+        source_with_hash = source_df.withColumn(
+            "row_hash", sha2(concat_ws("||", *self.tracked_columns), 256)
+        )
+        
+        active_target = target_df.filter(col("is_current") == True)
+        
+        changed_records = source_with_hash.join(
+            active_target.select(self.key_columns + ["row_hash"]),
+            self.key_columns,
+            "inner"
+        ).filter(source_with_hash["row_hash"] != active_target["row_hash"])
+        
+        new_records = source_with_hash.join(
+            active_target.select(self.key_columns),
+            self.key_columns,
+            "left_anti"
+        )
+        
+        merge_condition = " AND ".join([
+            f"target.{c} = updates.{c}" for c in self.key_columns
+        ])
+        
+        target_table.alias("target").merge(
+            changed_records.select(self.key_columns).alias("updates"),
+            f"{merge_condition} AND target.is_current = true"
+        ).whenMatchedUpdate(
+            set={
+                "is_current": "false",
+                "effective_end_date": "current_timestamp()",
+                "updated_at": "current_timestamp()"
+            }
+        ).execute()
+        
+        new_versions = changed_records.select(source_df.columns) \
+            .withColumn("is_current", lit(True)) \
+            .withColumn("effective_start_date", current_timestamp()) \
+            .withColumn("effective_end_date", lit(None).cast("timestamp"))
+        
+        new_inserts = new_records.select(source_df.columns) \
+            .withColumn("is_current", lit(True)) \
+            .withColumn("effective_start_date", current_timestamp()) \
+            .withColumn("effective_end_date", lit(None).cast("timestamp"))
+        
+        all_new = new_versions.union(new_inserts)
+        all_new.write.format("delta").mode("append").save(self.target_path)
+        
+        print(f"SCD Type 2 completed")
+
+scd2 = SCDType2(
+    "/warehouse/dim_customer_history",
+    key_columns=["customer_id"],
+    tracked_columns=["name", "email", "address", "segment"]
+)
+scd2.apply_changes(new_customer_data)</code></pre>
+        </div>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script>
+        const container = document.getElementById('viz-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+        const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        container.appendChild(renderer.domElement);
+        
+        const tableGeo = new THREE.BoxGeometry(3, 0.3, 2);
+        const tableMat = new THREE.MeshPhongMaterial({ color: 0x4dabf7 });
+        const table = new THREE.Mesh(tableGeo, tableMat);
+        table.position.set(0, 0, 0);
+        scene.add(table);
+        
+        const rows = [];
+        for (let i = 0; i < 4; i++) {
+            const rowGeo = new THREE.BoxGeometry(2.5, 0.15, 0.3);
+            const rowMat = new THREE.MeshPhongMaterial({ 
+                color: i === 3 ? 0x51cf66 : 0x868e96,
+                transparent: true,
+                opacity: i === 3 ? 1 : 0.6
+            });
+            const row = new THREE.Mesh(rowGeo, rowMat);
+            row.position.set(0, 0.3 + i * 0.2, 0);
+            scene.add(row);
+            rows.push(row);
+        }
+        
+        scene.add(new THREE.AmbientLight(0x404040, 0.5));
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(5, 5, 5);
+        scene.add(light);
+        
+        camera.position.set(4, 3, 4);
+        camera.lookAt(0, 0.5, 0);
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            table.rotation.y += 0.005;
+            rows.forEach(r => r.rotation.y += 0.005);
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>

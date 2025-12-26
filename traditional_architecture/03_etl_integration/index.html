@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traditional Architecture - ETL/Integration Layer</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <div class="logo">
+                <a href="../../index.html" style="text-decoration: none; display: flex; align-items: center; gap: 0.5rem;">
+                    <svg class="logo-icon" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="40" height="40" rx="8" fill="#795548"/>
+                        <path d="M10 20h8l4-8 4 16 4-8h8" stroke="white" stroke-width="2" fill="none"/>
+                    </svg>
+                    <span>ETL/Integration</span>
+                </a>
+            </div>
+            <nav class="nav">
+                <a href="../02_source_systems/index.html" class="nav-link">Previous</a>
+                <a href="../../index.html" class="nav-link">Home</a>
+                <a href="../04_data_warehouse/index.html" class="nav-link">Next</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container" style="padding: 2rem;">
+        <h1>ETL/Integration Layer</h1>
+        
+        <div id="visualization" style="width: 100%; height: 400px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 12px; margin: 2rem 0;"></div>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="tools">ETL Tools</button>
+            <button class="tab-btn" data-tab="patterns">Patterns</button>
+            <button class="tab-btn" data-tab="code">PySpark Code</button>
+        </div>
+
+        <div id="overview" class="tab-content active">
+            <h2>The ETL/Integration Layer</h2>
+            <p>The ETL (Extract, Transform, Load) layer was the heart of traditional data warehouse architecture. This layer was responsible for moving data from source systems, applying business rules and transformations, and loading it into the enterprise data warehouse.</p>
+            
+            <h3>Key Responsibilities</h3>
+            <p><strong>Data Extraction:</strong> Pull data from diverse source systems during batch windows (typically overnight) with minimal impact on operational systems.</p>
+            <p><strong>Data Transformation:</strong> Apply business rules, data cleansing, standardization, deduplication, and conforming to enterprise data models.</p>
+            <p><strong>Data Loading:</strong> Load transformed data into the enterprise data warehouse, managing slowly changing dimensions and fact table updates.</p>
+            
+            <h3>Batch Processing Model</h3>
+            <p>Traditional ETL was predominantly batch-oriented. Nightly batch windows of 4-8 hours were common. Data latency of T+1 (yesterday's data available today) was the norm. Real-time was rare and expensive.</p>
+        </div>
+
+        <div id="tools" class="tab-content">
+            <h2>Traditional ETL Tools</h2>
+            
+            <h3>Informatica PowerCenter</h3>
+            <p>The market leader in enterprise ETL. Known for its graphical mapping designer, robust metadata management, and enterprise scalability. Used by most Fortune 500 companies.</p>
+            
+            <h3>IBM DataStage</h3>
+            <p>Part of IBM's Information Server suite. Strong in mainframe integration and parallel processing. Popular in IBM-centric enterprises.</p>
+            
+            <h3>Microsoft SSIS</h3>
+            <p>SQL Server Integration Services. Tightly integrated with SQL Server. Popular for Microsoft-based data warehouses. Control flow and data flow paradigm.</p>
+            
+            <h3>Oracle Data Integrator (ODI)</h3>
+            <p>Oracle's ETL tool with ELT capabilities. Knowledge modules for different databases. Strong Oracle ecosystem integration.</p>
+            
+            <h3>Talend</h3>
+            <p>Open-source ETL tool that gained popularity in the 2010s. Java-based code generation. Both open-source and enterprise editions.</p>
+            
+            <h3>Ab Initio</h3>
+            <p>High-performance parallel processing ETL. Known for handling massive data volumes. Complex licensing and steep learning curve.</p>
+        </div>
+
+        <div id="patterns" class="tab-content">
+            <h2>Common ETL Patterns</h2>
+            
+            <h3>Full Load vs Incremental Load</h3>
+            <p>Full loads extracted entire tables (simple but slow). Incremental loads used timestamps or change flags to extract only changed records (complex but efficient).</p>
+            
+            <h3>Staging Area Pattern</h3>
+            <p>Data landed in staging tables first, then transformed and loaded to target. Staging provided restart capability and audit trail.</p>
+            
+            <h3>Lookup Pattern</h3>
+            <p>Enrich incoming data by looking up reference data. Used for code translations, surrogate key lookups, and data enrichment.</p>
+            
+            <h3>Slowly Changing Dimensions</h3>
+            <p>Type 1 (overwrite), Type 2 (history tracking), Type 3 (previous value column). SCD Type 2 was most common for maintaining history.</p>
+            
+            <h3>Error Handling</h3>
+            <p>Reject files for bad records, error tables for tracking, and restart/recovery mechanisms for failed jobs.</p>
+        </div>
+
+        <div id="code" class="tab-content">
+            <h2>PySpark ETL Implementation</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+from pyspark.sql.types import *
+from pyspark.sql.window import Window
+from datetime import datetime
+
+class TraditionalETLProcessor:
+    """
+    Implements traditional ETL patterns using PySpark.
+    Simulates enterprise ETL tool functionality.
+    """
+    
+    def __init__(self, staging_path, edw_path):
+        self.spark = SparkSession.builder \
+            .appName("TraditionalETL") \
+            .getOrCreate()
+        self.staging_path = staging_path
+        self.edw_path = edw_path
+        self.batch_id = datetime.now().strftime("%Y%m%d%H%M%S")
+        self.error_records = []
+    
+    # ==========================================
+    # TRANSFORMATION PATTERNS
+    # ==========================================
+    
+    def apply_data_cleansing(self, df, cleansing_rules):
+        """
+        Apply data cleansing rules - core ETL transformation.
+        """
+        result_df = df
+        
+        for rule in cleansing_rules:
+            rule_type = rule["type"]
+            column = rule["column"]
+            
+            if rule_type == "trim":
+                result_df = result_df.withColumn(column, trim(col(column)))
+            
+            elif rule_type == "uppercase":
+                result_df = result_df.withColumn(column, upper(col(column)))
+            
+            elif rule_type == "lowercase":
+                result_df = result_df.withColumn(column, lower(col(column)))
+            
+            elif rule_type == "null_to_default":
+                default_value = rule["default"]
+                result_df = result_df.withColumn(
+                    column,
+                    when(col(column).isNull(), lit(default_value))
+                    .otherwise(col(column))
+                )
+            
+            elif rule_type == "date_format":
+                input_format = rule["input_format"]
+                result_df = result_df.withColumn(
+                    column,
+                    to_date(col(column), input_format)
+                )
+            
+            elif rule_type == "remove_special_chars":
+                result_df = result_df.withColumn(
+                    column,
+                    regexp_replace(col(column), "[^a-zA-Z0-9 ]", "")
+                )
+        
+        return result_df
+    
+    def apply_standardization(self, df, standardization_map):
+        """
+        Standardize values using lookup mappings.
+        Common for code translations (e.g., state codes).
+        """
+        for column, mapping in standardization_map.items():
+            mapping_expr = create_map([lit(x) for item in mapping.items() for x in item])
+            result_df = df.withColumn(
+                column,
+                coalesce(mapping_expr[col(column)], col(column))
+            )
+        return result_df
+    
+    def apply_deduplication(self, df, key_columns, order_column, keep="latest"):
+        """
+        Remove duplicate records - essential ETL step.
+        """
+        window_spec = Window.partitionBy(key_columns)
+        
+        if keep == "latest":
+            window_spec = window_spec.orderBy(col(order_column).desc())
+        else:
+            window_spec = window_spec.orderBy(col(order_column).asc())
+        
+        deduped_df = df \
+            .withColumn("_row_num", row_number().over(window_spec)) \
+            .filter(col("_row_num") == 1) \
+            .drop("_row_num")
+        
+        original_count = df.count()
+        deduped_count = deduped_df.count()
+        print(f"Deduplication: {original_count} -> {deduped_count} records")
+        
+        return deduped_df
+    
+    # ==========================================
+    # LOOKUP PATTERN
+    # ==========================================
+    
+    def apply_lookup(self, source_df, lookup_df, source_key, lookup_key, 
+                     lookup_columns, lookup_type="left"):
+        """
+        Enrich source data with lookup table values.
+        Core pattern in traditional ETL.
+        """
+        lookup_df_renamed = lookup_df.select(
+            col(lookup_key),
+            *[col(c).alias(f"lkp_{c}") for c in lookup_columns]
+        )
+        
+        result_df = source_df.join(
+            lookup_df_renamed,
+            source_df[source_key] == lookup_df_renamed[lookup_key],
+            lookup_type
+        ).drop(lookup_df_renamed[lookup_key])
+        
+        return result_df
+    
+    def apply_surrogate_key_lookup(self, df, dim_table_path, 
+                                   natural_key_cols, surrogate_key_col):
+        """
+        Look up surrogate keys from dimension tables.
+        Essential for star schema fact table loading.
+        """
+        dim_df = self.spark.read.parquet(dim_table_path)
+        
+        current_dim = dim_df.filter(col("_is_current") == True)
+        
+        result_df = df.join(
+            current_dim.select(natural_key_cols + [surrogate_key_col]),
+            natural_key_cols,
+            "left"
+        )
+        
+        return result_df
+    
+    # ==========================================
+    # SCD TYPE 2 IMPLEMENTATION
+    # ==========================================
+    
+    def apply_scd_type2(self, incoming_df, target_table_path,
+                        key_columns, tracked_columns):
+        """
+        Implement Slowly Changing Dimension Type 2.
+        Most common SCD pattern in traditional DW.
+        """
+        try:
+            existing_df = self.spark.read.parquet(target_table_path)
+            current_records = existing_df.filter(col("_is_current") == True)
+            historical_records = existing_df.filter(col("_is_current") == False)
+        except:
+            result_df = incoming_df \
+                .withColumn("_surrogate_key", monotonically_increasing_id()) \
+                .withColumn("_effective_date", current_date()) \
+                .withColumn("_end_date", lit(None).cast("date")) \
+                .withColumn("_is_current", lit(True)) \
+                .withColumn("_version", lit(1))
+            
+            result_df.write.mode("overwrite").parquet(target_table_path)
+            return result_df
+        
+        join_condition = [current_records[k] == incoming_df[k] for k in key_columns]
+        
+        change_condition = " OR ".join([
+            f"curr.{c} != inc.{c} OR (curr.{c} IS NULL AND inc.{c} IS NOT NULL) OR (curr.{c} IS NOT NULL AND inc.{c} IS NULL)"
+            for c in tracked_columns
+        ])
+        
+        changed_records = current_records.alias("curr").join(
+            incoming_df.alias("inc"),
+            join_condition,
+            "inner"
+        ).filter(change_condition)
+        
+        if changed_records.count() > 0:
+            expired_keys = changed_records.select(
+                *[col(f"curr.{k}").alias(k) for k in key_columns]
+            )
+            
+            expired_records = current_records.join(
+                expired_keys, key_columns, "inner"
+            ).withColumn("_end_date", current_date()) \
+             .withColumn("_is_current", lit(False))
+            
+            max_version = current_records.agg(max("_version")).collect()[0][0] or 0
+            
+            new_versions = incoming_df.join(
+                expired_keys, key_columns, "inner"
+            ).withColumn("_surrogate_key", monotonically_increasing_id() + 1000000) \
+             .withColumn("_effective_date", current_date()) \
+             .withColumn("_end_date", lit(None).cast("date")) \
+             .withColumn("_is_current", lit(True)) \
+             .withColumn("_version", lit(max_version + 1))
+            
+            unchanged_current = current_records.join(
+                expired_keys, key_columns, "left_anti"
+            )
+            
+            result_df = historical_records \
+                .union(expired_records) \
+                .union(unchanged_current) \
+                .union(new_versions)
+        else:
+            new_records = incoming_df.join(
+                current_records.select(key_columns), key_columns, "left_anti"
+            ).withColumn("_surrogate_key", monotonically_increasing_id() + 2000000) \
+             .withColumn("_effective_date", current_date()) \
+             .withColumn("_end_date", lit(None).cast("date")) \
+             .withColumn("_is_current", lit(True)) \
+             .withColumn("_version", lit(1))
+            
+            result_df = existing_df.union(new_records)
+        
+        result_df.write.mode("overwrite").parquet(target_table_path)
+        
+        return result_df
+    
+    # ==========================================
+    # ERROR HANDLING
+    # ==========================================
+    
+    def apply_data_validation(self, df, validation_rules):
+        """
+        Validate data and separate good/bad records.
+        Traditional ETL pattern for error handling.
+        """
+        valid_df = df
+        error_df = None
+        
+        for rule in validation_rules:
+            rule_name = rule["name"]
+            condition = rule["condition"]
+            
+            invalid_records = valid_df.filter(~expr(condition))
+            
+            if invalid_records.count() > 0:
+                invalid_records = invalid_records.withColumn(
+                    "_error_rule", lit(rule_name)
+                )
+                
+                if error_df is None:
+                    error_df = invalid_records
+                else:
+                    error_df = error_df.union(invalid_records)
+            
+            valid_df = valid_df.filter(expr(condition))
+        
+        return valid_df, error_df
+    
+    def write_reject_file(self, error_df, reject_path):
+        """Write rejected records to error file."""
+        if error_df is not None and error_df.count() > 0:
+            error_df.write \
+                .mode("append") \
+                .option("header", "true") \
+                .csv(f"{reject_path}/rejects_{self.batch_id}")
+            print(f"Wrote {error_df.count()} records to reject file")
+
+
+# Example Usage
+if __name__ == "__main__":
+    etl = TraditionalETLProcessor(
+        staging_path="/data/staging",
+        edw_path="/data/edw"
+    )
+    
+    # Load staged data
+    staged_df = spark.read.parquet("/data/staging/stg_customers")
+    
+    # Apply cleansing
+    cleansing_rules = [
+        {"type": "trim", "column": "customer_name"},
+        {"type": "uppercase", "column": "state_code"},
+        {"type": "null_to_default", "column": "phone", "default": "UNKNOWN"},
+        {"type": "date_format", "column": "birth_date", "input_format": "MM/dd/yyyy"}
+    ]
+    cleansed_df = etl.apply_data_cleansing(staged_df, cleansing_rules)
+    
+    # Apply validation
+    validation_rules = [
+        {"name": "valid_email", "condition": "email LIKE '%@%.%'"},
+        {"name": "valid_state", "condition": "LENGTH(state_code) = 2"},
+        {"name": "positive_balance", "condition": "account_balance >= 0"}
+    ]
+    valid_df, error_df = etl.apply_data_validation(cleansed_df, validation_rules)
+    
+    # Apply SCD Type 2
+    etl.apply_scd_type2(
+        incoming_df=valid_df,
+        target_table_path="/data/edw/dim_customer",
+        key_columns=["customer_id"],
+        tracked_columns=["customer_name", "address", "phone", "email"]
+    )
+</code></pre>
+        </div>
+
+        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+            <a href="../02_source_systems/index.html" class="nav-button" style="padding: 1rem 2rem; background: var(--bg-secondary); color: var(--text-primary); text-decoration: none; border-radius: 8px;">Previous: Source Systems</a>
+            <a href="../04_data_warehouse/index.html" class="nav-button" style="padding: 1rem 2rem; background: var(--accent-primary); color: white; text-decoration: none; border-radius: 8px;">Next: Data Warehouse Layer</a>
+        </div>
+    </main>
+
+    <script>
+        // Tab functionality
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab).classList.add('active');
+            });
+        });
+
+        // 3D Visualization - ETL Process
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, document.getElementById('visualization').offsetWidth / 400, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(document.getElementById('visualization').offsetWidth, 400);
+        document.getElementById('visualization').appendChild(renderer.domElement);
+
+        // ETL stages: Extract -> Transform -> Load
+        const stages = [];
+        const stageColors = [0x4caf50, 0xff9800, 0x2196f3];
+        const stagePositions = [-4, 0, 4];
+        const stageLabels = ['Extract', 'Transform', 'Load'];
+
+        stagePositions.forEach((x, i) => {
+            const geometry = new THREE.BoxGeometry(2, 2, 2);
+            const material = new THREE.MeshPhongMaterial({ 
+                color: stageColors[i],
+                transparent: true,
+                opacity: 0.85
+            });
+            const stage = new THREE.Mesh(geometry, material);
+            stage.position.x = x;
+            scene.add(stage);
+            stages.push(stage);
+
+            // Add gears inside transform stage
+            if (i === 1) {
+                const gearGeom = new THREE.TorusGeometry(0.5, 0.1, 8, 16);
+                const gearMat = new THREE.MeshPhongMaterial({ color: 0xffffff });
+                const gear = new THREE.Mesh(gearGeom, gearMat);
+                gear.position.x = x;
+                scene.add(gear);
+                stages.push(gear);
+            }
+        });
+
+        // Data flow arrows
+        const arrowMaterial = new THREE.LineBasicMaterial({ color: 0xffd700 });
+        for (let i = 0; i < 2; i++) {
+            const points = [
+                new THREE.Vector3(stagePositions[i] + 1.2, 0, 0),
+                new THREE.Vector3(stagePositions[i + 1] - 1.2, 0, 0)
+            ];
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const line = new THREE.Line(geometry, arrowMaterial);
+            scene.add(line);
+
+            // Arrow head
+            const coneGeom = new THREE.ConeGeometry(0.2, 0.4, 8);
+            const coneMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+            const cone = new THREE.Mesh(coneGeom, coneMat);
+            cone.position.set(stagePositions[i + 1] - 1.4, 0, 0);
+            cone.rotation.z = -Math.PI / 2;
+            scene.add(cone);
+        }
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 5, 5);
+        scene.add(directionalLight);
+
+        camera.position.set(0, 3, 10);
+        camera.lookAt(0, 0, 0);
+
+        function animate() {
+            requestAnimationFrame(animate);
+            stages.forEach((stage, i) => {
+                if (i === 3) { // Gear
+                    stage.rotation.z += 0.02;
+                } else {
+                    stage.rotation.y += 0.005;
+                }
+            });
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            const width = document.getElementById('visualization').offsetWidth;
+            renderer.setSize(width, 400);
+            camera.aspect = width / 400;
+            camera.updateProjectionMatrix();
+        });
+    </script>
+</body>
+</html>

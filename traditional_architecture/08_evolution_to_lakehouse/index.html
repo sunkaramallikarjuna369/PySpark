@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Evolution to Modern Lakehouse</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <div class="logo">
+                <a href="../../index.html" style="text-decoration: none; display: flex; align-items: center; gap: 0.5rem;">
+                    <svg class="logo-icon" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="40" height="40" rx="8" fill="#795548"/>
+                        <path d="M8 28L20 8L32 28H8Z" fill="white"/>
+                        <circle cx="20" cy="22" r="4" fill="#795548"/>
+                    </svg>
+                    <span>Evolution to Lakehouse</span>
+                </a>
+            </div>
+            <nav class="nav">
+                <a href="../07_traditional_vs_medallion/index.html" class="nav-link">Previous</a>
+                <a href="../../index.html" class="nav-link">Home</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container" style="padding: 2rem;">
+        <h1>Evolution to Modern Lakehouse</h1>
+        
+        <div id="visualization" style="width: 100%; height: 400px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 12px; margin: 2rem 0;"></div>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="timeline">Timeline</button>
+            <button class="tab-btn" data-tab="lakehouse">Lakehouse Concept</button>
+            <button class="tab-btn" data-tab="code">PySpark Code</button>
+        </div>
+
+        <div id="timeline" class="tab-content active">
+            <h2>The Evolution Timeline</h2>
+            
+            <h3>1990s: Data Warehouse Era</h3>
+            <p>Bill Inmon and Ralph Kimball defined data warehousing. Enterprises invested heavily in Teradata, Oracle, and proprietary ETL tools. Data was structured, batch-processed, and expensive to store.</p>
+            
+            <h3>2000s: Enterprise BI Dominance</h3>
+            <p>Business Objects, Cognos, and MicroStrategy dominated enterprise reporting. OLAP cubes enabled multidimensional analysis. Data volumes grew but remained manageable with traditional approaches.</p>
+            
+            <h3>2006-2012: Big Data Revolution</h3>
+            <p>Hadoop emerged from Google's MapReduce paper. The "3 Vs" (Volume, Velocity, Variety) challenged traditional architecture. Data lakes promised cheap storage for all data types. However, data lakes often became "data swamps" without governance.</p>
+            
+            <h3>2013-2018: Cloud and Spark Era</h3>
+            <p>Cloud data warehouses (Redshift, BigQuery, Snowflake) offered elastic scaling. Apache Spark replaced MapReduce for processing. The "two-tier" architecture emerged: data lake for storage, data warehouse for analytics.</p>
+            
+            <h3>2019-Present: Lakehouse Architecture</h3>
+            <p>Delta Lake, Apache Iceberg, and Apache Hudi brought ACID transactions to data lakes. The lakehouse unified data lake flexibility with data warehouse reliability. Medallion Architecture (Bronze/Silver/Gold) became the standard pattern.</p>
+        </div>
+
+        <div id="lakehouse" class="tab-content">
+            <h2>The Lakehouse Paradigm</h2>
+            
+            <h3>What is a Lakehouse?</h3>
+            <p>A lakehouse combines the best of data lakes and data warehouses: cheap cloud object storage (like a lake), ACID transactions and schema enforcement (like a warehouse), and support for both BI and ML workloads.</p>
+            
+            <h3>Key Technologies</h3>
+            <p><strong>Delta Lake:</strong> Open-source storage layer from Databricks. ACID transactions, time travel, schema evolution. Most widely adopted lakehouse format.</p>
+            <p><strong>Apache Iceberg:</strong> Open table format from Netflix. Hidden partitioning, partition evolution, time travel. Strong community adoption.</p>
+            <p><strong>Apache Hudi:</strong> Open-source from Uber. Incremental processing, record-level updates, streaming ingestion.</p>
+            
+            <h3>Benefits Over Traditional</h3>
+            <p><strong>Cost:</strong> 10-100x cheaper storage on cloud object stores vs. enterprise databases.</p>
+            <p><strong>Flexibility:</strong> Schema evolution, support for unstructured data, ML workloads.</p>
+            <p><strong>Performance:</strong> Columnar formats (Parquet), data skipping, Z-ordering.</p>
+            <p><strong>Openness:</strong> Open formats, no vendor lock-in, community innovation.</p>
+            
+            <h3>The Medallion Pattern</h3>
+            <p>Bronze (raw) -> Silver (cleansed) -> Gold (aggregated) provides a clear data quality progression. Each layer serves different use cases: Bronze for debugging, Silver for data science, Gold for BI.</p>
+        </div>
+
+        <div id="code" class="tab-content">
+            <h2>PySpark Lakehouse Implementation</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+from delta.tables import DeltaTable
+from datetime import datetime, timedelta
+
+class ModernLakehouse:
+    """
+    Implements modern Lakehouse architecture with Delta Lake.
+    Demonstrates the evolution from traditional DW to lakehouse.
+    """
+    
+    def __init__(self, lakehouse_path):
+        self.spark = SparkSession.builder \
+            .appName("ModernLakehouse") \
+            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+            .getOrCreate()
+        self.lakehouse_path = lakehouse_path
+    
+    # ==========================================
+    # BRONZE LAYER: RAW DATA INGESTION
+    # ==========================================
+    
+    def ingest_to_bronze(self, source_df, table_name, source_system):
+        """
+        Ingest raw data to Bronze layer.
+        Preserves original data with metadata.
+        """
+        bronze_df = source_df \
+            .withColumn("_bronze_ingested_at", current_timestamp()) \
+            .withColumn("_bronze_source_system", lit(source_system)) \
+            .withColumn("_bronze_source_file", input_file_name()) \
+            .withColumn("_bronze_ingestion_date", current_date())
+        
+        bronze_path = f"{self.lakehouse_path}/bronze/{table_name}"
+        
+        bronze_df.write \
+            .format("delta") \
+            .mode("append") \
+            .partitionBy("_bronze_ingestion_date") \
+            .save(bronze_path)
+        
+        print(f"Ingested {bronze_df.count()} records to Bronze: {table_name}")
+        return bronze_df
+    
+    def ingest_streaming_to_bronze(self, stream_source, table_name, 
+                                   checkpoint_path):
+        """
+        Stream data to Bronze layer.
+        Near-real-time ingestion capability.
+        """
+        bronze_path = f"{self.lakehouse_path}/bronze/{table_name}"
+        
+        stream_df = stream_source \
+            .withColumn("_bronze_ingested_at", current_timestamp()) \
+            .withColumn("_bronze_ingestion_date", current_date())
+        
+        query = stream_df.writeStream \
+            .format("delta") \
+            .outputMode("append") \
+            .option("checkpointLocation", checkpoint_path) \
+            .partitionBy("_bronze_ingestion_date") \
+            .start(bronze_path)
+        
+        return query
+    
+    # ==========================================
+    # SILVER LAYER: CLEANSED & CONFORMED
+    # ==========================================
+    
+    def process_to_silver(self, bronze_table, silver_table, 
+                         transformations, key_columns):
+        """
+        Process Bronze to Silver with cleansing and conforming.
+        Incremental processing with Delta Lake MERGE.
+        """
+        bronze_path = f"{self.lakehouse_path}/bronze/{bronze_table}"
+        silver_path = f"{self.lakehouse_path}/silver/{silver_table}"
+        
+        bronze_df = self.spark.read.format("delta").load(bronze_path)
+        
+        silver_df = bronze_df
+        for transform_name, transform_func in transformations.items():
+            silver_df = transform_func(silver_df)
+            print(f"Applied transformation: {transform_name}")
+        
+        silver_df = silver_df \
+            .withColumn("_silver_processed_at", current_timestamp()) \
+            .withColumn("_silver_is_valid", lit(True))
+        
+        if DeltaTable.isDeltaTable(self.spark, silver_path):
+            silver_table = DeltaTable.forPath(self.spark, silver_path)
+            
+            merge_condition = " AND ".join([
+                f"target.{k} = source.{k}" for k in key_columns
+            ])
+            
+            silver_table.alias("target").merge(
+                silver_df.alias("source"),
+                merge_condition
+            ).whenMatchedUpdateAll() \
+             .whenNotMatchedInsertAll() \
+             .execute()
+            
+            print(f"Merged updates to Silver: {silver_table}")
+        else:
+            silver_df.write \
+                .format("delta") \
+                .mode("overwrite") \
+                .save(silver_path)
+            
+            print(f"Created Silver table: {silver_table}")
+        
+        return self.spark.read.format("delta").load(silver_path)
+    
+    # ==========================================
+    # GOLD LAYER: BUSINESS AGGREGATES
+    # ==========================================
+    
+    def build_gold_table(self, silver_tables, gold_table, 
+                        join_logic, aggregations):
+        """
+        Build Gold layer data products.
+        Optimized for specific business use cases.
+        """
+        dfs = {}
+        for table_name in silver_tables:
+            silver_path = f"{self.lakehouse_path}/silver/{table_name}"
+            dfs[table_name] = self.spark.read.format("delta").load(silver_path)
+        
+        gold_df = join_logic(dfs)
+        
+        for agg_name, agg_config in aggregations.items():
+            group_cols = agg_config["group_by"]
+            agg_exprs = agg_config["aggregations"]
+            
+            gold_df = gold_df.groupBy(group_cols).agg(*agg_exprs)
+        
+        gold_df = gold_df \
+            .withColumn("_gold_created_at", current_timestamp()) \
+            .withColumn("_gold_version", lit("1.0"))
+        
+        gold_path = f"{self.lakehouse_path}/gold/{gold_table}"
+        
+        gold_df.write \
+            .format("delta") \
+            .mode("overwrite") \
+            .save(gold_path)
+        
+        print(f"Built Gold table: {gold_table}")
+        return gold_df
+    
+    # ==========================================
+    # LAKEHOUSE FEATURES
+    # ==========================================
+    
+    def time_travel_query(self, table_path, version=None, timestamp=None):
+        """
+        Query historical data using Delta Lake time travel.
+        Feature not available in traditional DW.
+        """
+        if version is not None:
+            df = self.spark.read \
+                .format("delta") \
+                .option("versionAsOf", version) \
+                .load(table_path)
+            print(f"Querying version {version}")
+        elif timestamp is not None:
+            df = self.spark.read \
+                .format("delta") \
+                .option("timestampAsOf", timestamp) \
+                .load(table_path)
+            print(f"Querying as of {timestamp}")
+        else:
+            df = self.spark.read.format("delta").load(table_path)
+        
+        return df
+    
+    def get_table_history(self, table_path):
+        """
+        Get full history of table changes.
+        Audit trail built into Delta Lake.
+        """
+        delta_table = DeltaTable.forPath(self.spark, table_path)
+        history_df = delta_table.history()
+        
+        return history_df.select(
+            "version", "timestamp", "operation", 
+            "operationParameters", "operationMetrics"
+        )
+    
+    def optimize_table(self, table_path, z_order_cols=None):
+        """
+        Optimize Delta table for query performance.
+        Compaction and Z-ordering.
+        """
+        delta_table = DeltaTable.forPath(self.spark, table_path)
+        
+        if z_order_cols:
+            delta_table.optimize().zOrderBy(z_order_cols).executeCompaction()
+            print(f"Optimized with Z-ordering on: {z_order_cols}")
+        else:
+            delta_table.optimize().executeCompaction()
+            print("Optimized table (compaction)")
+    
+    def vacuum_table(self, table_path, retention_hours=168):
+        """
+        Clean up old files to reduce storage costs.
+        Removes files older than retention period.
+        """
+        delta_table = DeltaTable.forPath(self.spark, table_path)
+        delta_table.vacuum(retention_hours)
+        print(f"Vacuumed files older than {retention_hours} hours")
+    
+    def enable_change_data_feed(self, table_path):
+        """
+        Enable Change Data Feed for downstream consumers.
+        Tracks row-level changes.
+        """
+        self.spark.sql(f"""
+            ALTER TABLE delta.`{table_path}`
+            SET TBLPROPERTIES (delta.enableChangeDataFeed = true)
+        """)
+        print(f"Enabled Change Data Feed on: {table_path}")
+    
+    def read_change_data_feed(self, table_path, start_version):
+        """
+        Read changes since a specific version.
+        Enables incremental downstream processing.
+        """
+        changes_df = self.spark.read \
+            .format("delta") \
+            .option("readChangeFeed", "true") \
+            .option("startingVersion", start_version) \
+            .load(table_path)
+        
+        return changes_df
+    
+    # ==========================================
+    # SCHEMA EVOLUTION
+    # ==========================================
+    
+    def evolve_schema(self, table_path, new_columns):
+        """
+        Add new columns to existing table.
+        Schema evolution without downtime.
+        """
+        df = self.spark.read.format("delta").load(table_path)
+        
+        for col_name, col_type, default_value in new_columns:
+            df = df.withColumn(col_name, lit(default_value).cast(col_type))
+        
+        df.write \
+            .format("delta") \
+            .mode("overwrite") \
+            .option("overwriteSchema", "true") \
+            .save(table_path)
+        
+        print(f"Evolved schema with new columns: {[c[0] for c in new_columns]}")
+
+
+# Example Usage
+if __name__ == "__main__":
+    lakehouse = ModernLakehouse(lakehouse_path="/data/lakehouse")
+    
+    # Ingest to Bronze
+    raw_sales = spark.createDataFrame([
+        (1, "2024-01-15", "C001", "P001", 100, 1500.00),
+        (2, "2024-01-16", "C002", "P002", 50, 750.00),
+    ], ["sale_id", "sale_date", "customer_id", "product_id", "quantity", "amount"])
+    
+    lakehouse.ingest_to_bronze(raw_sales, "sales", "ERP_SYSTEM")
+    
+    # Process to Silver
+    transformations = {
+        "parse_dates": lambda df: df.withColumn("sale_date", to_date(col("sale_date"))),
+        "validate_amounts": lambda df: df.filter(col("amount") > 0),
+        "add_fiscal_period": lambda df: df.withColumn("fiscal_period", date_format(col("sale_date"), "yyyyMM"))
+    }
+    
+    lakehouse.process_to_silver(
+        bronze_table="sales",
+        silver_table="sales_cleansed",
+        transformations=transformations,
+        key_columns=["sale_id"]
+    )
+    
+    # Build Gold
+    def join_logic(dfs):
+        return dfs["sales_cleansed"]
+    
+    aggregations = {
+        "monthly_summary": {
+            "group_by": ["fiscal_period"],
+            "aggregations": [
+                sum("amount").alias("total_sales"),
+                count("sale_id").alias("transaction_count")
+            ]
+        }
+    }
+    
+    lakehouse.build_gold_table(
+        silver_tables=["sales_cleansed"],
+        gold_table="monthly_sales_summary",
+        join_logic=join_logic,
+        aggregations=aggregations
+    )
+    
+    # Demonstrate lakehouse features
+    history = lakehouse.get_table_history("/data/lakehouse/silver/sales_cleansed")
+    history.show()
+    
+    # Time travel query
+    old_data = lakehouse.time_travel_query(
+        "/data/lakehouse/silver/sales_cleansed",
+        version=0
+    )
+    
+    # Optimize for performance
+    lakehouse.optimize_table(
+        "/data/lakehouse/gold/monthly_sales_summary",
+        z_order_cols=["fiscal_period"]
+    )
+</code></pre>
+        </div>
+
+        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+            <a href="../07_traditional_vs_medallion/index.html" class="nav-button" style="padding: 1rem 2rem; background: var(--bg-secondary); color: var(--text-primary); text-decoration: none; border-radius: 8px;">Previous: Traditional vs Medallion</a>
+            <a href="../../index.html" class="nav-button" style="padding: 1rem 2rem; background: var(--accent-primary); color: white; text-decoration: none; border-radius: 8px;">Back to Home</a>
+        </div>
+    </main>
+
+    <script>
+        // Tab functionality
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab).classList.add('active');
+            });
+        });
+
+        // 3D Visualization - Evolution Timeline
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, document.getElementById('visualization').offsetWidth / 400, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(document.getElementById('visualization').offsetWidth, 400);
+        document.getElementById('visualization').appendChild(renderer.domElement);
+
+        // Timeline eras
+        const eras = [
+            { x: -6, color: 0x795548, label: '1990s DW' },
+            { x: -3, color: 0x5d4037, label: '2000s BI' },
+            { x: 0, color: 0x4caf50, label: '2010s Big Data' },
+            { x: 3, color: 0x2196f3, label: '2015s Cloud' },
+            { x: 6, color: 0xffd700, label: '2020s Lakehouse' }
+        ];
+
+        const eraObjects = [];
+        eras.forEach((era, i) => {
+            // Era sphere
+            const geom = new THREE.SphereGeometry(0.8, 32, 32);
+            const mat = new THREE.MeshPhongMaterial({ 
+                color: era.color,
+                transparent: true,
+                opacity: 0.9
+            });
+            const sphere = new THREE.Mesh(geom, mat);
+            sphere.position.set(era.x, 0, 0);
+            scene.add(sphere);
+            eraObjects.push(sphere);
+
+            // Connection line
+            if (i < eras.length - 1) {
+                const points = [
+                    new THREE.Vector3(era.x + 0.9, 0, 0),
+                    new THREE.Vector3(eras[i + 1].x - 0.9, 0, 0)
+                ];
+                const lineGeom = new THREE.BufferGeometry().setFromPoints(points);
+                const line = new THREE.Line(lineGeom, new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.5, transparent: true }));
+                scene.add(line);
+            }
+        });
+
+        // Lakehouse pyramid at the end
+        const pyramidGeom = new THREE.ConeGeometry(1.5, 2, 4);
+        const pyramidMat = new THREE.MeshPhongMaterial({ 
+            color: 0xffd700,
+            transparent: true,
+            opacity: 0.7
+        });
+        const pyramid = new THREE.Mesh(pyramidGeom, pyramidMat);
+        pyramid.position.set(6, 2, 0);
+        scene.add(pyramid);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 5, 5);
+        scene.add(directionalLight);
+
+        camera.position.set(0, 3, 12);
+        camera.lookAt(0, 0, 0);
+
+        function animate() {
+            requestAnimationFrame(animate);
+            eraObjects.forEach((obj, i) => {
+                obj.rotation.y += 0.01;
+                obj.position.y = Math.sin(Date.now() * 0.002 + i) * 0.2;
+            });
+            pyramid.rotation.y += 0.02;
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            const width = document.getElementById('visualization').offsetWidth;
+            renderer.setSize(width, 400);
+            camera.aspect = width / 400;
+            camera.updateProjectionMatrix();
+        });
+    </script>
+</body>
+</html>

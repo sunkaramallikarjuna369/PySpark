@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Marts for BI</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand"><a href="../../index.html">PySpark Learning Hub</a></div>
+        <div class="nav-links">
+            <a href="../02_semantic_layer/index.html">Prev: Semantic Layer</a>
+            <a href="../04_star_schema_lakehouse/index.html">Next: Star Schema</a>
+        </div>
+    </nav>
+    <main class="topic-container">
+        <header class="topic-header">
+            <div class="category-icon consumption">CL</div>
+            <h1>Data Marts for BI</h1>
+            <p class="topic-description">Subject-specific data stores optimized for business intelligence and reporting.</p>
+        </header>
+        <div class="content-tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="code">PySpark Code</button>
+        </div>
+        <div class="visualization-container"><div id="viz-container"></div></div>
+        <div class="tab-content active" id="overview">
+            <h2>What are Data Marts?</h2>
+            <p>Data marts are subject-specific subsets of a data warehouse, designed for specific business functions like Sales, Marketing, or Finance. They provide fast, focused access to relevant data.</p>
+            <h3>Types of Data Marts</h3>
+            <ul>
+                <li><strong>Dependent:</strong> Created from enterprise data warehouse</li>
+                <li><strong>Independent:</strong> Created directly from source systems</li>
+                <li><strong>Hybrid:</strong> Combination of both approaches</li>
+            </ul>
+        </div>
+        <div class="tab-content" id="code">
+            <h2>Building Data Marts with PySpark</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, sum as spark_sum, avg, count, countDistinct, current_timestamp
+
+spark = SparkSession.builder.appName("DataMarts").getOrCreate()
+
+class DataMartBuilder:
+    """Build subject-specific data marts from Gold layer."""
+    
+    def __init__(self, gold_path: str, mart_path: str):
+        self.gold_path = gold_path
+        self.mart_path = mart_path
+    
+    def build_sales_mart(self):
+        """Build Sales data mart."""
+        transactions = spark.read.format("delta").load(f"{self.gold_path}/transactions")
+        products = spark.read.format("delta").load(f"{self.gold_path}/products")
+        customers = spark.read.format("delta").load(f"{self.gold_path}/customers")
+        
+        sales_mart = transactions \
+            .join(products, "product_id", "left") \
+            .join(customers, "customer_id", "left") \
+            .select(
+                "transaction_id", "transaction_date", "store_id",
+                "customer_id", "customer_name", "customer_segment",
+                "product_id", "product_name", "category",
+                "quantity", "unit_price", "total_amount"
+            ) \
+            .withColumn("_mart_updated_at", current_timestamp())
+        
+        sales_mart.write.format("delta").mode("overwrite") \
+            .partitionBy("transaction_date") \
+            .save(f"{self.mart_path}/sales_mart")
+        
+        print(f"Sales mart created with {sales_mart.count()} records")
+        return sales_mart
+    
+    def build_customer_mart(self):
+        """Build Customer analytics mart."""
+        customers = spark.read.format("delta").load(f"{self.gold_path}/customer_360")
+        
+        customer_mart = customers.select(
+            "customer_id", "name", "email", "segment",
+            "total_transactions", "lifetime_value", "avg_order_value",
+            "first_purchase_date", "last_purchase_date",
+            "customer_tier", "churn_risk"
+        ).withColumn("_mart_updated_at", current_timestamp())
+        
+        customer_mart.write.format("delta").mode("overwrite") \
+            .save(f"{self.mart_path}/customer_mart")
+        
+        print(f"Customer mart created with {customer_mart.count()} records")
+        return customer_mart
+
+# Build data marts
+builder = DataMartBuilder("/lakehouse/gold", "/lakehouse/consumption/marts")
+builder.build_sales_mart()
+builder.build_customer_mart()</code></pre>
+        </div>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script>
+        const container = document.getElementById('viz-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+        const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        container.appendChild(renderer.domElement);
+        
+        // Central warehouse
+        const warehouseGeo = new THREE.BoxGeometry(2, 2, 2);
+        const warehouseMat = new THREE.MeshPhongMaterial({ color: 0xffd700 });
+        const warehouse = new THREE.Mesh(warehouseGeo, warehouseMat);
+        scene.add(warehouse);
+        
+        // Data marts around warehouse
+        const martColors = [0x4caf50, 0x2196f3, 0xff5722, 0x9c27b0];
+        const martNames = ['Sales', 'Marketing', 'Finance', 'HR'];
+        const marts = [];
+        for (let i = 0; i < 4; i++) {
+            const geo = new THREE.CylinderGeometry(0.6, 0.6, 0.8, 16);
+            const mat = new THREE.MeshPhongMaterial({ color: martColors[i] });
+            const mart = new THREE.Mesh(geo, mat);
+            const angle = (i / 4) * Math.PI * 2;
+            mart.position.set(Math.cos(angle) * 3, 0, Math.sin(angle) * 3);
+            scene.add(mart);
+            marts.push(mart);
+        }
+        
+        scene.add(new THREE.AmbientLight(0x404040, 0.5));
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(5, 5, 5);
+        scene.add(light);
+        
+        camera.position.set(5, 4, 5);
+        camera.lookAt(0, 0, 0);
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            warehouse.rotation.y += 0.005;
+            marts.forEach(m => m.rotation.y += 0.01);
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>
