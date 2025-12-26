@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lakehouse Pipeline - Capstone Project</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand"><a href="../../index.html">PySpark Learning Hub</a></div>
+        <div class="nav-links"><a href="../02_streaming_pipeline/index.html">Next: Streaming Pipeline</a></div>
+    </nav>
+    <main class="topic-container">
+        <header class="topic-header">
+            <div class="category-icon projects">CP</div>
+            <h1>Capstone Project 1: Lakehouse Pipeline</h1>
+            <p class="topic-description">Build a complete end-to-end data lakehouse pipeline using the Medallion Architecture (Bronze, Silver, Gold layers) with Delta Lake.</p>
+        </header>
+        <div class="content-tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="bronze">Bronze Layer</button>
+            <button class="tab-btn" data-tab="silver">Silver Layer</button>
+            <button class="tab-btn" data-tab="gold">Gold Layer</button>
+        </div>
+        <div class="visualization-container"><div id="viz-container"></div></div>
+        <div class="tab-content active" id="overview">
+            <h2>Project Overview</h2>
+            <p>This capstone project demonstrates building a production-grade data lakehouse pipeline that processes e-commerce data through the Medallion Architecture.</p>
+            <h3>Business Requirements</h3>
+            <ul>
+                <li>Ingest raw e-commerce transaction data from multiple sources</li>
+                <li>Clean and standardize data with quality validation</li>
+                <li>Create analytics-ready aggregations for business intelligence</li>
+                <li>Support both batch and incremental processing</li>
+            </ul>
+            <h3>Technical Stack</h3>
+            <ul>
+                <li>Apache Spark 3.x with PySpark</li>
+                <li>Delta Lake for ACID transactions</li>
+                <li>Medallion Architecture (Bronze/Silver/Gold)</li>
+            </ul>
+        </div>
+        <div class="tab-content" id="bronze">
+            <h2>Bronze Layer - Raw Data Ingestion</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import current_timestamp, lit, input_file_name, sha2, concat_ws, col
+from delta.tables import DeltaTable
+
+spark = SparkSession.builder.appName("BronzeLayer").getOrCreate()
+
+class BronzeLayer:
+    def __init__(self, base_path="/lakehouse/bronze"):
+        self.base_path = base_path
+    
+    def add_metadata(self, df, source_name):
+        return df.withColumn("_ingestion_timestamp", current_timestamp()) \
+                 .withColumn("_source_file", input_file_name()) \
+                 .withColumn("_source_name", lit(source_name)) \
+                 .withColumn("_row_hash", sha2(concat_ws("||", *df.columns), 256))
+    
+    def ingest_transactions(self, source_path):
+        df = spark.read.option("header", "true").csv(source_path)
+        df_with_metadata = self.add_metadata(df, "transactions")
+        df_with_metadata.write.format("delta").mode("append") \
+            .partitionBy("_ingestion_date").save(f"{self.base_path}/transactions")
+        return df_with_metadata
+
+bronze = BronzeLayer()
+bronze.ingest_transactions("/data/raw/transactions/")</code></pre>
+        </div>
+        <div class="tab-content" id="silver">
+            <h2>Silver Layer - Data Cleaning</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, trim, upper, to_timestamp, current_timestamp
+
+spark = SparkSession.builder.getOrCreate()
+
+class SilverLayer:
+    def __init__(self, bronze_path="/lakehouse/bronze", silver_path="/lakehouse/silver"):
+        self.bronze_path = bronze_path
+        self.silver_path = silver_path
+    
+    def clean_transactions(self):
+        bronze_df = spark.read.format("delta").load(f"{self.bronze_path}/transactions")
+        
+        cleaned_df = bronze_df \
+            .withColumn("transaction_id", trim(col("transaction_id"))) \
+            .withColumn("customer_id", trim(col("customer_id"))) \
+            .withColumn("store_id", upper(trim(col("store_id")))) \
+            .withColumn("total_amount", col("quantity") * col("unit_price")) \
+            .withColumn("_silver_timestamp", current_timestamp())
+        
+        valid_df = cleaned_df.filter(
+            col("transaction_id").isNotNull() & (col("quantity") > 0)
+        )
+        
+        valid_df.write.format("delta").mode("overwrite").save(f"{self.silver_path}/transactions")
+        return valid_df
+
+silver = SilverLayer()
+silver.clean_transactions()</code></pre>
+        </div>
+        <div class="tab-content" id="gold">
+            <h2>Gold Layer - Business Aggregations</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, sum as spark_sum, count, avg, countDistinct, current_timestamp, date_trunc
+
+spark = SparkSession.builder.getOrCreate()
+
+class GoldLayer:
+    def __init__(self, silver_path="/lakehouse/silver", gold_path="/lakehouse/gold"):
+        self.silver_path = silver_path
+        self.gold_path = gold_path
+    
+    def create_daily_sales(self):
+        transactions = spark.read.format("delta").load(f"{self.silver_path}/transactions")
+        
+        daily_sales = transactions.groupBy(
+            date_trunc("day", col("transaction_date")).alias("sale_date"),
+            "store_id"
+        ).agg(
+            count("transaction_id").alias("transaction_count"),
+            countDistinct("customer_id").alias("unique_customers"),
+            spark_sum("total_amount").alias("total_revenue"),
+            avg("total_amount").alias("avg_transaction_value")
+        ).withColumn("_gold_timestamp", current_timestamp())
+        
+        daily_sales.write.format("delta").mode("overwrite") \
+            .partitionBy("sale_date").save(f"{self.gold_path}/daily_sales")
+        return daily_sales
+
+gold = GoldLayer()
+gold.create_daily_sales()</code></pre>
+        </div>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script>
+        const container = document.getElementById('viz-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+        const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        container.appendChild(renderer.domElement);
+        
+        const layers = [
+            { name: 'Bronze', color: 0xcd7f32, y: -2, size: 3 },
+            { name: 'Silver', color: 0xc0c0c0, y: 0, size: 2.5 },
+            { name: 'Gold', color: 0xffd700, y: 2, size: 2 }
+        ];
+        
+        const meshes = [];
+        layers.forEach(layer => {
+            const geo = new THREE.CylinderGeometry(layer.size, layer.size, 0.5, 32);
+            const mat = new THREE.MeshPhongMaterial({ color: layer.color, shininess: 100, transparent: true, opacity: 0.8 });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.y = layer.y;
+            scene.add(mesh);
+            meshes.push(mesh);
+        });
+        
+        scene.add(new THREE.AmbientLight(0x404040, 0.5));
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(5, 5, 5);
+        scene.add(light);
+        
+        camera.position.set(5, 3, 5);
+        camera.lookAt(0, 0, 0);
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            meshes.forEach((m, i) => m.rotation.y += 0.005 * (i + 1));
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>

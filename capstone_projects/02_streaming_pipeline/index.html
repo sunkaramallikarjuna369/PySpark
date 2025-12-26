@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Streaming Pipeline - Capstone Project</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand"><a href="../../index.html">PySpark Learning Hub</a></div>
+        <div class="nav-links">
+            <a href="../01_lakehouse_pipeline/index.html">Prev: Lakehouse</a>
+            <a href="../03_cdc_scd_implementation/index.html">Next: CDC/SCD</a>
+        </div>
+    </nav>
+    <main class="topic-container">
+        <header class="topic-header">
+            <div class="category-icon projects">CP</div>
+            <h1>Capstone Project 2: Real-Time Streaming Pipeline</h1>
+            <p class="topic-description">Build a production-grade real-time data streaming pipeline using PySpark Structured Streaming with Kafka integration.</p>
+        </header>
+        <div class="content-tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="kafka">Kafka Integration</button>
+            <button class="tab-btn" data-tab="processing">Stream Processing</button>
+            <button class="tab-btn" data-tab="sink">Output Sinks</button>
+        </div>
+        <div class="visualization-container"><div id="viz-container"></div></div>
+        <div class="tab-content active" id="overview">
+            <h2>Project Overview</h2>
+            <p>This capstone project demonstrates building a real-time streaming pipeline that processes IoT sensor data, performs aggregations, and writes to multiple sinks.</p>
+            <h3>Architecture</h3>
+            <ul>
+                <li>Kafka as the message broker for event ingestion</li>
+                <li>PySpark Structured Streaming for real-time processing</li>
+                <li>Watermarking for handling late data</li>
+                <li>Delta Lake for reliable streaming writes</li>
+            </ul>
+            <h3>Use Cases</h3>
+            <ul>
+                <li>Real-time IoT sensor monitoring</li>
+                <li>Fraud detection in financial transactions</li>
+                <li>Live dashboard metrics aggregation</li>
+            </ul>
+        </div>
+        <div class="tab-content" id="kafka">
+            <h2>Kafka Integration</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import from_json, col, window, avg, max as spark_max, count
+from pyspark.sql.types import StructType, StructField, StringType, DoubleType, TimestampType
+
+spark = SparkSession.builder \
+    .appName("StreamingPipeline") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .getOrCreate()
+
+# Define schema for IoT sensor data
+sensor_schema = StructType([
+    StructField("sensor_id", StringType(), True),
+    StructField("device_type", StringType(), True),
+    StructField("temperature", DoubleType(), True),
+    StructField("humidity", DoubleType(), True),
+    StructField("pressure", DoubleType(), True),
+    StructField("event_time", TimestampType(), True),
+    StructField("location", StringType(), True)
+])
+
+# Read from Kafka
+kafka_df = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("subscribe", "iot-sensors") \
+    .option("startingOffsets", "latest") \
+    .option("failOnDataLoss", "false") \
+    .load()
+
+# Parse JSON from Kafka value
+parsed_df = kafka_df \
+    .selectExpr("CAST(value AS STRING) as json_str") \
+    .select(from_json(col("json_str"), sensor_schema).alias("data")) \
+    .select("data.*")
+
+print("Kafka stream initialized successfully")</code></pre>
+        </div>
+        <div class="tab-content" id="processing">
+            <h2>Stream Processing with Watermarking</h2>
+            <pre><code class="language-python">from pyspark.sql.functions import window, avg, max as spark_max, min as spark_min, count, current_timestamp
+
+# Add watermark for handling late data (10 minutes)
+watermarked_df = parsed_df \
+    .withWatermark("event_time", "10 minutes")
+
+# Tumbling window aggregations (5-minute windows)
+windowed_stats = watermarked_df \
+    .groupBy(
+        window(col("event_time"), "5 minutes"),
+        "sensor_id",
+        "device_type",
+        "location"
+    ) \
+    .agg(
+        avg("temperature").alias("avg_temperature"),
+        spark_max("temperature").alias("max_temperature"),
+        spark_min("temperature").alias("min_temperature"),
+        avg("humidity").alias("avg_humidity"),
+        avg("pressure").alias("avg_pressure"),
+        count("*").alias("reading_count")
+    ) \
+    .withColumn("processed_at", current_timestamp())
+
+# Anomaly detection - flag readings outside normal range
+from pyspark.sql.functions import when, lit
+
+anomaly_df = parsed_df \
+    .withColumn("is_anomaly",
+        when((col("temperature") > 100) | (col("temperature") < -50), lit(True))
+        .when((col("humidity") > 100) | (col("humidity") < 0), lit(True))
+        .otherwise(lit(False))
+    ) \
+    .filter(col("is_anomaly") == True)
+
+print("Stream processing logic configured")</code></pre>
+        </div>
+        <div class="tab-content" id="sink">
+            <h2>Output Sinks</h2>
+            <pre><code class="language-python"># Write aggregated stats to Delta Lake
+stats_query = windowed_stats.writeStream \
+    .format("delta") \
+    .outputMode("append") \
+    .option("checkpointLocation", "/streaming/checkpoints/stats") \
+    .option("mergeSchema", "true") \
+    .trigger(processingTime="1 minute") \
+    .start("/streaming/output/sensor_stats")
+
+# Write anomalies to separate Delta table for alerting
+anomaly_query = anomaly_df.writeStream \
+    .format("delta") \
+    .outputMode("append") \
+    .option("checkpointLocation", "/streaming/checkpoints/anomalies") \
+    .trigger(processingTime="10 seconds") \
+    .start("/streaming/output/anomalies")
+
+# Write to Kafka for downstream consumers
+kafka_output = windowed_stats \
+    .selectExpr("to_json(struct(*)) AS value") \
+    .writeStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("topic", "sensor-aggregates") \
+    .option("checkpointLocation", "/streaming/checkpoints/kafka") \
+    .start()
+
+# ForeachBatch for custom processing
+def process_batch(batch_df, batch_id):
+    print(f"Processing batch {batch_id} with {batch_df.count()} records")
+    # Custom logic: send alerts, update cache, etc.
+    batch_df.write.format("delta").mode("append").save("/streaming/output/processed")
+
+custom_query = parsed_df.writeStream \
+    .foreachBatch(process_batch) \
+    .option("checkpointLocation", "/streaming/checkpoints/custom") \
+    .start()
+
+# Wait for all streams
+spark.streams.awaitAnyTermination()</code></pre>
+        </div>
+    </main>
+    <script src="../../assets/js/main.js"></script>
+    <script>
+        const container = document.getElementById('viz-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+        const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        container.appendChild(renderer.domElement);
+        
+        // Create streaming data flow visualization
+        const particles = [];
+        const particleCount = 50;
+        const particleMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        
+        for (let i = 0; i < particleCount; i++) {
+            const geo = new THREE.SphereGeometry(0.1, 8, 8);
+            const particle = new THREE.Mesh(geo, particleMaterial);
+            particle.position.set(-5 + Math.random() * 2, Math.random() * 4 - 2, Math.random() * 2 - 1);
+            particle.userData = { speed: 0.02 + Math.random() * 0.03 };
+            scene.add(particle);
+            particles.push(particle);
+        }
+        
+        // Add processing nodes
+        const nodeGeo = new THREE.BoxGeometry(1, 1, 1);
+        const nodeMat = new THREE.MeshPhongMaterial({ color: 0x4dabf7 });
+        const nodes = [-2, 0, 2].map(x => {
+            const node = new THREE.Mesh(nodeGeo, nodeMat);
+            node.position.set(x, 0, 0);
+            scene.add(node);
+            return node;
+        });
+        
+        scene.add(new THREE.AmbientLight(0x404040, 0.5));
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(5, 5, 5);
+        scene.add(light);
+        
+        camera.position.set(0, 3, 8);
+        camera.lookAt(0, 0, 0);
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            particles.forEach(p => {
+                p.position.x += p.userData.speed;
+                if (p.position.x > 5) p.position.x = -5;
+            });
+            nodes.forEach(n => n.rotation.y += 0.01);
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>
