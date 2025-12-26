@@ -32,6 +32,7 @@
     --quality-color: #51cf66;
     --interview-color: #4dabf7;
     --consumption-color: #00bcd4;
+    --traditional-color: #795548;
     
     /* Spacing */
     --spacing-xs: 0.25rem;
@@ -299,6 +300,7 @@ a:hover {
 .card.quality { --card-accent: var(--quality-color); }
 .card.interview { --card-accent: var(--interview-color); }
 .card.consumption { --card-accent: var(--consumption-color); }
+.card.traditional { --card-accent: var(--traditional-color); }
 
 /* Category Sections */
 .category-section {
@@ -338,6 +340,7 @@ a:hover {
 .category-icon.quality { background: var(--quality-color); }
 .category-icon.interview { background: var(--interview-color); }
 .category-icon.consumption { background: var(--consumption-color); }
+.category-icon.traditional { background: var(--traditional-color); }
 
 /* 3D Visualization Container */
 .visualization-container {

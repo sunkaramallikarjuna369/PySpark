@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traditional 3-Layer Architecture - Introduction</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <div class="logo">
+                <a href="../../index.html" style="text-decoration: none; display: flex; align-items: center; gap: 0.5rem;">
+                    <svg class="logo-icon" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="40" height="40" rx="8" fill="#795548"/>
+                        <path d="M10 30V10h20v20H10z" fill="white" opacity="0.3"/>
+                        <path d="M10 20h20M20 10v20" stroke="white" stroke-width="2"/>
+                    </svg>
+                    <span>Traditional Architecture</span>
+                </a>
+            </div>
+            <nav class="nav">
+                <a href="../../index.html" class="nav-link">Home</a>
+                <a href="../02_source_systems/index.html" class="nav-link">Next: Source Systems</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container" style="padding: 2rem;">
+        <h1>Introduction to Traditional 3-Layer Architecture</h1>
+        
+        <div id="visualization" style="width: 100%; height: 400px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 12px; margin: 2rem 0;"></div>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="layers">The 3 Layers</button>
+            <button class="tab-btn" data-tab="history">Historical Context</button>
+            <button class="tab-btn" data-tab="code">PySpark Code</button>
+        </div>
+
+        <div id="overview" class="tab-content active">
+            <h2>What is Traditional 3-Layer Architecture?</h2>
+            <p>Before the Medallion Architecture (Bronze/Silver/Gold) became popular with modern lakehouses, enterprises used a traditional 3-layer data architecture that dominated data warehousing from the 1990s through the 2010s.</p>
+            
+            <h3>The Three Layers</h3>
+            <p><strong>1. Source/Staging Layer:</strong> Raw data extracted from operational systems (ERP, CRM, files) landed in staging tables with minimal transformation.</p>
+            <p><strong>2. Integration/ETL Layer:</strong> Data was transformed, cleansed, and integrated using ETL tools like Informatica, DataStage, or SSIS into a normalized enterprise data warehouse.</p>
+            <p><strong>3. Presentation/BI Layer:</strong> Data marts and OLAP cubes were built for specific business domains, consumed by BI tools like Cognos, Business Objects, or Tableau.</p>
+            
+            <h3>Key Characteristics</h3>
+            <p>This architecture was characterized by batch processing (typically nightly), heavy reliance on relational databases (Oracle, Teradata, SQL Server), and a clear separation between data engineers (ETL developers) and business analysts (report builders).</p>
+        </div>
+
+        <div id="layers" class="tab-content">
+            <h2>Deep Dive: The 3 Layers</h2>
+            
+            <h3>Layer 1: Source/Staging</h3>
+            <p>The staging layer served as a landing zone for raw data. Key characteristics included temporary storage (often truncated before each load), minimal transformations (just data type conversions), and source system mirroring (tables matched source structure).</p>
+            
+            <h3>Layer 2: Integration/Enterprise DW</h3>
+            <p>The heart of traditional architecture was the Enterprise Data Warehouse (EDW). This layer featured normalized schemas (3NF) following Inmon methodology, or dimensional models following Kimball methodology. Data was cleansed, deduplicated, and conformed to enterprise standards.</p>
+            
+            <h3>Layer 3: Presentation/Data Marts</h3>
+            <p>Data marts were subject-specific subsets optimized for reporting. They used star schemas with fact and dimension tables, pre-aggregated data for performance, and were often denormalized for query speed.</p>
+        </div>
+
+        <div id="history" class="tab-content">
+            <h2>Historical Context</h2>
+            
+            <h3>The 1990s: Birth of Data Warehousing</h3>
+            <p>Bill Inmon introduced the concept of the Enterprise Data Warehouse with a top-down, normalized approach. Ralph Kimball countered with a bottom-up, dimensional modeling approach focused on data marts.</p>
+            
+            <h3>The 2000s: ETL Tool Dominance</h3>
+            <p>Enterprise ETL tools like Informatica PowerCenter, IBM DataStage, and Microsoft SSIS became the standard for data integration. OLAP cubes (Essbase, Analysis Services) powered multidimensional analysis.</p>
+            
+            <h3>The 2010s: Big Data Disruption</h3>
+            <p>Hadoop and the data lake concept challenged traditional architecture. The need for real-time analytics and unstructured data processing exposed limitations of the 3-layer model.</p>
+            
+            <h3>Evolution to Medallion</h3>
+            <p>The Medallion Architecture (Bronze/Silver/Gold) emerged as a modern evolution, combining the best of data lakes and data warehouses into the "lakehouse" paradigm.</p>
+        </div>
+
+        <div id="code" class="tab-content">
+            <h2>PySpark Implementation</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+from pyspark.sql.types import *
+from datetime import datetime
+
+class TraditionalArchitecture:
+    """
+    Simulates traditional 3-layer data warehouse architecture.
+    Layer 1: Staging (raw data landing)
+    Layer 2: Integration (enterprise DW)
+    Layer 3: Presentation (data marts)
+    """
+    
+    def __init__(self, staging_path, edw_path, mart_path):
+        self.spark = SparkSession.builder \
+            .appName("Traditional3LayerArchitecture") \
+            .getOrCreate()
+        self.staging_path = staging_path
+        self.edw_path = edw_path
+        self.mart_path = mart_path
+    
+    # ==========================================
+    # LAYER 1: STAGING (Source Landing Zone)
+    # ==========================================
+    
+    def extract_to_staging(self, source_name, source_df):
+        """
+        Extract data from source systems to staging.
+        Minimal transformation - just add metadata.
+        """
+        staged_df = source_df \
+            .withColumn("_source_system", lit(source_name)) \
+            .withColumn("_extract_timestamp", current_timestamp()) \
+            .withColumn("_batch_id", lit(datetime.now().strftime("%Y%m%d%H%M%S")))
+        
+        staging_table = f"{self.staging_path}/stg_{source_name}"
+        staged_df.write \
+            .mode("overwrite") \
+            .parquet(staging_table)
+        
+        print(f"Staged {staged_df.count()} records from {source_name}")
+        return staged_df
+    
+    def truncate_staging(self, source_name):
+        """Traditional staging tables were often truncated before each load."""
+        import shutil
+        staging_table = f"{self.staging_path}/stg_{source_name}"
+        try:
+            shutil.rmtree(staging_table)
+            print(f"Truncated staging table: stg_{source_name}")
+        except FileNotFoundError:
+            print(f"Staging table not found: stg_{source_name}")
+    
+    # ==========================================
+    # LAYER 2: INTEGRATION (Enterprise DW)
+    # ==========================================
+    
+    def transform_to_edw(self, source_name, transformation_rules):
+        """
+        Transform staged data into enterprise data warehouse.
+        Apply business rules, cleansing, and conforming.
+        """
+        staging_table = f"{self.staging_path}/stg_{source_name}"
+        staged_df = self.spark.read.parquet(staging_table)
+        
+        transformed_df = staged_df
+        for rule_name, rule_func in transformation_rules.items():
+            transformed_df = rule_func(transformed_df)
+            print(f"Applied transformation: {rule_name}")
+        
+        transformed_df = transformed_df \
+            .withColumn("_edw_load_timestamp", current_timestamp()) \
+            .withColumn("_edw_update_timestamp", current_timestamp()) \
+            .withColumn("_is_current", lit(True))
+        
+        edw_table = f"{self.edw_path}/edw_{source_name}"
+        transformed_df.write \
+            .mode("overwrite") \
+            .parquet(edw_table)
+        
+        print(f"Loaded {transformed_df.count()} records to EDW")
+        return transformed_df
+    
+    def apply_scd_type2(self, edw_table_name, incoming_df, key_columns, tracked_columns):
+        """
+        Apply Slowly Changing Dimension Type 2 logic.
+        Traditional DW heavily used SCD for historical tracking.
+        """
+        edw_table = f"{self.edw_path}/{edw_table_name}"
+        
+        try:
+            existing_df = self.spark.read.parquet(edw_table)
+        except:
+            result_df = incoming_df \
+                .withColumn("_effective_date", current_date()) \
+                .withColumn("_end_date", lit(None).cast("date")) \
+                .withColumn("_is_current", lit(True))
+            result_df.write.mode("overwrite").parquet(edw_table)
+            return result_df
+        
+        current_records = existing_df.filter(col("_is_current") == True)
+        
+        join_condition = [current_records[k] == incoming_df[k] for k in key_columns]
+        
+        changes = current_records.alias("curr").join(
+            incoming_df.alias("new"),
+            join_condition,
+            "inner"
+        ).filter(
+            " OR ".join([f"curr.{c} != new.{c}" for c in tracked_columns])
+        )
+        
+        if changes.count() > 0:
+            print(f"Found {changes.count()} changed records - applying SCD Type 2")
+        
+        return existing_df
+    
+    # ==========================================
+    # LAYER 3: PRESENTATION (Data Marts)
+    # ==========================================
+    
+    def build_data_mart(self, mart_name, source_tables, mart_query):
+        """
+        Build a subject-specific data mart from EDW tables.
+        Data marts are denormalized star schemas for BI.
+        """
+        for table_name, table_path in source_tables.items():
+            df = self.spark.read.parquet(f"{self.edw_path}/{table_path}")
+            df.createOrReplaceTempView(table_name)
+        
+        mart_df = self.spark.sql(mart_query)
+        
+        mart_df = mart_df \
+            .withColumn("_mart_refresh_timestamp", current_timestamp())
+        
+        mart_table = f"{self.mart_path}/mart_{mart_name}"
+        mart_df.write \
+            .mode("overwrite") \
+            .parquet(mart_table)
+        
+        print(f"Built data mart: {mart_name} with {mart_df.count()} records")
+        return mart_df
+    
+    def build_aggregate_table(self, mart_name, base_table, group_cols, agg_expressions):
+        """
+        Build pre-aggregated tables for BI performance.
+        Traditional marts heavily used aggregates.
+        """
+        base_df = self.spark.read.parquet(f"{self.mart_path}/mart_{base_table}")
+        
+        agg_df = base_df.groupBy(group_cols).agg(*agg_expressions)
+        
+        agg_table = f"{self.mart_path}/agg_{mart_name}"
+        agg_df.write.mode("overwrite").parquet(agg_table)
+        
+        print(f"Built aggregate table: agg_{mart_name}")
+        return agg_df
+
+
+# Example Usage
+if __name__ == "__main__":
+    arch = TraditionalArchitecture(
+        staging_path="/data/staging",
+        edw_path="/data/edw",
+        mart_path="/data/marts"
+    )
+    
+    # Layer 1: Extract to Staging
+    sales_data = spark.createDataFrame([
+        (1, "2024-01-15", 100, 1500.00, "STORE001"),
+        (2, "2024-01-15", 101, 2300.00, "STORE002"),
+        (3, "2024-01-16", 100, 800.00, "STORE001"),
+    ], ["sale_id", "sale_date", "customer_id", "amount", "store_id"])
+    
+    arch.extract_to_staging("sales", sales_data)
+    
+    # Layer 2: Transform to EDW
+    transformation_rules = {
+        "standardize_dates": lambda df: df.withColumn(
+            "sale_date", to_date(col("sale_date"))
+        ),
+        "add_fiscal_period": lambda df: df.withColumn(
+            "fiscal_period", date_format(col("sale_date"), "yyyyMM")
+        ),
+        "validate_amounts": lambda df: df.filter(col("amount") > 0)
+    }
+    
+    arch.transform_to_edw("sales", transformation_rules)
+    
+    # Layer 3: Build Data Mart
+    mart_query = """
+        SELECT 
+            fiscal_period,
+            store_id,
+            COUNT(*) as transaction_count,
+            SUM(amount) as total_sales,
+            AVG(amount) as avg_sale
+        FROM edw_sales
+        GROUP BY fiscal_period, store_id
+    """
+    
+    arch.build_data_mart(
+        mart_name="sales_summary",
+        source_tables={"edw_sales": "edw_sales"},
+        mart_query=mart_query
+    )
+</code></pre>
+        </div>
+
+        <a href="../02_source_systems/index.html" class="nav-button" style="display: inline-block; margin-top: 2rem; padding: 1rem 2rem; background: var(--accent-primary); color: white; text-decoration: none; border-radius: 8px;">Next: Source Systems Layer</a>
+    </main>
+
+    <script>
+        // Tab functionality
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab).classList.add('active');
+            });
+        });
+
+        // 3D Visualization - Traditional 3-Layer Architecture
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, document.getElementById('visualization').offsetWidth / 400, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(document.getElementById('visualization').offsetWidth, 400);
+        document.getElementById('visualization').appendChild(renderer.domElement);
+
+        // Create 3 layers
+        const layers = [];
+        const layerColors = [0x795548, 0x5d4037, 0x3e2723]; // Brown shades
+        const layerNames = ['Presentation/BI', 'Integration/EDW', 'Staging/Source'];
+        const layerY = [2, 0, -2];
+
+        layerNames.forEach((name, i) => {
+            const geometry = new THREE.BoxGeometry(6, 1.2, 3);
+            const material = new THREE.MeshPhongMaterial({ 
+                color: layerColors[i],
+                transparent: true,
+                opacity: 0.85
+            });
+            const layer = new THREE.Mesh(geometry, material);
+            layer.position.y = layerY[i];
+            scene.add(layer);
+            layers.push(layer);
+
+            // Add edges
+            const edges = new THREE.EdgesGeometry(geometry);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.5, transparent: true }));
+            line.position.y = layerY[i];
+            scene.add(line);
+        });
+
+        // Add arrows between layers
+        const arrowMaterial = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+        for (let i = 0; i < 2; i++) {
+            const arrowGeom = new THREE.ConeGeometry(0.2, 0.5, 8);
+            const arrow = new THREE.Mesh(arrowGeom, arrowMaterial);
+            arrow.position.set(0, layerY[i + 1] + 1, 0);
+            arrow.rotation.x = Math.PI;
+            scene.add(arrow);
+        }
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 5, 5);
+        scene.add(directionalLight);
+
+        camera.position.set(5, 3, 7);
+        camera.lookAt(0, 0, 0);
+
+        function animate() {
+            requestAnimationFrame(animate);
+            layers.forEach((layer, i) => {
+                layer.rotation.y = Math.sin(Date.now() * 0.001 + i) * 0.1;
+            });
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Responsive
+        window.addEventListener('resize', () => {
+            const width = document.getElementById('visualization').offsetWidth;
+            renderer.setSize(width, 400);
+            camera.aspect = width / 400;
+            camera.updateProjectionMatrix();
+        });
+    </script>
+</body>
+</html>

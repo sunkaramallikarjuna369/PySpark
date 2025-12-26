@@ -35,6 +35,7 @@
                 <a href="#quality" class="nav-link">Quality</a>
                 <a href="#interview" class="nav-link">Interview</a>
                 <a href="#consumption" class="nav-link">Consumption</a>
+                <a href="#traditional" class="nav-link">Traditional</a>
                 <button class="theme-toggle" aria-label="Toggle theme">🌙</button>
             </nav>
         </div>
@@ -58,11 +59,11 @@
             <!-- Stats -->
             <div style="display: flex; justify-content: center; gap: 3rem; margin-top: 2rem;">
                 <div style="text-align: center;">
-                    <div style="font-size: 2.5rem; font-weight: 700; color: var(--accent-primary);">134</div>
+                    <div style="font-size: 2.5rem; font-weight: 700; color: var(--accent-primary);">142</div>
                     <div style="color: var(--text-muted);">Concepts</div>
                 </div>
                 <div style="text-align: center;">
-                    <div style="font-size: 2.5rem; font-weight: 700; color: var(--accent-primary);">13</div>
+                    <div style="font-size: 2.5rem; font-weight: 700; color: var(--accent-primary);">14</div>
                     <div style="color: var(--text-muted);">Categories</div>
                 </div>
                 <div style="text-align: center;">
@@ -1091,6 +1092,73 @@
                     <h3 class="card-title">Best Practices</h3>
                     <p class="card-description">SLAs, documentation, and discoverability</p>
                     <div class="card-meta"><span>40 min</span><span>Expert</span></div>
+                </a>
+            </div>
+        </section>
+
+        <!-- Traditional Architecture Section -->
+        <section id="traditional" class="category-section section">
+            <div class="category-header">
+                <div class="category-icon traditional">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="4" y="4" width="16" height="4" rx="1"/>
+                        <rect x="4" y="10" width="16" height="4" rx="1"/>
+                        <rect x="4" y="16" width="16" height="4" rx="1"/>
+                    </svg>
+                </div>
+                <div>
+                    <h2>Traditional Architecture</h2>
+                    <p style="margin: 0; color: var(--text-muted);">Classic 3-Layer Data Warehouse Architecture Before Medallion</p>
+                </div>
+            </div>
+            <div class="card-grid">
+                <a href="traditional_architecture/01_introduction/index.html" class="card traditional">
+                    <div class="card-icon" style="background: rgba(121, 85, 72, 0.1); color: #795548;">🏛️</div>
+                    <h3 class="card-title">Introduction</h3>
+                    <p class="card-description">Overview of traditional 3-layer architecture</p>
+                    <div class="card-meta"><span>30 min</span><span>Beginner</span></div>
+                </a>
+                <a href="traditional_architecture/02_source_systems/index.html" class="card traditional">
+                    <div class="card-icon" style="background: rgba(121, 85, 72, 0.1); color: #795548;">💾</div>
+                    <h3 class="card-title">Source Systems</h3>
+                    <p class="card-description">OLTP systems, ERP, CRM, and data extraction</p>
+                    <div class="card-meta"><span>35 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="traditional_architecture/03_etl_integration/index.html" class="card traditional">
+                    <div class="card-icon" style="background: rgba(121, 85, 72, 0.1); color: #795548;">⚙️</div>
+                    <h3 class="card-title">ETL/Integration</h3>
+                    <p class="card-description">Informatica, DataStage, SSIS, and ETL patterns</p>
+                    <div class="card-meta"><span>40 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="traditional_architecture/04_data_warehouse/index.html" class="card traditional">
+                    <div class="card-icon" style="background: rgba(121, 85, 72, 0.1); color: #795548;">🏢</div>
+                    <h3 class="card-title">Data Warehouse</h3>
+                    <p class="card-description">Enterprise DW, Inmon vs Kimball, normalization</p>
+                    <div class="card-meta"><span>45 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="traditional_architecture/05_data_marts/index.html" class="card traditional">
+                    <div class="card-icon" style="background: rgba(121, 85, 72, 0.1); color: #795548;">🏪</div>
+                    <h3 class="card-title">Data Marts</h3>
+                    <p class="card-description">Subject-specific marts and star schemas</p>
+                    <div class="card-meta"><span>35 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="traditional_architecture/06_bi_reporting/index.html" class="card traditional">
+                    <div class="card-icon" style="background: rgba(121, 85, 72, 0.1); color: #795548;">📊</div>
+                    <h3 class="card-title">BI/Reporting</h3>
+                    <p class="card-description">Cognos, Business Objects, OLAP cubes</p>
+                    <div class="card-meta"><span>35 min</span><span>Intermediate</span></div>
+                </a>
+                <a href="traditional_architecture/07_traditional_vs_medallion/index.html" class="card traditional">
+                    <div class="card-icon" style="background: rgba(121, 85, 72, 0.1); color: #795548;">⚖️</div>
+                    <h3 class="card-title">Traditional vs Medallion</h3>
+                    <p class="card-description">Comparing architectures and migration paths</p>
+                    <div class="card-meta"><span>40 min</span><span>Advanced</span></div>
+                </a>
+                <a href="traditional_architecture/08_evolution_to_lakehouse/index.html" class="card traditional">
+                    <div class="card-icon" style="background: rgba(121, 85, 72, 0.1); color: #795548;">🚀</div>
+                    <h3 class="card-title">Evolution to Lakehouse</h3>
+                    <p class="card-description">From traditional DW to modern lakehouse</p>
+                    <div class="card-meta"><span>45 min</span><span>Advanced</span></div>
                 </a>
             </div>
         </section>

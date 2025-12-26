@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traditional vs Medallion Architecture</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <div class="logo">
+                <a href="../../index.html" style="text-decoration: none; display: flex; align-items: center; gap: 0.5rem;">
+                    <svg class="logo-icon" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="40" height="40" rx="8" fill="#795548"/>
+                        <path d="M10 20h8M22 20h8" stroke="white" stroke-width="2"/>
+                        <circle cx="20" cy="20" r="6" fill="white"/>
+                    </svg>
+                    <span>Traditional vs Medallion</span>
+                </a>
+            </div>
+            <nav class="nav">
+                <a href="../06_bi_reporting/index.html" class="nav-link">Previous</a>
+                <a href="../../index.html" class="nav-link">Home</a>
+                <a href="../08_evolution_to_lakehouse/index.html" class="nav-link">Next</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container" style="padding: 2rem;">
+        <h1>Traditional vs Medallion Architecture</h1>
+        
+        <div id="visualization" style="width: 100%; height: 400px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 12px; margin: 2rem 0;"></div>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="comparison">Comparison</button>
+            <button class="tab-btn" data-tab="mapping">Layer Mapping</button>
+            <button class="tab-btn" data-tab="code">PySpark Code</button>
+        </div>
+
+        <div id="comparison" class="tab-content active">
+            <h2>Architecture Comparison</h2>
+            
+            <h3>Traditional 3-Layer Architecture</h3>
+            <p><strong>Staging Layer:</strong> Raw data landing zone with minimal transformation. Data often truncated before each load. Temporary storage for ETL processing.</p>
+            <p><strong>Integration/EDW Layer:</strong> Normalized or dimensional enterprise data warehouse. Heavy transformations, business rules, and data quality. Single source of truth.</p>
+            <p><strong>Presentation/Mart Layer:</strong> Subject-specific data marts optimized for BI. Pre-aggregated data for performance. Star schemas for reporting.</p>
+            
+            <h3>Medallion Architecture (Bronze/Silver/Gold)</h3>
+            <p><strong>Bronze Layer:</strong> Raw data ingestion with full history preserved. Schema-on-read flexibility. Immutable append-only storage.</p>
+            <p><strong>Silver Layer:</strong> Cleansed, validated, and conformed data. Business logic applied. Queryable for data science and exploration.</p>
+            <p><strong>Gold Layer:</strong> Business-level aggregates and data products. Optimized for specific use cases. Consumption-ready datasets.</p>
+            
+            <h3>Key Differences</h3>
+            <p>Traditional architecture was batch-oriented with T+1 latency, while Medallion supports streaming and near-real-time. Traditional used relational databases; Medallion uses cloud object storage with Delta Lake. Traditional required upfront schema design; Medallion enables schema evolution.</p>
+        </div>
+
+        <div id="mapping" class="tab-content">
+            <h2>Layer Mapping</h2>
+            
+            <table style="width: 100%; border-collapse: collapse; margin: 1rem 0;">
+                <thead>
+                    <tr style="background: var(--bg-secondary);">
+                        <th style="padding: 1rem; text-align: left; border: 1px solid var(--border-color);">Traditional</th>
+                        <th style="padding: 1rem; text-align: left; border: 1px solid var(--border-color);">Medallion</th>
+                        <th style="padding: 1rem; text-align: left; border: 1px solid var(--border-color);">Purpose</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td style="padding: 1rem; border: 1px solid var(--border-color);">Staging</td>
+                        <td style="padding: 1rem; border: 1px solid var(--border-color);">Bronze</td>
+                        <td style="padding: 1rem; border: 1px solid var(--border-color);">Raw data landing</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 1rem; border: 1px solid var(--border-color);">Integration/EDW</td>
+                        <td style="padding: 1rem; border: 1px solid var(--border-color);">Silver</td>
+                        <td style="padding: 1rem; border: 1px solid var(--border-color);">Cleansed, integrated data</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 1rem; border: 1px solid var(--border-color);">Data Marts</td>
+                        <td style="padding: 1rem; border: 1px solid var(--border-color);">Gold</td>
+                        <td style="padding: 1rem; border: 1px solid var(--border-color);">Business-ready aggregates</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 1rem; border: 1px solid var(--border-color);">BI/Reporting</td>
+                        <td style="padding: 1rem; border: 1px solid var(--border-color);">Consumption Layer</td>
+                        <td style="padding: 1rem; border: 1px solid var(--border-color);">End-user access</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <h3>What Changed</h3>
+            <p><strong>Storage:</strong> From expensive relational databases to cheap cloud object storage (S3, ADLS, GCS).</p>
+            <p><strong>Processing:</strong> From proprietary ETL tools to open-source Spark, dbt, and Airflow.</p>
+            <p><strong>Format:</strong> From database tables to open file formats (Parquet, Delta, Iceberg).</p>
+            <p><strong>Schema:</strong> From rigid upfront design to flexible schema evolution.</p>
+            <p><strong>History:</strong> From periodic snapshots to full change history with time travel.</p>
+        </div>
+
+        <div id="code" class="tab-content">
+            <h2>PySpark: Traditional to Medallion Migration</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+from delta.tables import DeltaTable
+
+class ArchitectureMigration:
+    """
+    Demonstrates migration from Traditional 3-Layer to Medallion Architecture.
+    Shows equivalent patterns in both paradigms.
+    """
+    
+    def __init__(self):
+        self.spark = SparkSession.builder \
+            .appName("ArchitectureMigration") \
+            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+            .getOrCreate()
+    
+    # ==========================================
+    # TRADITIONAL: STAGING -> MEDALLION: BRONZE
+    # ==========================================
+    
+    def traditional_staging(self, source_df, staging_path):
+        """
+        Traditional: Truncate and load staging table.
+        Data is temporary, often deleted after ETL.
+        """
+        staged_df = source_df \
+            .withColumn("_load_timestamp", current_timestamp()) \
+            .withColumn("_batch_id", lit("BATCH_001"))
+        
+        staged_df.write \
+            .mode("overwrite") \
+            .parquet(staging_path)
+        
+        return staged_df
+    
+    def medallion_bronze(self, source_df, bronze_path):
+        """
+        Medallion: Append to Bronze with full history.
+        Data is immutable, never deleted.
+        """
+        bronze_df = source_df \
+            .withColumn("_ingested_at", current_timestamp()) \
+            .withColumn("_source_file", input_file_name()) \
+            .withColumn("_ingestion_date", current_date())
+        
+        bronze_df.write \
+            .format("delta") \
+            .mode("append") \
+            .partitionBy("_ingestion_date") \
+            .save(bronze_path)
+        
+        return bronze_df
+    
+    # ==========================================
+    # TRADITIONAL: EDW -> MEDALLION: SILVER
+    # ==========================================
+    
+    def traditional_edw_load(self, staging_df, edw_path, key_cols):
+        """
+        Traditional: Full refresh or merge into EDW.
+        Complex SCD logic, often overnight batch.
+        """
+        edw_df = staging_df \
+            .withColumn("_edw_load_date", current_date()) \
+            .withColumn("_edw_update_date", current_date()) \
+            .withColumn("_is_current", lit(True))
+        
+        edw_df.write \
+            .mode("overwrite") \
+            .parquet(edw_path)
+        
+        return edw_df
+    
+    def medallion_silver(self, bronze_path, silver_path, key_cols, 
+                        quality_rules):
+        """
+        Medallion: Incremental merge with Delta Lake.
+        Streaming-capable, near-real-time updates.
+        """
+        bronze_df = self.spark.read.format("delta").load(bronze_path)
+        
+        cleansed_df = bronze_df
+        for rule in quality_rules:
+            if rule["type"] == "not_null":
+                cleansed_df = cleansed_df.filter(col(rule["column"]).isNotNull())
+            elif rule["type"] == "valid_range":
+                cleansed_df = cleansed_df.filter(
+                    (col(rule["column"]) >= rule["min"]) &
+                    (col(rule["column"]) <= rule["max"])
+                )
+        
+        cleansed_df = cleansed_df \
+            .withColumn("_processed_at", current_timestamp()) \
+            .withColumn("_quality_score", lit(1.0))
+        
+        if DeltaTable.isDeltaTable(self.spark, silver_path):
+            silver_table = DeltaTable.forPath(self.spark, silver_path)
+            
+            merge_condition = " AND ".join([
+                f"target.{k} = source.{k}" for k in key_cols
+            ])
+            
+            silver_table.alias("target").merge(
+                cleansed_df.alias("source"),
+                merge_condition
+            ).whenMatchedUpdateAll() \
+             .whenNotMatchedInsertAll() \
+             .execute()
+        else:
+            cleansed_df.write \
+                .format("delta") \
+                .mode("overwrite") \
+                .save(silver_path)
+        
+        return self.spark.read.format("delta").load(silver_path)
+    
+    # ==========================================
+    # TRADITIONAL: DATA MART -> MEDALLION: GOLD
+    # ==========================================
+    
+    def traditional_data_mart(self, edw_df, mart_path, aggregations):
+        """
+        Traditional: Build denormalized data mart.
+        Pre-computed aggregates for BI performance.
+        """
+        mart_df = edw_df
+        
+        for agg_name, agg_config in aggregations.items():
+            group_cols = agg_config["group_by"]
+            agg_exprs = agg_config["aggregations"]
+            
+            agg_df = mart_df.groupBy(group_cols).agg(*agg_exprs)
+            
+            agg_df.write \
+                .mode("overwrite") \
+                .parquet(f"{mart_path}/{agg_name}")
+        
+        return mart_df
+    
+    def medallion_gold(self, silver_path, gold_path, aggregations):
+        """
+        Medallion: Build Gold layer data products.
+        Optimized for specific use cases with Delta Lake.
+        """
+        silver_df = self.spark.read.format("delta").load(silver_path)
+        
+        for product_name, config in aggregations.items():
+            group_cols = config["group_by"]
+            agg_exprs = config["aggregations"]
+            
+            gold_df = silver_df.groupBy(group_cols).agg(*agg_exprs)
+            
+            gold_df = gold_df \
+                .withColumn("_product_name", lit(product_name)) \
+                .withColumn("_created_at", current_timestamp()) \
+                .withColumn("_version", lit("1.0"))
+            
+            gold_df.write \
+                .format("delta") \
+                .mode("overwrite") \
+                .option("overwriteSchema", "true") \
+                .save(f"{gold_path}/{product_name}")
+        
+        return gold_df
+    
+    # ==========================================
+    # COMPARISON: FULL PIPELINE
+    # ==========================================
+    
+    def run_traditional_pipeline(self, source_df):
+        """Run complete traditional 3-layer pipeline."""
+        print("=== TRADITIONAL PIPELINE ===")
+        
+        print("Step 1: Load to Staging")
+        staged = self.traditional_staging(source_df, "/tmp/traditional/staging")
+        
+        print("Step 2: Transform to EDW")
+        edw = self.traditional_edw_load(staged, "/tmp/traditional/edw", ["id"])
+        
+        print("Step 3: Build Data Mart")
+        aggregations = {
+            "sales_by_region": {
+                "group_by": ["region"],
+                "aggregations": [sum("amount").alias("total_sales")]
+            }
+        }
+        mart = self.traditional_data_mart(edw, "/tmp/traditional/mart", aggregations)
+        
+        print("Traditional pipeline complete")
+        return mart
+    
+    def run_medallion_pipeline(self, source_df):
+        """Run complete Medallion pipeline."""
+        print("=== MEDALLION PIPELINE ===")
+        
+        print("Step 1: Ingest to Bronze")
+        self.medallion_bronze(source_df, "/tmp/medallion/bronze")
+        
+        print("Step 2: Process to Silver")
+        quality_rules = [
+            {"type": "not_null", "column": "id"},
+            {"type": "valid_range", "column": "amount", "min": 0, "max": 1000000}
+        ]
+        silver = self.medallion_silver(
+            "/tmp/medallion/bronze",
+            "/tmp/medallion/silver",
+            ["id"],
+            quality_rules
+        )
+        
+        print("Step 3: Aggregate to Gold")
+        aggregations = {
+            "sales_by_region": {
+                "group_by": ["region"],
+                "aggregations": [
+                    sum("amount").alias("total_sales"),
+                    count("*").alias("transaction_count")
+                ]
+            }
+        }
+        gold = self.medallion_gold(
+            "/tmp/medallion/silver",
+            "/tmp/medallion/gold",
+            aggregations
+        )
+        
+        print("Medallion pipeline complete")
+        return gold
+    
+    def compare_approaches(self):
+        """
+        Compare key differences between approaches.
+        """
+        comparison = {
+            "Data Retention": {
+                "Traditional": "Staging truncated, limited history",
+                "Medallion": "Full history preserved, time travel"
+            },
+            "Processing Model": {
+                "Traditional": "Batch only, T+1 latency",
+                "Medallion": "Batch + Streaming, near-real-time"
+            },
+            "Schema Handling": {
+                "Traditional": "Rigid, upfront design required",
+                "Medallion": "Flexible, schema evolution supported"
+            },
+            "Storage Cost": {
+                "Traditional": "Expensive (Oracle, Teradata)",
+                "Medallion": "Cheap (S3, ADLS, GCS)"
+            },
+            "Update Pattern": {
+                "Traditional": "Full refresh or complex SCD",
+                "Medallion": "MERGE with Delta Lake"
+            },
+            "Tooling": {
+                "Traditional": "Proprietary (Informatica, SSIS)",
+                "Medallion": "Open source (Spark, dbt, Airflow)"
+            }
+        }
+        
+        return comparison
+
+
+# Example Usage
+if __name__ == "__main__":
+    migration = ArchitectureMigration()
+    
+    # Sample data
+    source_data = spark.createDataFrame([
+        (1, "North", 1000.00, "2024-01-15"),
+        (2, "South", 1500.00, "2024-01-15"),
+        (3, "East", 800.00, "2024-01-16"),
+    ], ["id", "region", "amount", "date"])
+    
+    # Run both pipelines
+    traditional_result = migration.run_traditional_pipeline(source_data)
+    medallion_result = migration.run_medallion_pipeline(source_data)
+    
+    # Compare approaches
+    comparison = migration.compare_approaches()
+    for aspect, details in comparison.items():
+        print(f"\n{aspect}:")
+        print(f"  Traditional: {details['Traditional']}")
+        print(f"  Medallion: {details['Medallion']}")
+</code></pre>
+        </div>
+
+        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+            <a href="../06_bi_reporting/index.html" class="nav-button" style="padding: 1rem 2rem; background: var(--bg-secondary); color: var(--text-primary); text-decoration: none; border-radius: 8px;">Previous: BI/Reporting</a>
+            <a href="../08_evolution_to_lakehouse/index.html" class="nav-button" style="padding: 1rem 2rem; background: var(--accent-primary); color: white; text-decoration: none; border-radius: 8px;">Next: Evolution to Lakehouse</a>
+        </div>
+    </main>
+
+    <script>
+        // Tab functionality
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab).classList.add('active');
+            });
+        });
+
+        // 3D Visualization - Side by Side Comparison
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, document.getElementById('visualization').offsetWidth / 400, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(document.getElementById('visualization').offsetWidth, 400);
+        document.getElementById('visualization').appendChild(renderer.domElement);
+
+        // Traditional Architecture (Left)
+        const traditionalLayers = [];
+        const traditionalColors = [0x795548, 0x5d4037, 0x3e2723];
+        const traditionalLabels = ['Presentation', 'EDW', 'Staging'];
+        
+        for (let i = 0; i < 3; i++) {
+            const geom = new THREE.BoxGeometry(3, 1, 2);
+            const mat = new THREE.MeshPhongMaterial({ 
+                color: traditionalColors[i],
+                transparent: true,
+                opacity: 0.85
+            });
+            const layer = new THREE.Mesh(geom, mat);
+            layer.position.set(-3, 2 - i * 1.5, 0);
+            scene.add(layer);
+            traditionalLayers.push(layer);
+        }
+
+        // Medallion Architecture (Right)
+        const medallionLayers = [];
+        const medallionColors = [0xffd700, 0xc0c0c0, 0xcd7f32]; // Gold, Silver, Bronze
+        const medallionLabels = ['Gold', 'Silver', 'Bronze'];
+        
+        for (let i = 0; i < 3; i++) {
+            const geom = new THREE.BoxGeometry(3, 1, 2);
+            const mat = new THREE.MeshPhongMaterial({ 
+                color: medallionColors[i],
+                transparent: true,
+                opacity: 0.85
+            });
+            const layer = new THREE.Mesh(geom, mat);
+            layer.position.set(3, 2 - i * 1.5, 0);
+            scene.add(layer);
+            medallionLayers.push(layer);
+        }
+
+        // Arrow between architectures
+        const arrowGeom = new THREE.ConeGeometry(0.3, 0.8, 8);
+        const arrowMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        const arrow = new THREE.Mesh(arrowGeom, arrowMat);
+        arrow.position.set(0, 0, 0);
+        arrow.rotation.z = -Math.PI / 2;
+        scene.add(arrow);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 5, 5);
+        scene.add(directionalLight);
+
+        camera.position.set(0, 2, 10);
+        camera.lookAt(0, 0, 0);
+
+        function animate() {
+            requestAnimationFrame(animate);
+            traditionalLayers.forEach(layer => layer.rotation.y = Math.sin(Date.now() * 0.001) * 0.1);
+            medallionLayers.forEach(layer => layer.rotation.y = Math.sin(Date.now() * 0.001) * 0.1);
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            const width = document.getElementById('visualization').offsetWidth;
+            renderer.setSize(width, 400);
+            camera.aspect = width / 400;
+            camera.updateProjectionMatrix();
+        });
+    </script>
+</body>
+</html>

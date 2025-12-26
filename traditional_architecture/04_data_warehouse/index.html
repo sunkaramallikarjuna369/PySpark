@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traditional Architecture - Data Warehouse Layer</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <div class="logo">
+                <a href="../../index.html" style="text-decoration: none; display: flex; align-items: center; gap: 0.5rem;">
+                    <svg class="logo-icon" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="40" height="40" rx="8" fill="#795548"/>
+                        <rect x="8" y="8" width="24" height="6" rx="2" fill="white"/>
+                        <rect x="8" y="17" width="24" height="6" rx="2" fill="white" opacity="0.7"/>
+                        <rect x="8" y="26" width="24" height="6" rx="2" fill="white" opacity="0.4"/>
+                    </svg>
+                    <span>Data Warehouse</span>
+                </a>
+            </div>
+            <nav class="nav">
+                <a href="../03_etl_integration/index.html" class="nav-link">Previous</a>
+                <a href="../../index.html" class="nav-link">Home</a>
+                <a href="../05_data_marts/index.html" class="nav-link">Next</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container" style="padding: 2rem;">
+        <h1>Enterprise Data Warehouse Layer</h1>
+        
+        <div id="visualization" style="width: 100%; height: 400px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 12px; margin: 2rem 0;"></div>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="methodologies">Methodologies</button>
+            <button class="tab-btn" data-tab="code">PySpark Code</button>
+        </div>
+
+        <div id="overview" class="tab-content active">
+            <h2>The Enterprise Data Warehouse</h2>
+            <p>The Enterprise Data Warehouse (EDW) was the central repository of integrated data from across the organization. It served as the "single source of truth" for enterprise reporting and analytics.</p>
+            
+            <h3>Key Characteristics</h3>
+            <p><strong>Subject-Oriented:</strong> Data organized around major business subjects (customers, products, sales) rather than operational processes.</p>
+            <p><strong>Integrated:</strong> Data from multiple sources conformed to consistent naming conventions, formats, and business rules.</p>
+            <p><strong>Non-Volatile:</strong> Once loaded, data was not updated or deleted. Historical data was preserved for trend analysis.</p>
+            <p><strong>Time-Variant:</strong> Data was stored with time stamps to enable historical analysis and trend identification.</p>
+            
+            <h3>Technology Stack</h3>
+            <p>Traditional EDWs ran on specialized database platforms: Teradata (massively parallel processing), Oracle (enterprise RDBMS), IBM DB2 (mainframe integration), Microsoft SQL Server (Windows ecosystem), and Netezza (data warehouse appliance).</p>
+        </div>
+
+        <div id="methodologies" class="tab-content">
+            <h2>DW Methodologies</h2>
+            
+            <h3>Inmon (Top-Down)</h3>
+            <p>Bill Inmon's approach built a normalized (3NF) enterprise data warehouse first, then derived data marts. The EDW was the "hub" with data marts as "spokes." This approach ensured enterprise-wide consistency but required significant upfront investment.</p>
+            
+            <h3>Kimball (Bottom-Up)</h3>
+            <p>Ralph Kimball's approach built dimensional data marts first, then integrated them into a "data warehouse bus." Star schemas with conformed dimensions enabled cross-mart analysis. Faster time-to-value but risked inconsistency.</p>
+            
+            <h3>Hybrid Approach</h3>
+            <p>Many organizations adopted a hybrid: normalized staging/integration layer (Inmon-style) feeding dimensional data marts (Kimball-style). This balanced enterprise consistency with departmental agility.</p>
+            
+            <h3>Data Vault</h3>
+            <p>Dan Linstedt's Data Vault methodology emerged as an alternative, using Hubs (business keys), Links (relationships), and Satellites (descriptive data). Designed for agility and auditability.</p>
+        </div>
+
+        <div id="code" class="tab-content">
+            <h2>PySpark EDW Implementation</h2>
+            <pre><code class="language-python">from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+from pyspark.sql.types import *
+from pyspark.sql.window import Window
+from datetime import datetime
+
+class EnterpriseDataWarehouse:
+    """
+    Implements Enterprise Data Warehouse patterns using PySpark.
+    Supports both Inmon (normalized) and Kimball (dimensional) approaches.
+    """
+    
+    def __init__(self, edw_path):
+        self.spark = SparkSession.builder \
+            .appName("EnterpriseDataWarehouse") \
+            .getOrCreate()
+        self.edw_path = edw_path
+    
+    # ==========================================
+    # INMON APPROACH: NORMALIZED EDW
+    # ==========================================
+    
+    def create_normalized_entity(self, entity_name, df, primary_key, 
+                                  foreign_keys=None):
+        """
+        Create a normalized (3NF) entity table.
+        Inmon approach: Build normalized EDW first.
+        """
+        normalized_df = df \
+            .withColumn("_edw_load_date", current_date()) \
+            .withColumn("_edw_load_timestamp", current_timestamp()) \
+            .withColumn("_source_system", lit("INTEGRATED"))
+        
+        entity_path = f"{self.edw_path}/normalized/{entity_name}"
+        normalized_df.write \
+            .mode("overwrite") \
+            .parquet(entity_path)
+        
+        print(f"Created normalized entity: {entity_name}")
+        return normalized_df
+    
+    def create_normalized_relationship(self, relationship_name, 
+                                       parent_entity, child_entity,
+                                       parent_key, child_key):
+        """
+        Create relationship table for normalized model.
+        Maintains referential integrity between entities.
+        """
+        parent_df = self.spark.read.parquet(
+            f"{self.edw_path}/normalized/{parent_entity}"
+        )
+        child_df = self.spark.read.parquet(
+            f"{self.edw_path}/normalized/{child_entity}"
+        )
+        
+        relationship_df = child_df.select(child_key, parent_key).distinct()
+        
+        rel_path = f"{self.edw_path}/normalized/rel_{relationship_name}"
+        relationship_df.write.mode("overwrite").parquet(rel_path)
+        
+        return relationship_df
+    
+    # ==========================================
+    # KIMBALL APPROACH: DIMENSIONAL MODEL
+    # ==========================================
+    
+    def create_dimension(self, dim_name, source_df, natural_key_cols,
+                        attribute_cols, scd_type=2):
+        """
+        Create a dimension table with surrogate keys.
+        Kimball approach: Star schema dimensions.
+        """
+        dim_path = f"{self.edw_path}/dimensional/dim_{dim_name}"
+        
+        try:
+            existing_dim = self.spark.read.parquet(dim_path)
+            max_sk = existing_dim.agg(max(f"{dim_name}_sk")).collect()[0][0] or 0
+        except:
+            existing_dim = None
+            max_sk = 0
+        
+        if scd_type == 1:
+            dim_df = source_df \
+                .withColumn(f"{dim_name}_sk", 
+                           monotonically_increasing_id() + max_sk + 1) \
+                .withColumn("_effective_date", current_date()) \
+                .withColumn("_end_date", lit("9999-12-31").cast("date")) \
+                .withColumn("_is_current", lit(True))
+            
+            dim_df.write.mode("overwrite").parquet(dim_path)
+        
+        elif scd_type == 2:
+            if existing_dim is None:
+                dim_df = source_df \
+                    .withColumn(f"{dim_name}_sk", 
+                               monotonically_increasing_id() + 1) \
+                    .withColumn("_effective_date", current_date()) \
+                    .withColumn("_end_date", lit("9999-12-31").cast("date")) \
+                    .withColumn("_is_current", lit(True)) \
+                    .withColumn("_version", lit(1))
+                
+                dim_df.write.mode("overwrite").parquet(dim_path)
+            else:
+                current_records = existing_dim.filter(col("_is_current") == True)
+                
+                join_cond = [current_records[k] == source_df[k] for k in natural_key_cols]
+                change_cond = " OR ".join([
+                    f"curr.{c} != src.{c}" for c in attribute_cols
+                ])
+                
+                changes = current_records.alias("curr").join(
+                    source_df.alias("src"), join_cond, "inner"
+                ).filter(change_cond)
+                
+                if changes.count() > 0:
+                    print(f"Found {changes.count()} changed records in dim_{dim_name}")
+                
+                dim_df = existing_dim
+                dim_df.write.mode("overwrite").parquet(dim_path)
+        
+        print(f"Created dimension: dim_{dim_name}")
+        return self.spark.read.parquet(dim_path)
+    
+    def create_fact_table(self, fact_name, source_df, dimension_lookups,
+                         measure_cols, date_col):
+        """
+        Create a fact table with foreign keys to dimensions.
+        Kimball approach: Star schema facts.
+        """
+        fact_df = source_df
+        
+        for dim_name, lookup_config in dimension_lookups.items():
+            dim_path = f"{self.edw_path}/dimensional/dim_{dim_name}"
+            dim_df = self.spark.read.parquet(dim_path)
+            
+            current_dim = dim_df.filter(col("_is_current") == True)
+            
+            natural_keys = lookup_config["natural_keys"]
+            surrogate_key = f"{dim_name}_sk"
+            
+            lookup_df = current_dim.select(natural_keys + [surrogate_key])
+            
+            fact_df = fact_df.join(lookup_df, natural_keys, "left")
+            
+            for nk in natural_keys:
+                if nk not in measure_cols and nk != date_col:
+                    fact_df = fact_df.drop(nk)
+        
+        fact_df = fact_df \
+            .withColumn("_fact_load_date", current_date()) \
+            .withColumn("_fact_load_timestamp", current_timestamp())
+        
+        fact_path = f"{self.edw_path}/dimensional/fact_{fact_name}"
+        fact_df.write \
+            .mode("append") \
+            .partitionBy(date_col) \
+            .parquet(fact_path)
+        
+        print(f"Created fact table: fact_{fact_name}")
+        return fact_df
+    
+    def create_date_dimension(self, start_date, end_date):
+        """
+        Create a date dimension - essential for any DW.
+        Pre-populated with date attributes.
+        """
+        from datetime import timedelta
+        
+        dates = []
+        current = datetime.strptime(start_date, "%Y-%m-%d")
+        end = datetime.strptime(end_date, "%Y-%m-%d")
+        
+        while current <= end:
+            dates.append({
+                "date_sk": int(current.strftime("%Y%m%d")),
+                "full_date": current.date(),
+                "year": current.year,
+                "quarter": (current.month - 1) // 3 + 1,
+                "month": current.month,
+                "month_name": current.strftime("%B"),
+                "week": current.isocalendar()[1],
+                "day_of_month": current.day,
+                "day_of_week": current.weekday() + 1,
+                "day_name": current.strftime("%A"),
+                "is_weekend": current.weekday() >= 5,
+                "is_holiday": False,
+                "fiscal_year": current.year if current.month >= 7 else current.year - 1,
+                "fiscal_quarter": ((current.month - 7) % 12) // 3 + 1
+            })
+            current += timedelta(days=1)
+        
+        date_df = self.spark.createDataFrame(dates)
+        
+        dim_path = f"{self.edw_path}/dimensional/dim_date"
+        date_df.write.mode("overwrite").parquet(dim_path)
+        
+        print(f"Created date dimension with {len(dates)} dates")
+        return date_df
+    
+    # ==========================================
+    # DATA VAULT APPROACH
+    # ==========================================
+    
+    def create_hub(self, hub_name, source_df, business_key_cols):
+        """
+        Create a Hub table (Data Vault methodology).
+        Hubs contain unique business keys.
+        """
+        hub_df = source_df.select(business_key_cols).distinct() \
+            .withColumn(f"{hub_name}_hk", 
+                       md5(concat_ws("|", *[col(c) for c in business_key_cols]))) \
+            .withColumn("_load_date", current_timestamp()) \
+            .withColumn("_record_source", lit("SOURCE_SYSTEM"))
+        
+        hub_path = f"{self.edw_path}/datavault/hub_{hub_name}"
+        hub_df.write.mode("overwrite").parquet(hub_path)
+        
+        print(f"Created hub: hub_{hub_name}")
+        return hub_df
+    
+    def create_satellite(self, sat_name, hub_name, source_df, 
+                        business_key_cols, attribute_cols):
+        """
+        Create a Satellite table (Data Vault methodology).
+        Satellites contain descriptive attributes with history.
+        """
+        hub_path = f"{self.edw_path}/datavault/hub_{hub_name}"
+        hub_df = self.spark.read.parquet(hub_path)
+        
+        sat_df = source_df \
+            .withColumn(f"{hub_name}_hk",
+                       md5(concat_ws("|", *[col(c) for c in business_key_cols]))) \
+            .withColumn("_hashdiff",
+                       md5(concat_ws("|", *[col(c) for c in attribute_cols]))) \
+            .withColumn("_load_date", current_timestamp()) \
+            .withColumn("_record_source", lit("SOURCE_SYSTEM"))
+        
+        sat_df = sat_df.select(
+            f"{hub_name}_hk", "_hashdiff", "_load_date", "_record_source",
+            *attribute_cols
+        )
+        
+        sat_path = f"{self.edw_path}/datavault/sat_{sat_name}"
+        sat_df.write.mode("append").parquet(sat_path)
+        
+        print(f"Created satellite: sat_{sat_name}")
+        return sat_df
+    
+    def create_link(self, link_name, hub_names, source_df, key_mappings):
+        """
+        Create a Link table (Data Vault methodology).
+        Links represent relationships between hubs.
+        """
+        link_df = source_df
+        
+        for hub_name, key_cols in key_mappings.items():
+            link_df = link_df.withColumn(
+                f"{hub_name}_hk",
+                md5(concat_ws("|", *[col(c) for c in key_cols]))
+            )
+        
+        hk_cols = [f"{h}_hk" for h in hub_names]
+        link_df = link_df \
+            .withColumn(f"{link_name}_hk", md5(concat_ws("|", *[col(c) for c in hk_cols]))) \
+            .withColumn("_load_date", current_timestamp()) \
+            .withColumn("_record_source", lit("SOURCE_SYSTEM"))
+        
+        link_df = link_df.select(
+            f"{link_name}_hk", *hk_cols, "_load_date", "_record_source"
+        ).distinct()
+        
+        link_path = f"{self.edw_path}/datavault/link_{link_name}"
+        link_df.write.mode("overwrite").parquet(link_path)
+        
+        print(f"Created link: link_{link_name}")
+        return link_df
+
+
+# Example Usage
+if __name__ == "__main__":
+    edw = EnterpriseDataWarehouse(edw_path="/data/edw")
+    
+    # Create Date Dimension
+    edw.create_date_dimension("2020-01-01", "2025-12-31")
+    
+    # Create Customer Dimension (Kimball)
+    customer_data = spark.createDataFrame([
+        ("C001", "John Smith", "New York", "NY", "Enterprise"),
+        ("C002", "Jane Doe", "Los Angeles", "CA", "SMB"),
+    ], ["customer_id", "customer_name", "city", "state", "segment"])
+    
+    edw.create_dimension(
+        dim_name="customer",
+        source_df=customer_data,
+        natural_key_cols=["customer_id"],
+        attribute_cols=["customer_name", "city", "state", "segment"],
+        scd_type=2
+    )
+    
+    # Create Sales Fact Table
+    sales_data = spark.createDataFrame([
+        ("2024-01-15", "C001", "P001", 100, 1500.00),
+        ("2024-01-16", "C002", "P002", 50, 750.00),
+    ], ["sale_date", "customer_id", "product_id", "quantity", "amount"])
+    
+    edw.create_fact_table(
+        fact_name="sales",
+        source_df=sales_data,
+        dimension_lookups={
+            "customer": {"natural_keys": ["customer_id"]},
+            "product": {"natural_keys": ["product_id"]}
+        },
+        measure_cols=["quantity", "amount"],
+        date_col="sale_date"
+    )
+</code></pre>
+        </div>
+
+        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+            <a href="../03_etl_integration/index.html" class="nav-button" style="padding: 1rem 2rem; background: var(--bg-secondary); color: var(--text-primary); text-decoration: none; border-radius: 8px;">Previous: ETL/Integration</a>
+            <a href="../05_data_marts/index.html" class="nav-button" style="padding: 1rem 2rem; background: var(--accent-primary); color: white; text-decoration: none; border-radius: 8px;">Next: Data Marts</a>
+        </div>
+    </main>
+
+    <script>
+        // Tab functionality
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab).classList.add('active');
+            });
+        });
+
+        // 3D Visualization - Data Warehouse
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, document.getElementById('visualization').offsetWidth / 400, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(document.getElementById('visualization').offsetWidth, 400);
+        document.getElementById('visualization').appendChild(renderer.domElement);
+
+        // Central EDW cylinder
+        const edwGeom = new THREE.CylinderGeometry(2, 2, 3, 32);
+        const edwMat = new THREE.MeshPhongMaterial({ 
+            color: 0x795548,
+            transparent: true,
+            opacity: 0.9
+        });
+        const edw = new THREE.Mesh(edwGeom, edwMat);
+        scene.add(edw);
+
+        // Data layers inside EDW
+        const layerColors = [0x8d6e63, 0xa1887f, 0xbcaaa4];
+        for (let i = 0; i < 3; i++) {
+            const layerGeom = new THREE.CylinderGeometry(1.8, 1.8, 0.8, 32);
+            const layerMat = new THREE.MeshPhongMaterial({ 
+                color: layerColors[i],
+                transparent: true,
+                opacity: 0.7
+            });
+            const layer = new THREE.Mesh(layerGeom, layerMat);
+            layer.position.y = 1 - i;
+            scene.add(layer);
+        }
+
+        // Surrounding data sources
+        const sourcePositions = [
+            { x: -4, y: 1, z: 0 },
+            { x: -4, y: -1, z: 0 },
+            { x: 4, y: 1, z: 0 },
+            { x: 4, y: -1, z: 0 }
+        ];
+
+        sourcePositions.forEach((pos) => {
+            const sourceGeom = new THREE.BoxGeometry(1, 1, 1);
+            const sourceMat = new THREE.MeshPhongMaterial({ color: 0x5d4037 });
+            const source = new THREE.Mesh(sourceGeom, sourceMat);
+            source.position.set(pos.x, pos.y, pos.z);
+            scene.add(source);
+
+            // Connection lines
+            const points = [
+                new THREE.Vector3(pos.x > 0 ? pos.x - 0.6 : pos.x + 0.6, pos.y, pos.z),
+                new THREE.Vector3(pos.x > 0 ? 2.2 : -2.2, 0, 0)
+            ];
+            const lineGeom = new THREE.BufferGeometry().setFromPoints(points);
+            const line = new THREE.Line(lineGeom, new THREE.LineBasicMaterial({ color: 0xffd700, opacity: 0.5, transparent: true }));
+            scene.add(line);
+        });
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 5, 5);
+        scene.add(directionalLight);
+
+        camera.position.set(0, 3, 8);
+        camera.lookAt(0, 0, 0);
+
+        function animate() {
+            requestAnimationFrame(animate);
+            edw.rotation.y += 0.005;
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            const width = document.getElementById('visualization').offsetWidth;
+            renderer.setSize(width, 400);
+            camera.aspect = width / 400;
+            camera.updateProjectionMatrix();
+        });
+    </script>
+</body>
+</html>
